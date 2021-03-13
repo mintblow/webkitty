@@ -1,6 +1,16 @@
 # WebKit
 
-WebKit is a cross-platform web browser engine. On iOS and macOS, it powers Safari, Mail, iBooks, and many other applications.
+WebKit is a cross-platform web browser engine that forms the basis of Safari on all Apple devices, as well as certain Linux browsers such as GNOME Web. It also is a part of Chromium, where it is renamed Blink.
+
+(But of course the codename remains intact.)
+
+On iOS and iPadOS, there are no stadalone binary redistributable executable installers, this is to prevent malware execution, that is besides HTML and JavaScript, both of which have minimal system permissions and are contained. In order to install any native application, you need to go to the Apple iOS App Store server, where you can install advanced system-friendly software. 
+
+(System-Friendly means User-Friendly, because the system was always meant to be User-Friendly)
+
+This App Store however forbids any publishing of non-WebKit-based HTML rendering engines, to standardify the design of the iPhone and iPad Web Experience, by preventing the installation of an unstable non-system friendly applications HTML rendering engine.
+
+It is even harder to actually host a browser on the App Store.
 
 ## Feature Status
 
