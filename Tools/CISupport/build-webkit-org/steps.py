@@ -125,9 +125,6 @@ class ConfigureBuild(buildstep.BuildStep):
         self.setProperty("buildOnly", self.buildOnly)
         self.setProperty("additionalArguments", self.additionalArguments)
         self.setProperty("device_model", self.device_model)
-        worker_name = self.getProperty("slavename")
-        if worker_name:
-            self.setProperty("workername", worker_name)  # Temporary workaround for supporting both older and newer buildbot versions.
         self.finished(SUCCESS)
         return defer.succeed(None)
 
@@ -1120,6 +1117,7 @@ class ExtractTestResults(master.MasterShellCommand):
         master.MasterShellCommand.__init__(self, **kwargs)
 
     def resultDirectoryURL(self):
+        self.setProperty('result_directory', self.resultDirectory)
         return self.resultDirectory.replace('public_html/', '/') + '/'
 
     def addCustomURLs(self):
@@ -1129,6 +1127,16 @@ class ExtractTestResults(master.MasterShellCommand):
     def finished(self, result):
         self.addCustomURLs()
         return master.MasterShellCommand.finished(self, result)
+
+
+class SetPermissions(master.MasterShellCommand):
+    name = 'set-permissions'
+
+    def __init__(self, **kwargs):
+        resultDirectory = Interpolate('%(prop:result_directory)s')
+        kwargs['command'] = ['chmod', 'a+rx', resultDirectory]
+        kwargs['logEnviron'] = False
+        master.MasterShellCommand.__init__(self, **kwargs)
 
 
 class ShowIdentifier(shell.ShellCommand):

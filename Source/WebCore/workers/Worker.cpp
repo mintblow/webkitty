@@ -233,7 +233,7 @@ void Worker::notifyFinished()
             responseURL.setFragmentIdentifier(m_scriptLoader->url().fragmentIdentifier());
     }
     m_contextProxy.startWorkerGlobalScope(responseURL, m_name, context->userAgent(responseURL), isOnline, m_scriptLoader->script(), contentSecurityPolicyResponseHeaders, m_shouldBypassMainWorldContentSecurityPolicy, m_workerCreationTime, referrerPolicy, m_type, m_credentials, m_runtimeFlags);
-    InspectorInstrumentation::scriptImported(*context, m_scriptLoader->identifier(), m_scriptLoader->script());
+    InspectorInstrumentation::scriptImported(*context, m_scriptLoader->identifier(), m_scriptLoader->script().toString());
 }
 
 void Worker::dispatchEvent(Event& event)
@@ -249,15 +249,14 @@ void Worker::dispatchEvent(Event& event)
 }
 
 #if ENABLE(WEB_RTC)
-void Worker::createRTCRtpScriptTransformer(RTCRtpScriptTransform& transform, Ref<SerializedScriptValue>&& options, TransferredMessagePort&& port)
+void Worker::createRTCRtpScriptTransformer(RTCRtpScriptTransform& transform, MessageWithMessagePorts&& options)
 {
     if (!scriptExecutionContext())
         return;
 
-    m_contextProxy.postTaskToWorkerGlobalScope([transform = makeRef(transform), options = WTFMove(options), port = WTFMove(port)](auto& context) mutable {
-        if (auto transformer = downcast<DedicatedWorkerGlobalScope>(context).createRTCRtpScriptTransformer(WTFMove(options), WTFMove(port)))
+    m_contextProxy.postTaskToWorkerGlobalScope([transform = makeRef(transform), options = WTFMove(options)](auto& context) mutable {
+        if (auto transformer = downcast<DedicatedWorkerGlobalScope>(context).createRTCRtpScriptTransformer(WTFMove(options)))
             transform->setTransformer(*transformer);
-        callOnMainThread([transform = WTFMove(transform)] { });
     });
 
 }

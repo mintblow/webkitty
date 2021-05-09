@@ -198,21 +198,23 @@ void PageClientImpl::didRelaunchProcess()
 }
 
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
-void PageClientImpl::didCreateContextForVisibilityPropagation(LayerHostingContextID)
+void PageClientImpl::didCreateContextInWebProcessForVisibilityPropagation(LayerHostingContextID)
 {
-    [m_contentView _processDidCreateContextForVisibilityPropagation];
+    [m_contentView _webProcessDidCreateContextForVisibilityPropagation];
 }
 
+#if ENABLE(GPU_PROCESS)
 void PageClientImpl::didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID)
 {
     [m_contentView _gpuProcessDidCreateContextForVisibilityPropagation];
 }
-#endif
+#endif // ENABLE(GPU_PROCESS)
+#endif // HAVE(VISIBILITY_PROPAGATION_VIEW)
 
 #if ENABLE(GPU_PROCESS)
-void PageClientImpl::gpuProcessCrashed()
+void PageClientImpl::gpuProcessDidExit()
 {
-    [m_contentView _gpuProcessCrashed];
+    [m_contentView _gpuProcessDidExit];
 }
 #endif
 
@@ -230,7 +232,12 @@ void PageClientImpl::didNotHandleTapAsClick(const WebCore::IntPoint& point)
 {
     [m_contentView _didNotHandleTapAsClick:point];
 }
-    
+
+void PageClientImpl::didNotHandleTapAsMeaningfulClickAtPoint(const WebCore::IntPoint& point)
+{
+    [m_webView _didNotHandleTapAsMeaningfulClickAtPoint:point];
+}
+
 void PageClientImpl::didCompleteSyntheticClick()
 {
     [m_contentView _didCompleteSyntheticClick];
@@ -238,7 +245,6 @@ void PageClientImpl::didCompleteSyntheticClick()
 
 void PageClientImpl::decidePolicyForGeolocationPermissionRequest(WebFrameProxy& frame, const FrameInfoData& frameInfo, Function<void(bool)>& completionHandler)
 {
-    auto origin = API::SecurityOrigin::create(frameInfo.securityOrigin.protocol, frameInfo.securityOrigin.host, frameInfo.securityOrigin.port);
     [[wrapper(m_webView.get()->_page->process().processPool()) _geolocationProvider] decidePolicyForGeolocationRequestFromOrigin:FrameInfoData { frameInfo } completionHandler:std::exchange(completionHandler, nullptr) view:m_webView.get().get()];
 }
 
@@ -487,6 +493,11 @@ void PageClientImpl::setTextIndicatorAnimationProgress(float)
 
 void PageClientImpl::enterAcceleratedCompositingMode(const LayerTreeContext& layerTreeContext)
 {
+}
+
+void PageClientImpl::makeViewBlank(bool makeBlank)
+{
+    [m_contentView layer].opacity = makeBlank ? 0 : 1;
 }
 
 void PageClientImpl::showSafeBrowsingWarning(const SafeBrowsingWarning& warning, CompletionHandler<void(Variant<WebKit::ContinueUnsafeLoad, URL>&&)>&& completionHandler)
@@ -975,12 +986,12 @@ void PageClientImpl::setMouseEventPolicy(WebCore::MouseEventPolicy policy)
 #endif
 }
 
-#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
 void PageClientImpl::showMediaControlsContextMenu(FloatRect&& targetFrame, Vector<MediaControlsContextMenuItem>&& items, CompletionHandler<void(MediaControlsContextMenuItem::ID)>&& completionHandler)
 {
     [m_contentView _showMediaControlsContextMenu:WTFMove(targetFrame) items:WTFMove(items) completionHandler:WTFMove(completionHandler)];
 }
-#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
 
 #if HAVE(UISCROLLVIEW_ASYNCHRONOUS_SCROLL_EVENT_HANDLING)
 void PageClientImpl::handleAsynchronousCancelableScrollEvent(UIScrollView *scrollView, UIScrollEvent *scrollEvent, void (^completion)(BOOL handled))
@@ -988,6 +999,11 @@ void PageClientImpl::handleAsynchronousCancelableScrollEvent(UIScrollView *scrol
     [m_webView _scrollView:scrollView asynchronouslyHandleScrollEvent:scrollEvent completion:completion];
 }
 #endif
+
+void PageClientImpl::runModalJavaScriptDialog(CompletionHandler<void()>&& callback)
+{
+    [m_contentView runModalJavaScriptDialog:WTFMove(callback)];
+}
 
 } // namespace WebKit
 

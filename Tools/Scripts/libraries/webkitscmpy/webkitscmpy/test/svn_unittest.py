@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Apple Inc. All rights reserved.
+# Copyright (C) 2020-2021 Apple Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -25,9 +25,9 @@ import shutil
 import tempfile
 import unittest
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from webkitcorepy import OutputCapture
-from webkitscmpy import local, mocks, remote
+from webkitscmpy import Commit, local, mocks, remote
 
 
 class TestLocalSvn(unittest.TestCase):
@@ -231,6 +231,26 @@ class TestLocalSvn(unittest.TestCase):
         with mocks.local.Svn(self.path), OutputCapture():
             self.assertIsNone(local.Svn(self.path).find('trunk', include_identifier=False).identifier)
 
+    def test_commits(self):
+        with mocks.local.Svn(self.path), OutputCapture():
+            svn = local.Svn(self.path)
+            self.assertEqual(Commit.Encoder().default([
+                svn.commit(revision='r6'),
+                svn.commit(revision='r4'),
+                svn.commit(revision='r2'),
+                svn.commit(revision='r1'),
+            ]), Commit.Encoder().default(list(svn.commits(begin=dict(revision='r1'), end=dict(revision='r6')))))
+
+    def test_commits_branch(self):
+        with mocks.local.Svn(self.path), OutputCapture():
+            svn = local.Svn(self.path)
+            self.assertEqual(Commit.Encoder().default([
+                svn.commit(revision='r7'),
+                svn.commit(revision='r3'),
+                svn.commit(revision='r2'),
+                svn.commit(revision='r1'),
+            ]), Commit.Encoder().default(list(svn.commits(begin=dict(argument='r1'), end=dict(argument='r7')))))
+
 
 class TestRemoteSvn(unittest.TestCase):
     remote = 'https://svn.example.org/repository/webkit'
@@ -263,7 +283,7 @@ class TestRemoteSvn(unittest.TestCase):
         with mocks.remote.Svn():
             self.assertDictEqual({
                 'Last Changed Author': 'jbedard@apple.com',
-                'Last Changed Date': datetime.fromtimestamp(1601665100).strftime('%Y-%m-%d %H:%M:%S'),
+                'Last Changed Date': datetime.utcfromtimestamp(1601665100 - timedelta(hours=7).seconds).strftime('%Y-%m-%d %H:%M:%S'),
                 'Last Changed Rev': '6',
                 'Revision': 10,
             }, remote.Svn(self.remote).info())
@@ -331,3 +351,24 @@ class TestRemoteSvn(unittest.TestCase):
 
     def test_id(self):
         self.assertEqual(remote.Svn(self.remote).id, 'webkit')
+
+    def test_commits(self):
+        self.maxDiff = None
+        with mocks.remote.Svn():
+            svn = remote.Svn(self.remote)
+            self.assertEqual(Commit.Encoder().default([
+                svn.commit(revision='r6'),
+                svn.commit(revision='r4'),
+                svn.commit(revision='r2'),
+                svn.commit(revision='r1'),
+            ]), Commit.Encoder().default(list(svn.commits(begin=dict(revision='r1'), end=dict(revision='r6')))))
+
+    def test_commits_branch(self):
+        with mocks.remote.Svn(), OutputCapture():
+            svn = remote.Svn(self.remote)
+            self.assertEqual(Commit.Encoder().default([
+                svn.commit(revision='r7'),
+                svn.commit(revision='r3'),
+                svn.commit(revision='r2'),
+                svn.commit(revision='r1'),
+            ]), Commit.Encoder().default(list(svn.commits(begin=dict(argument='r1'), end=dict(argument='r7')))))

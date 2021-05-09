@@ -39,6 +39,7 @@
 #include <wtf/Scope.h>
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/StringHash.h>
+#include <wtf/text/StringToIntegerConversion.h>
 
 namespace WebKit {
 
@@ -233,7 +234,7 @@ uint64_t Engine::diskUsage(const String& rootPath, const WebCore::ClientOrigin& 
         return 0;
 
     String saltPath = FileSystem::pathByAppendingComponent(rootPath, "salt"_s);
-    auto salt = readOrMakeSalt(saltPath);
+    auto salt = FileSystem::readOrMakeSalt(saltPath);
     if (!salt)
         return 0;
 
@@ -374,7 +375,7 @@ void Engine::initialize(CompletionCallback&& callback)
     m_ioQueue->dispatch([this, weakThis = makeWeakPtr(this), rootPath = m_rootPath.isolatedCopy()] () mutable {
         FileSystem::makeAllDirectories(rootPath);
         String saltPath = FileSystem::pathByAppendingComponent(rootPath, "salt"_s);
-        RunLoop::main().dispatch([this, weakThis = WTFMove(weakThis), salt = readOrMakeSalt(saltPath)]() mutable {
+        RunLoop::main().dispatch([this, weakThis = WTFMove(weakThis), salt = FileSystem::readOrMakeSalt(saltPath)]() mutable {
             if (!weakThis)
                 return;
 
@@ -570,16 +571,17 @@ Optional<uint64_t> Engine::readSizeFile(const String& path)
     if (!FileSystem::getFileSize(path, fileSize) || !fileSize)
         return WTF::nullopt;
 
-    size_t bytesToRead;
+    unsigned bytesToRead;
     if (!WTF::convertSafely(fileSize, bytesToRead))
         return WTF::nullopt;
 
-    Vector<unsigned char> buffer(bytesToRead);
-    size_t totalBytesRead = FileSystem::readFromFile(fileHandle, reinterpret_cast<char*>(buffer.data()), buffer.size());
+    // FIXME: No reason we need a heap buffer to read an arbitrary number of bytes when we only support small files that contain numerals.
+    Vector<char> buffer(bytesToRead);
+    unsigned totalBytesRead = FileSystem::readFromFile(fileHandle, buffer.data(), buffer.size());
     if (totalBytesRead != bytesToRead)
         return WTF::nullopt;
 
-    return charactersToUIntStrict(buffer.data(), totalBytesRead);
+    return parseInteger<uint64_t>({ buffer.data(), totalBytesRead });
 }
 
 class ReadOriginsTaskCounter : public RefCounted<ReadOriginsTaskCounter> {
@@ -702,7 +704,7 @@ void Engine::clearAllCachesFromDisk(CompletionHandler<void()>&& completionHandle
         LockHolder locker(globalSizeFileLock);
         for (auto& filename : FileSystem::listDirectory(path, "*")) {
             if (FileSystem::fileIsDirectory(filename, FileSystem::ShouldFollowSymbolicLinks::No))
-                deleteDirectoryRecursively(filename);
+                FileSystem::deleteNonEmptyDirectory(filename);
         }
         RunLoop::main().dispatch(WTFMove(completionHandler));
     });
@@ -749,18 +751,18 @@ void Engine::clearCachesForOriginFromDirectories(const Vector<String>& folderPat
 
             // If cache salt is initialized and the paths do not match, some cache files have probably be removed or partially corrupted.
             ASSERT(!m_salt || folderPath == cachesRootPath(*folderOrigin));
-            deleteDirectoryRecursivelyOnBackgroundThread(folderPath, [callbackAggregator = WTFMove(callbackAggregator)] { });
+            deleteNonEmptyDirectoryOnBackgroundThread(folderPath, [callbackAggregator = WTFMove(callbackAggregator)] { });
         });
     }
 }
 
-void Engine::deleteDirectoryRecursivelyOnBackgroundThread(const String& path, CompletionHandler<void()>&& completionHandler)
+void Engine::deleteNonEmptyDirectoryOnBackgroundThread(const String& path, CompletionHandler<void()>&& completionHandler)
 {
     ASSERT(RunLoop::isMain());
 
     m_ioQueue->dispatch([path = path.isolatedCopy(), completionHandler = WTFMove(completionHandler)]() mutable {
         LockHolder locker(globalSizeFileLock);
-        deleteDirectoryRecursively(path);
+        FileSystem::deleteNonEmptyDirectory(path);
 
         RunLoop::main().dispatch(WTFMove(completionHandler));
     });

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -268,7 +268,7 @@ void SpeculativeJIT::speculationCheck(ExitKind kind, JSValueSource jsValueSource
         m_jit.appendExitInfo(jumpsToFail);
     } else
         m_jit.appendExitInfo(jumpToFail);
-    m_jit.jitCode()->appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size()));
+    m_jit.appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size()));
 }
 
 void SpeculativeJIT::speculationCheck(ExitKind kind, JSValueSource jsValueSource, Node* node, const MacroAssembler::JumpList& jumpsToFail)
@@ -283,16 +283,16 @@ void SpeculativeJIT::speculationCheck(ExitKind kind, JSValueSource jsValueSource
         m_jit.appendExitInfo(myJumpsToFail);
     } else
         m_jit.appendExitInfo(jumpsToFail);
-    m_jit.jitCode()->appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size()));
+    m_jit.appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size()));
 }
 
 OSRExitJumpPlaceholder SpeculativeJIT::speculationCheck(ExitKind kind, JSValueSource jsValueSource, Node* node)
 {
     if (!m_compileOkay)
         return OSRExitJumpPlaceholder();
-    unsigned index = m_jit.jitCode()->osrExit.size();
+    unsigned index = m_jit.m_osrExit.size();
     m_jit.appendExitInfo();
-    m_jit.jitCode()->appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size()));
+    m_jit.appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size()));
     return OSRExitJumpPlaceholder(index);
 }
 
@@ -315,9 +315,9 @@ void SpeculativeJIT::speculationCheck(ExitKind kind, JSValueSource jsValueSource
 {
     if (!m_compileOkay)
         return;
-    unsigned recoveryIndex = m_jit.jitCode()->appendSpeculationRecovery(recovery);
+    unsigned recoveryIndex = m_jit.appendSpeculationRecovery(recovery);
     m_jit.appendExitInfo(jumpToFail);
-    m_jit.jitCode()->appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size(), recoveryIndex));
+    m_jit.appendOSRExit(OSRExit(kind, jsValueSource, m_jit.graph().methodOfGettingAValueProfileFor(m_currentNode, node), this, m_stream->size(), recoveryIndex));
 }
 
 void SpeculativeJIT::speculationCheck(ExitKind kind, JSValueSource jsValueSource, Edge nodeUse, MacroAssembler::Jump jumpToFail, const SpeculationRecovery& recovery)
@@ -330,11 +330,11 @@ void SpeculativeJIT::emitInvalidationPoint(Node* node)
     if (!m_compileOkay)
         return;
     OSRExitCompilationInfo& info = m_jit.appendExitInfo(JITCompiler::JumpList());
-    m_jit.jitCode()->appendOSRExit(OSRExit(
+    m_jit.appendOSRExit(OSRExit(
         UncountableInvalidation, JSValueSource(), MethodOfGettingAValueProfile(),
         this, m_stream->size()));
     info.m_replacementSource = m_jit.watchpointLabel();
-    ASSERT(info.m_replacementSource.isSet());
+    RELEASE_ASSERT(info.m_replacementSource.isSet());
     noResult(node);
 }
 
@@ -2079,7 +2079,7 @@ void SpeculativeJIT::checkArgumentTypes()
     m_origin = NodeOrigin(CodeOrigin(BytecodeIndex(0)), CodeOrigin(BytecodeIndex(0)), true);
 
     auto& arguments = m_jit.graph().m_rootToArguments.find(m_jit.graph().block(0))->value;
-    for (int i = 0; i < m_jit.codeBlock()->numParameters(); ++i) {
+    for (unsigned i = 0; i < m_jit.codeBlock()->numParameters(); ++i) {
         Node* node = arguments[i];
         if (!node) {
             // The argument is dead. We don't do any checks for such arguments.
@@ -2201,15 +2201,15 @@ void SpeculativeJIT::linkOSREntries(LinkBuffer& linkBuffer)
         }
     }
 
-    m_jit.jitCode()->finalizeOSREntrypoints();
-    m_jit.jitCode()->common.finalizeCatchEntrypoints();
+    m_jit.jitCode()->finalizeOSREntrypoints(WTFMove(m_jit.m_osrEntry));
+    m_jit.jitCode()->common.finalizeCatchEntrypoints(WTFMove(m_jit.graph().m_catchEntrypoints));
 
     ASSERT(osrEntryIndex == m_osrEntryHeads.size());
     
     if (verboseCompilationEnabled()) {
         DumpContext dumpContext;
         dataLog("OSR Entries:\n");
-        for (OSREntryData& entryData : m_jit.jitCode()->osrEntry)
+        for (OSREntryData& entryData : m_jit.jitCode()->m_osrEntry)
             dataLog("    ", inContext(entryData, &dumpContext), "\n");
         if (!dumpContext.isEmpty())
             dumpContext.dump(WTF::dataFile());
@@ -2222,8 +2222,9 @@ void SpeculativeJIT::compileCheckTraps(Node* node)
     GPRTemporary unused(this);
     GPRReg unusedGPR = unused.gpr();
 
-    JITCompiler::Jump needTrapHandling = m_jit.branchTest8(JITCompiler::NonZero,
-        JITCompiler::AbsoluteAddress(m_jit.vm().needTrapHandlingAddress()));
+    JITCompiler::Jump needTrapHandling = m_jit.branchTest32(JITCompiler::NonZero,
+        JITCompiler::AbsoluteAddress(m_jit.vm().traps().trapBitsAddress()),
+        TrustedImm32(VMTraps::AsyncEvents));
 
     addSlowPathGenerator(slowPathCall(needTrapHandling, this, operationHandleTraps, unusedGPR, TrustedImmPtr::weakPointer(m_graph, m_graph.globalObjectFor(node->origin.semantic))));
     noResult(node);
@@ -2403,7 +2404,7 @@ void SpeculativeJIT::compileGetByValOnString(Node* node)
         JSGlobalObject* globalObject = m_jit.globalObjectFor(node->origin.semantic);
         Structure* stringPrototypeStructure = globalObject->stringPrototype()->structure(vm);
         Structure* objectPrototypeStructure = globalObject->objectPrototype()->structure(vm);
-        WTF::loadLoadFence();
+        WTF::dependentLoadLoadFence();
 
         if (globalObject->stringPrototypeChainIsSane()) {
             // FIXME: This could be captured using a Speculation mode that means "out-of-bounds
@@ -7481,12 +7482,13 @@ void SpeculativeJIT::compileConstantStoragePointer(Node* node)
     storageResult(storageGPR, node);
 }
 
-void SpeculativeJIT::cageTypedArrayStorage(GPRReg baseReg, GPRReg storageReg)
+void SpeculativeJIT::cageTypedArrayStorage(GPRReg baseReg, GPRReg storageReg, bool validateAuth)
 {
     auto untagArrayPtr = [&]() {
 #if CPU(ARM64E)
-        m_jit.untagArrayPtr(MacroAssembler::Address(baseReg, JSArrayBufferView::offsetOfLength()), storageReg);
+        m_jit.untagArrayPtrLength32(MacroAssembler::Address(baseReg, JSArrayBufferView::offsetOfLength()), storageReg, validateAuth);
 #else
+        UNUSED_PARAM(validateAuth);
         UNUSED_PARAM(baseReg);
         UNUSED_PARAM(storageReg);
 #endif
@@ -10211,7 +10213,7 @@ void SpeculativeJIT::compileCallDOMGetter(Node* node)
         m_jit.storePtr(GPRInfo::callFrameRegister, &vm().topCallFrame);
         m_jit.emitStoreCodeOrigin(m_currentNode->origin.semantic);
         if (Options::useJITCage())
-            m_jit.appendCall(vmEntryCustomAccessor);
+            m_jit.appendCall(vmEntryCustomGetter);
         else {
             FunctionPtr<OperationPtrTag> bypassedFunction = FunctionPtr<OperationPtrTag>(MacroAssemblerCodePtr<OperationPtrTag>(WTF::tagNativeCodePtrImpl<OperationPtrTag>(WTF::untagNativeCodePtrImpl<CustomAccessorPtrTag>(getter.executableAddress()))));
             m_jit.appendOperationCall(bypassedFunction);
@@ -11502,16 +11504,21 @@ void SpeculativeJIT::speculate(Node*, Edge edge)
 void SpeculativeJIT::emitSwitchIntJump(
     SwitchData* data, GPRReg value, GPRReg scratch)
 {
-    SimpleJumpTable& table = m_jit.codeBlock()->switchJumpTable(data->switchTableIndex);
-    table.ensureCTITable();
-    m_jit.sub32(Imm32(table.min), value);
+    const UnlinkedSimpleJumpTable& unlinkedTable = m_jit.graph().unlinkedSwitchJumpTable(data->switchTableIndex);
+    SimpleJumpTable& linkedTable = m_jit.graph().switchJumpTable(data->switchTableIndex);
+    linkedTable.ensureCTITable(unlinkedTable);
+    m_jit.sub32(Imm32(unlinkedTable.m_min), value);
     addBranch(
-        m_jit.branch32(JITCompiler::AboveOrEqual, value, Imm32(table.ctiOffsets.size())),
+        m_jit.branch32(JITCompiler::AboveOrEqual, value, Imm32(linkedTable.m_ctiOffsets.size())),
         data->fallThrough.block);
-    m_jit.move(TrustedImmPtr(table.ctiOffsets.begin()), scratch);
+    m_jit.move(TrustedImmPtr(linkedTable.m_ctiOffsets.data()), scratch);
+
+#if USE(JSVALUE64)
+    m_jit.farJump(JITCompiler::BaseIndex(scratch, value, JITCompiler::ScalePtr), JSSwitchPtrTag);
+#else
     m_jit.loadPtr(JITCompiler::BaseIndex(scratch, value, JITCompiler::ScalePtr), scratch);
-    
     m_jit.farJump(scratch, JSSwitchPtrTag);
+#endif
     data->didUseJumpTable = true;
 }
 
@@ -11538,8 +11545,10 @@ void SpeculativeJIT::emitSwitchImm(Node* node, SwitchData* data)
         emitSwitchIntJump(data, valueRegs.payloadGPR(), scratch);
         notInt32.link(&m_jit);
         addBranch(m_jit.branchIfNotNumber(valueRegs, scratch), data->fallThrough.block);
+
+        const UnlinkedSimpleJumpTable& unlinkedTable = m_jit.graph().unlinkedSwitchJumpTable(data->switchTableIndex);
         silentSpillAllRegisters(scratch);
-        callOperation(operationFindSwitchImmTargetForDouble, scratch, &vm(), valueRegs, data->switchTableIndex);
+        callOperation(operationFindSwitchImmTargetForDouble, scratch, &vm(), valueRegs, data->switchTableIndex, unlinkedTable.m_min);
         silentFillAllRegisters();
 
         m_jit.farJump(scratch, JSSwitchPtrTag);
@@ -11551,6 +11560,7 @@ void SpeculativeJIT::emitSwitchImm(Node* node, SwitchData* data)
         RELEASE_ASSERT_NOT_REACHED();
         break;
     }
+    ASSERT(data->didUseJumpTable);
 }
 
 void SpeculativeJIT::emitSwitchCharStringJump(Node* node, SwitchData* data, GPRReg value, GPRReg scratch)
@@ -11624,6 +11634,7 @@ void SpeculativeJIT::emitSwitchChar(Node* node, SwitchData* data)
         RELEASE_ASSERT_NOT_REACHED();
         break;
     }
+    ASSERT(data->didUseJumpTable);
 }
 
 namespace {
@@ -11775,7 +11786,11 @@ void SpeculativeJIT::emitBinarySwitchStringRecurse(
 void SpeculativeJIT::emitSwitchStringOnString(Node* node, SwitchData* data, GPRReg string)
 {
     data->didUseJumpTable = true;
-    
+
+    const UnlinkedStringJumpTable& unlinkedTable = m_graph.unlinkedStringSwitchJumpTable(data->switchTableIndex);
+    StringJumpTable& linkedTable = m_jit.graph().stringSwitchJumpTable(data->switchTableIndex);
+    linkedTable.ensureCTITable(unlinkedTable);
+
     bool canDoBinarySwitch = true;
     unsigned totalLength = 0;
     
@@ -11794,8 +11809,7 @@ void SpeculativeJIT::emitSwitchStringOnString(Node* node, SwitchData* data, GPRR
 
     if (!canDoBinarySwitch || totalLength > Options::maximumBinaryStringSwitchTotalLength()) {
         flushRegisters();
-        callOperation(
-            operationSwitchString, string, TrustedImmPtr::weakPointer(m_graph, m_graph.globalObjectFor(node->origin.semantic)), static_cast<size_t>(data->switchTableIndex), string);
+        callOperation(operationSwitchString, string, TrustedImmPtr::weakPointer(m_graph, m_graph.globalObjectFor(node->origin.semantic)), static_cast<size_t>(data->switchTableIndex), &unlinkedTable, string);
         m_jit.exceptionCheck();
         m_jit.farJump(string, JSSwitchPtrTag);
         return;
@@ -11832,7 +11846,7 @@ void SpeculativeJIT::emitSwitchStringOnString(Node* node, SwitchData* data, GPRR
     
     slowCases.link(&m_jit);
     silentSpillAllRegisters(string);
-    callOperation(operationSwitchString, string, TrustedImmPtr::weakPointer(m_graph, m_graph.globalObjectFor(node->origin.semantic)), static_cast<size_t>(data->switchTableIndex), string);
+    callOperation(operationSwitchString, string, TrustedImmPtr::weakPointer(m_graph, m_graph.globalObjectFor(node->origin.semantic)), static_cast<size_t>(data->switchTableIndex), &unlinkedTable, string);
     silentFillAllRegisters();
     m_jit.exceptionCheck();
     m_jit.farJump(string, JSSwitchPtrTag);
@@ -11842,6 +11856,7 @@ void SpeculativeJIT::emitSwitchString(Node* node, SwitchData* data)
 {
     switch (node->child1().useKind()) {
     case StringIdentUse: {
+        // Note that we do not use JumpTable in this case.
         SpeculateCellOperand op1(this, node->child1());
         GPRTemporary temp(this);
         

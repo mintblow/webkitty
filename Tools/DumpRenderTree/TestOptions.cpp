@@ -89,6 +89,7 @@ const TestFeatures& TestOptions::defaults()
             { "MediaDevicesEnabled", true },
             { "MediaPreloadingEnabled", true },
             { "MockScrollbarsEnabled", true },
+            { "NPAPIPlugInsEnabledForTestingInWebKitLegacy", true },
             { "NeedsStorageAccessFromFileURLsQuirk", false },
             { "OfflineWebApplicationCacheEnabled", true },
             { "RequiresUserGestureForAudioPlayback", false },
@@ -107,7 +108,6 @@ const TestFeatures& TestOptions::defaults()
             // FIXME: These experimental features are currently the only ones not enabled for WebKitLegacy, we
             // should either enable them or stop exposing them (as we do with with preferences like HTTP3Enabled).
             // All other experimental features are automatically enabled regardless of their specified defaults.
-            { "AspectRatioOfImgFromWidthAndHeightEnabled", false },
             { "AsyncClipboardAPIEnabled", false },
             { "CSSOMViewSmoothScrollingEnabled", false },
             { "ContactPickerAPIEnabled", false },
@@ -129,12 +129,15 @@ const TestFeatures& TestOptions::defaults()
             { "AllowFileAccessFromFileURLs", true },
             { "AllowTopNavigationToDataURLs", true },
             { "AllowUniversalAccessFromFileURLs", true },
-            { "AspectRatioOfImgFromWidthAndHeightEnabled", false },
             { "AspectRatioEnabled", true },
             { "AsyncClipboardAPIEnabled", false },
             { "AttachmentElementEnabled", false },
+            { "CSSContainmentEnabled", false },
+            { "CSSCounterStyleAtRuleImageSymbolsEnabled", false },
+            { "CSSCounterStyleAtRulesEnabled", false },
             { "CSSLogicalEnabled", false },
             { "CSSOMViewSmoothScrollingEnabled", false },
+            { "CanvasColorSpaceEnabled", true },
             { "ColorFilterEnabled", false },
             { "ContactPickerAPIEnabled", false },
             { "CoreMathMLEnabled", false },
@@ -167,6 +170,9 @@ const TestFeatures& TestOptions::defaults()
             { "UsesBackForwardCache", false },
             { "WebGPUEnabled", false },
             { "XSSAuditorEnabled", false },
+#endif
+#if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
+            { "UseGPUProcessForWebGLEnabled", false },
 #endif
         };
 #if PLATFORM(WIN)

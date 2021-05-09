@@ -37,6 +37,7 @@
 #include <wtf/Box.h>
 #include <wtf/Function.h>
 #include <wtf/MediaTime.h>
+#include <wtf/RobinHoodHashSet.h>
 #include <wtf/UniqueRef.h>
 #include <wtf/Variant.h>
 #include <wtf/Vector.h>
@@ -97,6 +98,7 @@ public:
         UnsupportedVideoCodec,
         UnsupportedAudioCodec,
         ContentEncrypted,
+        VariableFrameDuration,
     };
 
     enum class State : uint8_t {
@@ -213,9 +215,13 @@ public:
         CMTime m_samplePresentationTime;
         CMTime m_packetDuration;
         Vector<uint8_t> m_packetData;
+        Optional<size_t> m_currentPacketByteOffset;
+        Optional<size_t> m_currentPacketSize;
         size_t m_packetBytesRead { 0 };
         size_t m_byteOffset { 0 };
         size_t m_partialBytesRead { 0 };
+        uint8_t m_framesPerPacket { 0 };
+        Seconds m_frameDuration { 0_s };
         Vector<AudioStreamPacketDescription> m_packetDescriptions;
 
         // FIXME: 0.5 - 1.0 seconds is a better duration per sample buffer, but use 2 seconds so at least the first
@@ -230,8 +236,8 @@ private:
 
     TrackData* trackDataForTrackNumber(uint64_t);
 
-    static const HashSet<String>& supportedVideoCodecs();
-    static const HashSet<String>& supportedAudioCodecs();
+    static const MemoryCompactLookupOnlyRobinHoodHashSet<String>& supportedVideoCodecs();
+    static const MemoryCompactLookupOnlyRobinHoodHashSet<String>& supportedAudioCodecs();
 
     // webm::Callback
     webm::Status OnElementBegin(const webm::ElementMetadata&, webm::Action*) final;

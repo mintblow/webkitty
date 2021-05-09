@@ -577,6 +577,7 @@ public:
     static constexpr GCGLenum RG32I = 0x823B;
     static constexpr GCGLenum RG32UI = 0x823C;
     static constexpr GCGLenum VERTEX_ARRAY_BINDING = 0x85B5;
+    static constexpr GCGLenum VERTEX_ARRAY_BINDING_OES = 0x85B5;
     static constexpr GCGLenum R8_SNORM = 0x8F94;
     static constexpr GCGLenum RG8_SNORM = 0x8F95;
     static constexpr GCGLenum RGB8_SNORM = 0x8F96;
@@ -909,7 +910,7 @@ public:
 
     // Creates a GraphicsContextGL instance to render into offscreen destination in context of HostWindow.
     // HostWindow might affect the decision which backend is to be used.
-    static RefPtr<GraphicsContextGL> create(const GraphicsContextGLAttributes&, HostWindow*);
+    WEBCORE_EXPORT static RefPtr<GraphicsContextGL> create(const GraphicsContextGLAttributes&, HostWindow*);
 
     GraphicsContextGL(GraphicsContextGLAttributes, GraphicsContextGL* sharedContext = nullptr);
     virtual ~GraphicsContextGL() = default;
@@ -1310,7 +1311,9 @@ public:
     // Returns interface for CV interaction if the functionality is present.
     virtual GraphicsContextGLCV* asCV() = 0;
 #endif
+#if ENABLE(VIDEO)
     virtual bool copyTextureFromMedia(MediaPlayer&, PlatformGLObject texture, GCGLenum target, GCGLint level, GCGLenum internalFormat, GCGLenum format, GCGLenum type, bool premultiplyAlpha, bool flipY) = 0;
+#endif
 
     IntSize getInternalFramebufferSize() const { return IntSize(m_currentWidth, m_currentHeight); }
 

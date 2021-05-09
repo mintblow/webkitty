@@ -92,28 +92,20 @@ class LayoutTestRunner(object):
         all_shards = self._sharder.shard_tests(test_inputs, child_process_count, self._options.fully_parallel)
         return min(child_process_count, len(all_shards))
 
-    def run_tests(self, expectations, test_inputs, tests_to_skip, num_workers, retrying, device_type=None):
+    def run_tests(self, expectations, test_inputs, num_workers, retrying, device_type=None):
         self._expectations = expectations
-        self._test_inputs = []
-        for test_input in test_inputs:
-            self._update_test_input(test_input, device_type)
-            self._test_inputs.append(test_input)
+        self._test_inputs = list(test_inputs)
 
         self._retrying = retrying
 
         # FIXME: rename all variables to test_run_results or some such ...
-        run_results = TestRunResults(self._expectations, len(test_inputs) + len(tests_to_skip))
+        run_results = TestRunResults(self._expectations, len(test_inputs))
         self._current_run_results = run_results
         self._printer.num_tests = len(test_inputs)
         self._printer.num_started = 0
 
         if not retrying:
             self._printer.print_expected(run_results, self._expectations.model().get_tests_with_result_type)
-
-        for test_name in set(tests_to_skip):
-            result = test_results.TestResult(test_name)
-            result.type = test_expectations.SKIP
-            run_results.add(result, expected=True, test_is_slow=self._test_is_slow(test_name))
 
         self._printer.write_update('Sharding tests ...')
         all_shards = self._sharder.shard_tests(test_inputs, int(self._options.child_processes), self._options.fully_parallel)
@@ -140,15 +132,6 @@ class LayoutTestRunner(object):
             raise
 
         return run_results
-
-    def _update_test_input(self, test_input, device_type=None):
-        if test_input.reference_files is None:
-            # Lazy initialization.
-            test_input.reference_files = self._port.reference_files(test_input.test_name, device_type=device_type)
-        if test_input.reference_files:
-            test_input.should_run_pixel_test = True
-        else:
-            test_input.should_run_pixel_test = self._port.should_run_as_pixel_test(test_input)
 
     def _worker_factory(self, worker_connection):
         results_directory = self._results_directory

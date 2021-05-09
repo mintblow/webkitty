@@ -68,6 +68,12 @@ typedef NS_ENUM(NSInteger, WKMediaPlaybackState) {
     WKMediaPlaybackStateSuspended
 } WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
+typedef NS_ENUM(NSInteger, WKMediaCaptureState) {
+    WKMediaCaptureStateNone,
+    WKMediaCaptureStateActive,
+    WKMediaCaptureStateMuted,
+} WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+
 /*! @abstract A copy of the configuration with which the web view was
  initialized. */
 @property (nonatomic, readonly, copy) WKWebViewConfiguration *configuration;
@@ -327,7 +333,11 @@ typedef NS_ENUM(NSInteger, WKMediaPlaybackState) {
 
  The above function text will create a promise that will fulfull with the value 42 after a one second delay, wait for it to resolve, then return the fulfillment value of 42.
 */
+#ifdef NS_SWIFT_ASYNC_NAME
+- (void)callAsyncJavaScript:(NSString *)functionBody arguments:(nullable NSDictionary<NSString *, id> *)arguments inFrame:(nullable WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^ _Nullable)(_Nullable_result id, NSError * _Nullable error))completionHandler NS_REFINED_FOR_SWIFT WK_API_AVAILABLE(macos(11.0), ios(14.0));
+#else
 - (void)callAsyncJavaScript:(NSString *)functionBody arguments:(nullable NSDictionary<NSString *, id> *)arguments inFrame:(nullable WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^ _Nullable)(_Nullable id, NSError * _Nullable error))completionHandler NS_REFINED_FOR_SWIFT WK_API_AVAILABLE(macos(11.0), ios(14.0));
+#endif
 
 /*! @abstract Closes all out-of-window media presentations in a WKWebView.
  @discussion Includes picture-in-picture and fullscreen.
@@ -354,6 +364,39 @@ typedef NS_ENUM(NSInteger, WKMediaPlaybackState) {
  */
 - (void)requestMediaPlaybackStateWithCompletionHandler:(void (^)(WKMediaPlaybackState))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
+
+/*! @abstract The state of camera capture on a web page.
+ @discussion @link WKWebView @/link is key-value observing (KVO) compliant
+ for this property.
+ */
+@property (nonatomic, readonly) WKMediaCaptureState cameraCaptureState WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+
+/*! @abstract The state of microphone capture on a web page.
+ @discussion @link WKWebView @/link is key-value observing (KVO) compliant
+ for this property.
+ */
+@property (nonatomic, readonly) WKMediaCaptureState microphoneCaptureState WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+
+/*! @abstract Set camera capture state of a WKWebView.
+ @param state State to apply for capture.
+ @param completionHandler A block to invoke after the camera state has been changed.
+ @discussion
+ If value is WKMediaCaptureStateNone, this will stop any camera capture.
+ If value is WKMediaCaptureStateMuted, any active camera capture will become muted.
+ If value is WKMediaCaptureStateActive, any muted camera capture will become active.
+ */
+- (void)setCameraCaptureState:(WKMediaCaptureState)state completionHandler:(void (^_Nullable)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+
+/*! @abstract Set microphone capture state of a WKWebView.
+ @param state state to apply for capture.
+ @param completionHandler A block to invoke after the camera state has been changed.
+ @discussion
+ If value is WKMediaCaptureStateNone, this will stop any microphone capture.
+ If value is WKMediaCaptureStateMuted, any active microphone capture will become muted.
+ If value is WKMediaCaptureStateActive, any muted microphone capture will become active.
+ */
+- (void)setMicrophoneCaptureState:(WKMediaCaptureState)state completionHandler:(void (^_Nullable)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+
 /*! @abstract Get a snapshot for the visible viewport of WKWebView.
  @param snapshotConfiguration An object that specifies how the snapshot is configured.
  @param completionHandler A block to invoke when the snapshot is ready.
@@ -362,9 +405,9 @@ typedef NS_ENUM(NSInteger, WKMediaPlaybackState) {
  device scale. The completionHandler is passed the image of the viewport contents or an error.
  */
 #if TARGET_OS_IPHONE
-- (void)takeSnapshotWithConfiguration:(nullable WKSnapshotConfiguration *)snapshotConfiguration completionHandler:(void (^)(UIImage * _Nullable snapshotImage, NSError * _Nullable error))completionHandler WK_API_AVAILABLE(ios(11.0));
+- (void)takeSnapshotWithConfiguration:(nullable WKSnapshotConfiguration *)snapshotConfiguration completionHandler:(void (^)(UIImage * _Nullable snapshotImage, NSError * _Nullable error))completionHandler WK_SWIFT_ASYNC_NAME(takeSnapshot(configuration:)) WK_API_AVAILABLE(ios(11.0));
 #else
-- (void)takeSnapshotWithConfiguration:(nullable WKSnapshotConfiguration *)snapshotConfiguration completionHandler:(void (^)(NSImage * _Nullable snapshotImage, NSError * _Nullable error))completionHandler WK_API_AVAILABLE(macos(10.13));
+- (void)takeSnapshotWithConfiguration:(nullable WKSnapshotConfiguration *)snapshotConfiguration completionHandler:(void (^)(NSImage * _Nullable snapshotImage, NSError * _Nullable error))completionHandler WK_SWIFT_ASYNC_NAME(takeSnapshot(configuration:)) WK_API_AVAILABLE(macos(10.13));
 #endif
 
 /*! @abstract Create a PDF document representation from the web page currently displayed in the WKWebView
@@ -479,12 +522,64 @@ The uniform type identifier kUTTypeWebArchive can be used get the related pasteb
 */
 @property (nonatomic, nullable, copy) id interactionState WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
+/*! @abstract Sets the webpage contents from the passed data as if it was the
+ response to the supplied request. The request is never actually sent to the
+ supplied URL, though loads of resources defined in the NSData object would
+ be performed.
+ @param request The request specifying the base URL and other loading details
+ to be used while interpreting the supplied data object.
+ @param response A response that is used to interpret the supplied data object.
+ @param data The data to use as the contents of the webpage.
+ @result A new navigation.
+*/
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request response:(NSURLResponse *)response responseData:(NSData *)data WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponse:(NSURLResponse *)response responseData:(NSData *)data WK_API_DEPRECATED_WITH_REPLACEMENT("loadSimulatedRequest:response:responseData:", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
+
+/*! @abstract Navigates to the requested file URL on the filesystem.
+ @param request The request specifying the file URL to which to navigate.
+ @param readAccessURL The URL to allow read access to.
+ @discussion If readAccessURL references a single file, only that file may be
+ loaded by WebKit.
+ If readAccessURL references a directory, files inside that file may be loaded by WebKit.
+ @result A new navigation for the given file URL.
+*/
+- (WKNavigation *)loadFileRequest:(NSURLRequest *)request allowingReadAccessToURL:(NSURL *)readAccessURL WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+
+/*! @abstract Sets the webpage contents from the passed HTML string as if it was
+ the response to the supplied request. The request is never actually sent to the
+ supplied URL, though loads of resources defined in the HTML string would be
+ performed.
+ @param request The request specifying the base URL and other loading details
+ to be used while interpreting the supplied data object.
+ @param string The data to use as the contents of the webpage.
+ @result A new navigation.
+*/
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request responseHTMLString:(NSString *)string NS_SWIFT_NAME(loadSimulatedRequest(_:responseHTML:)) WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponseHTMLString:(NSString *)string NS_SWIFT_NAME(loadSimulatedRequest(_:withResponseHTML:)) WK_API_DEPRECATED_WITH_REPLACEMENT("loadSimulatedRequest:responseHTMLString:", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
+
 #if !TARGET_OS_IPHONE
 /* @abstract Returns an NSPrintOperation object configured to print the contents of this WKWebView
 @param printInfo The print info object used to configure the resulting print operation.
 */
 - (NSPrintOperation *)printOperationWithPrintInfo:(NSPrintInfo *)printInfo WK_API_AVAILABLE(macos(11.0));
 #endif
+
+/*! @abstract The theme color of the active page.
+ @discussion This is the CSS color parsed value of the `contents`
+ attribute of the first valid
+ @textblock
+    <meta name="theme-color" contents="...">
+ @/textblock
+ element in the current main document.
+ @link WKWebView @/link is key-value observing (KVO) compliant for this
+ property.
+ */
+#if TARGET_OS_IPHONE
+@property (nonatomic, readonly, nullable) UIColor *themeColor WK_API_AVAILABLE(ios(WK_IOS_TBA));
+#else
+@property (nonatomic, readonly, nullable) NSColor *themeColor WK_API_AVAILABLE(macos(WK_MAC_TBA));
+#endif
+
 @end
 
 #if !TARGET_OS_IPHONE
@@ -531,12 +626,6 @@ WK_API_AVAILABLE(macos(10.15.4))
 @interface WKWebView (WKDeprecated)
 
 @property (nonatomic, readonly, copy) NSArray *certificateChain WK_API_DEPRECATED_WITH_REPLACEMENT("serverTrust", macos(10.11, 10.12), ios(9.0, 10.0));
-
-- (void)pauseAllMediaPlayback:(void (^_Nullable)(void))completionHandler WK_API_DEPRECATED_WITH_REPLACEMENT("pauseAllMediaPlaybackWithCompletionHandler", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
-- (void)suspendAllMediaPlayback:(void (^_Nullable)(void))completionHandler WK_API_DEPRECATED_WITH_REPLACEMENT("setAllMediaPlaybackSuspended:suspended", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
-- (void)resumeAllMediaPlayback:(void (^ _Nullable)(void))completionHandler WK_API_DEPRECATED_WITH_REPLACEMENT("setAllMediaPlaybackSuspended:suspended", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
-- (void)closeAllMediaPresentations:(void (^_Nullable)(void))completionHandler WK_API_DEPRECATED_WITH_REPLACEMENT("closeAllMediaPresentationsWithCompletionHandler", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
-- (void)requestMediaPlaybackState:(void (^)(WKMediaPlaybackState))completionHandler WK_API_DEPRECATED_WITH_REPLACEMENT("requestMediaPlaybackStateWithCompletionHandler", macos(WK_MAC_TBA, WK_MAC_TBA), ios(WK_IOS_TBA, WK_IOS_TBA));
 
 @end
 

@@ -73,7 +73,7 @@
 #include "WebBackForwardList.h"
 #include "WebFormClient.h"
 #include "WebImage.h"
-#include "WebInspectorProxy.h"
+#include "WebInspectorUIProxy.h"
 #include "WebOpenPanelResultListenerProxy.h"
 #include "WebPageGroup.h"
 #include "WebPageMessages.h"
@@ -1928,13 +1928,14 @@ void WKPageSetPageUIClient(WKPageRef pageRef, const WKPageUIClientBase* wkClient
         }
 
 #if ENABLE(DEVICE_ORIENTATION)
-        void shouldAllowDeviceOrientationAndMotionAccess(WebPageProxy& page, WebFrameProxy&, FrameInfoData&& frameInfo, CompletionHandler<void(bool)>&& completionHandler) final
+        void shouldAllowDeviceOrientationAndMotionAccess(WebPageProxy& page, WebFrameProxy& frame, FrameInfoData&& frameInfo, CompletionHandler<void(bool)>&& completionHandler) final
         {
             if (!m_client.shouldAllowDeviceOrientationAndMotionAccess)
                 return completionHandler(false);
 
-            auto origin = API::SecurityOrigin::create(frameInfo.securityOrigin.securityOrigin());
-            completionHandler(m_client.shouldAllowDeviceOrientationAndMotionAccess(toAPI(&page), toAPI(origin.ptr()), m_client.base.clientInfo));
+            auto origin = API::SecurityOrigin::create(SecurityOrigin::createFromString(page.pageLoadState().activeURL()).get());
+            auto apiFrameInfo = API::FrameInfo::create(WTFMove(frameInfo), &page);
+            completionHandler(m_client.shouldAllowDeviceOrientationAndMotionAccess(toAPI(&page), toAPI(origin.ptr()), toAPI(apiFrameInfo.ptr()), m_client.base.clientInfo));
         }
 #endif
 
@@ -2709,9 +2710,18 @@ void WKPageSetMediaVolume(WKPageRef page, float volume)
     toImpl(page)->setMediaVolume(volume);    
 }
 
-void WKPageSetMuted(WKPageRef page, WKMediaMutedState muted)
+void WKPageSetMuted(WKPageRef page, WKMediaMutedState mutedState)
 {
-    toImpl(page)->setMuted(muted);
+    WebCore::MediaProducer::MutedStateFlags coreState;
+
+    if (mutedState & kWKMediaAudioMuted)
+        coreState.add(WebCore::MediaProducer::MutedState::AudioIsMuted);
+    if (mutedState & kWKMediaCaptureDevicesMuted)
+        coreState.add(WebCore::MediaProducer::AudioAndVideoCaptureIsMuted);
+    if (mutedState & kWKMediaScreenCaptureMuted)
+        coreState.add(WebCore::MediaProducer::MutedState::ScreenCaptureIsMuted);
+
+    toImpl(page)->setMuted(coreState);
 }
 
 void WKPageSetMediaCaptureEnabled(WKPageRef page, bool enabled)
@@ -2852,21 +2862,21 @@ WKMediaState WKPageGetMediaState(WKPageRef page)
     WebCore::MediaProducer::MediaStateFlags coreState = toImpl(page)->reportedMediaState();
     WKMediaState state = kWKMediaIsNotPlaying;
 
-    if (coreState & WebCore::MediaProducer::IsPlayingAudio)
+    if (coreState & WebCore::MediaProducer::MediaState::IsPlayingAudio)
         state |= kWKMediaIsPlayingAudio;
-    if (coreState & WebCore::MediaProducer::IsPlayingVideo)
+    if (coreState & WebCore::MediaProducer::MediaState::IsPlayingVideo)
         state |= kWKMediaIsPlayingVideo;
-    if (coreState & WebCore::MediaProducer::HasActiveAudioCaptureDevice)
+    if (coreState & WebCore::MediaProducer::MediaState::HasActiveAudioCaptureDevice)
         state |= kWKMediaHasActiveAudioCaptureDevice;
-    if (coreState & WebCore::MediaProducer::HasActiveVideoCaptureDevice)
+    if (coreState & WebCore::MediaProducer::MediaState::HasActiveVideoCaptureDevice)
         state |= kWKMediaHasActiveVideoCaptureDevice;
-    if (coreState & WebCore::MediaProducer::HasMutedAudioCaptureDevice)
+    if (coreState & WebCore::MediaProducer::MediaState::HasMutedAudioCaptureDevice)
         state |= kWKMediaHasMutedAudioCaptureDevice;
-    if (coreState & WebCore::MediaProducer::HasMutedVideoCaptureDevice)
+    if (coreState & WebCore::MediaProducer::MediaState::HasMutedVideoCaptureDevice)
         state |= kWKMediaHasMutedVideoCaptureDevice;
-    if (coreState & WebCore::MediaProducer::HasActiveDisplayCaptureDevice)
+    if (coreState & WebCore::MediaProducer::MediaState::HasActiveDisplayCaptureDevice)
         state |= kWKMediaHasActiveDisplayCaptureDevice;
-    if (coreState & WebCore::MediaProducer::HasMutedDisplayCaptureDevice)
+    if (coreState & WebCore::MediaProducer::MediaState::HasMutedDisplayCaptureDevice)
         state |= kWKMediaHasMutedDisplayCaptureDevice;
 
     return state;
@@ -2959,9 +2969,9 @@ void WKPageSetPrivateClickMeasurementTokenSignatureURLForTesting(WKPageRef page,
     });
 }
 
-void WKPageSetPrivateClickMeasurementAttributionReportURLForTesting(WKPageRef page, WKURLRef URLRef, WKPageSetPrivateClickMeasurementAttributionReportURLForTestingFunction callback, void* callbackContext)
+void WKPageSetPrivateClickMeasurementAttributionReportURLsForTesting(WKPageRef page, WKURLRef sourceURL, WKURLRef destinationURL, WKPageSetPrivateClickMeasurementAttributionReportURLsForTestingFunction callback, void* callbackContext)
 {
-    toImpl(page)->setPrivateClickMeasurementAttributionReportURLForTesting(URL(URL(), toWTFString(URLRef)), [callbackContext, callback] () {
+    toImpl(page)->setPrivateClickMeasurementAttributionReportURLsForTesting(URL(URL(), toWTFString(sourceURL)), URL(URL(), toWTFString(destinationURL)), [callbackContext, callback] () {
         callback(callbackContext);
     });
 }

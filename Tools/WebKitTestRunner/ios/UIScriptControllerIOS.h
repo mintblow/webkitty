@@ -80,6 +80,7 @@ private:
     void rawKeyUp(JSStringRef) override;
 
     void dismissFormAccessoryView() override;
+    JSObjectRef filePickerAcceptedTypeIdentifiers() override;
     void dismissFilePicker(JSValueRef) override;
     JSRetainPtr<JSStringRef> selectFormPopoverTitle() const override;
     JSRetainPtr<JSStringRef> textContentType() const override;
@@ -133,6 +134,8 @@ private:
     void setKeyboardInputModeIdentifier(JSStringRef) override;
     void toggleCapsLock(JSValueRef) override;
     bool keyboardIsAutomaticallyShifted() const override;
+    bool isAnimatingDragCancel() const override;
+    JSObjectRef tapHighlightViewRect() const override;
     JSObjectRef attachmentInfo(JSStringRef) override;
     UIView *platformContentView() const override;
     JSObjectRef calendarType() const override;
@@ -140,15 +143,12 @@ private:
     void setAllowsViewportShrinkToFit(bool) override;
     void copyText(JSStringRef) override;
     void installTapGestureOnWindow(JSValueRef) override;
-    bool isShowingContextMenu() const override;
     void setSpellCheckerResults(JSValueRef) override { }
 
     bool mayContainEditableElementsInRect(unsigned x, unsigned y, unsigned width, unsigned height) override;
 
     void setDidStartFormControlInteractionCallback(JSValueRef) override;
     void setDidEndFormControlInteractionCallback(JSValueRef) override;
-    void setDidShowContextMenuCallback(JSValueRef) override;
-    void setDidDismissContextMenuCallback(JSValueRef) override;
     void setWillBeginZoomingCallback(JSValueRef) override;
     void setDidEndZoomingCallback(JSValueRef) override;
     void setDidShowKeyboardCallback(JSValueRef) override;

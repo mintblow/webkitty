@@ -24,6 +24,9 @@
  */
 
 #include "config.h"
+
+#if USE(AVIF)
+
 #include "AVIFImageReader.h"
 
 #include "AVIFImageDecoder.h"
@@ -36,32 +39,23 @@ AVIFImageReader::AVIFImageReader(RefPtr<AVIFImageDecoder>&& decoder)
 {
 }
 
-AVIFImageReader::~AVIFImageReader()
+AVIFImageReader::~AVIFImageReader() = default;
+
+bool AVIFImageReader::parseHeader(const SharedBuffer::DataSegment& data, bool allDataReceived)
 {
-}
+    if (avifDecoderSetIOMemory(m_avifDecoder.get(), reinterpret_cast<const uint8_t*>(data.data()), data.size()) != AVIF_RESULT_OK)
+        return allDataReceived ? m_decoder->setFailed() : false;
 
-void AVIFImageReader::parseHeader(const SharedBuffer::DataSegment& data, bool allDataReceived)
-{
-    avifROData avifData;
-    avifData.data = reinterpret_cast<const uint8_t*>(data.data());
-    avifData.size = data.size();
-
-    if (!avifPeekCompatibleFileType(&avifData)) {
-        m_decoder->setFailed();
-        return;
-    }
-
-    if (avifDecoderParse(m_avifDecoder.get(), &avifData) != AVIF_RESULT_OK
-        || avifDecoderNextImage(m_avifDecoder.get()) != AVIF_RESULT_OK) {
-        m_decoder->setFailed();
-        return;
-    }
+    if (avifDecoderParse(m_avifDecoder.get()) != AVIF_RESULT_OK
+        || avifDecoderNextImage(m_avifDecoder.get()) != AVIF_RESULT_OK)
+        return allDataReceived ? m_decoder->setFailed() : false;
 
     if (!m_dataParsed && allDataReceived)
         m_dataParsed = true;
 
     const avifImage* firstImage = m_avifDecoder->image;
     m_decoder->setSize(IntSize(firstImage->width, firstImage->height));
+    return true;
 }
 
 void AVIFImageReader::decodeFrame(size_t frameIndex, ScalableImageDecoderFrame& buffer, const SharedBuffer::DataSegment& data)
@@ -70,11 +64,12 @@ void AVIFImageReader::decodeFrame(size_t frameIndex, ScalableImageDecoderFrame& 
         return;
 
     if (!m_dataParsed) {
-        avifROData avifData;
-        avifData.data = reinterpret_cast<const uint8_t*>(data.data());
-        avifData.size = data.size();
+        if (avifDecoderSetIOMemory(m_avifDecoder.get(), reinterpret_cast<const uint8_t*>(data.data()), data.size()) != AVIF_RESULT_OK) {
+            m_decoder->setFailed();
+            return;
+        }
 
-        if (avifDecoderParse(m_avifDecoder.get(), &avifData) != AVIF_RESULT_OK) {
+        if (avifDecoderParse(m_avifDecoder.get()) != AVIF_RESULT_OK) {
             m_decoder->setFailed();
             return;
         }
@@ -108,7 +103,31 @@ void AVIFImageReader::decodeFrame(size_t frameIndex, ScalableImageDecoderFrame& 
     }
 
     buffer.setHasAlpha(avifRGBFormatHasAlpha(decodedRGBImage.format));
+    buffer.setDuration(Seconds(m_avifDecoder->imageTiming.duration));
     buffer.setDecodingStatus(DecodingStatus::Complete);
 }
 
+size_t AVIFImageReader::imageCount() const
+{
+    return m_avifDecoder->imageCount;
 }
+
+double AVIFImageReader::repetitionCount() const
+{
+    double trackDuration = m_avifDecoder->duration;
+    if (!trackDuration)
+        return 0.0;
+
+    double accumulatedFrameDuration = 0.0;
+    for (int i = 0; i < m_avifDecoder->imageCount; ++i) {
+        avifImageTiming timing;
+        if (avifDecoderNthImageTiming(m_avifDecoder.get(), i, &timing) != AVIF_RESULT_OK)
+            return 0.0;
+        accumulatedFrameDuration += timing.duration;
+    }
+    return accumulatedFrameDuration / trackDuration;
+}
+
+}
+
+#endif // USE(AVIF)

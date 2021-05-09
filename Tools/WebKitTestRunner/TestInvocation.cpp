@@ -792,6 +792,12 @@ void TestInvocation::didReceiveMessageFromInjectedBundle(WKStringRef messageName
         return;
     }
 
+    if (WKStringIsEqualToUTF8CString(messageName, "AppBoundRequestContextDataForDomain")) {
+        WKStringRef domain = stringValue(messageBody);
+        TestController::singleton().appBoundRequestContextDataForDomain(domain);
+        return;
+    }
+
     ASSERT_NOT_REACHED();
 }
 
@@ -1352,9 +1358,11 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         return nullptr;
     }
 
-    if (WKStringIsEqualToUTF8CString(messageName, "SetPrivateClickMeasurementAttributionReportURLForTesting")) {
-        ASSERT(WKGetTypeID(messageBody) == WKURLGetTypeID());
-        TestController::singleton().setPrivateClickMeasurementAttributionReportURLForTesting(static_cast<WKURLRef>(messageBody));
+    if (WKStringIsEqualToUTF8CString(messageName, "SetPrivateClickMeasurementAttributionReportURLsForTesting")) {
+        auto testDictionary = dictionaryValue(messageBody);
+        auto sourceURL = adoptWK(WKURLCreateWithUTF8CString(toWTFString(stringValue(testDictionary, "SourceURLString")).utf8().data()));
+        auto destinationURL = adoptWK(WKURLCreateWithUTF8CString(toWTFString(stringValue(testDictionary, "AttributeOnURLString")).utf8().data()));
+        TestController::singleton().setPrivateClickMeasurementAttributionReportURLsForTesting(sourceURL.get(), destinationURL.get());
         return nullptr;
     }
 
@@ -1386,11 +1394,6 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
 
     if (WKStringIsEqualToUTF8CString(messageName, "SetIsMediaKeySystemPermissionGranted")) {
         TestController::singleton().setIsMediaKeySystemPermissionGranted(booleanValue(messageBody));
-        return nullptr;
-    }
-
-    if (WKStringIsEqualToUTF8CString(messageName, "SetQuotaLoggingEnabled")) {
-        TestController::singleton().setQuotaLoggingEnabled(messageBody);
         return nullptr;
     }
 
@@ -1434,6 +1437,11 @@ void TestInvocation::uiScriptDidComplete(const String& result, unsigned scriptCa
 void TestInvocation::outputText(const WTF::String& text)
 {
     m_textOutput.append(text);
+}
+
+void TestInvocation::didNotHandleTapAsMeaningfulClick()
+{
+    postPageMessage("CallDidNotHandleTapAsMeaningfulClickCallback");
 }
 
 void TestInvocation::didBeginSwipe()
@@ -1565,6 +1573,12 @@ void TestInvocation::didReceiveLoadedSubresourceDomains(Vector<String>&& domains
     for (auto& domain : domains)
         WKArrayAppendItem(messageBody.get(), toWK(domain).get());
     postPageMessage("CallDidReceiveLoadedSubresourceDomains", messageBody);
+}
+
+void TestInvocation::didReceiveAppBoundRequestContextDataForDomain(String&& domain)
+{
+    auto messageBody = WKStringCreateWithUTF8CString(domain.utf8().data());
+    postPageMessage("CallDidReceiveAppBoundRequestContextDataForDomain", messageBody);
 }
 
 void TestInvocation::didRemoveAllSessionCredentials()

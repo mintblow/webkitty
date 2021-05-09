@@ -41,6 +41,7 @@
 #include "JSTemplateObjectDescriptor.h"
 #include "Label.h"
 #include "LabelScope.h"
+#include "LinkTimeConstant.h"
 #include "Nodes.h"
 #include "ParserError.h"
 #include "ProfileTypeBytecodeFlag.h"
@@ -74,6 +75,7 @@ namespace JSC {
 
     enum class DebuggableCall { Yes, No };
     enum class ThisResolutionType { Local, Scoped };
+    enum class InvalidPrototypeMode : uint8_t { Throw, Ignore };
     enum class LinkTimeConstant : int32_t;
     
     class CallArguments {
@@ -814,7 +816,20 @@ namespace JSC {
         RegisterID* emitGetByVal(RegisterID* dst, RegisterID* base, RegisterID* property);
         RegisterID* emitGetByVal(RegisterID* dst, RegisterID* base, RegisterID* thisValue, RegisterID* property);
         RegisterID* emitGetPrototypeOf(RegisterID* dst, RegisterID* value);
-        RegisterID* emitDirectSetPrototypeOf(RegisterID* base, RegisterID* prototype);
+
+        template<InvalidPrototypeMode mode>
+        RegisterID* emitDirectSetPrototypeOf(RegisterID* base, RegisterID* prototype, const JSTextPosition& divot, const JSTextPosition& divotStart, const JSTextPosition& divotEnd)
+        {
+            RefPtr<RegisterID> setPrototypeDirect = moveLinkTimeConstant(nullptr, mode == InvalidPrototypeMode::Throw ? LinkTimeConstant::setPrototypeDirectOrThrow : LinkTimeConstant::setPrototypeDirect);
+
+            CallArguments args(*this, nullptr, 1);
+            move(args.thisRegister(), base);
+            move(args.argumentRegister(0), prototype);
+
+            emitCall(newTemporary(), setPrototypeDirect.get(), NoExpectedFunction, args, divot, divotStart, divotEnd, DebuggableCall::No);
+            return base;
+        }
+
         RegisterID* emitPutByVal(RegisterID* base, RegisterID* property, RegisterID* value);
         RegisterID* emitPutByVal(RegisterID* base, RegisterID* thisValue, RegisterID* property, RegisterID* value);
         RegisterID* emitDirectPutByVal(RegisterID* base, RegisterID* property, RegisterID* value);

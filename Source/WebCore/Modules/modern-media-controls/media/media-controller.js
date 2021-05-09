@@ -132,14 +132,14 @@ class MediaController
         return !!this.host?.showMediaControlsContextMenu;
     }
 
-    showMediaControlsContextMenu(button)
+    showMediaControlsContextMenu(button, options = {})
     {
         if (!this.canShowMediaControlsContextMenu)
             return false;
 
         let autoHideController = this.controls.autoHideController;
 
-        let willShowContextMenu = this.host.showMediaControlsContextMenu(button.element, button.contextMenuOptions, () => {
+        let willShowContextMenu = this.host.showMediaControlsContextMenu(button.element, {...button.contextMenuOptions, ...options}, () => {
             button.on = false;
             autoHideController.hasSecondaryUIAttached = false;
         });
@@ -371,6 +371,13 @@ class MediaController
             this._supportingObjects.forEach(supportingObject => supportingObject.enable());
 
         this.controls.visible = shouldControlsBeAvailable;
+    }
+
+    // Testing
+
+    set maximumRightContainerButtonCountOverride(count)
+    {
+        this.controls.maximumRightContainerButtonCountOverride = count;
     }
 
 }

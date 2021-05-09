@@ -126,10 +126,6 @@ public:
 
     void simulateWebNotificationClick(uint64_t notificationID);
 
-#if ENABLE(ACCESSIBILITY_ISOLATED_TREE)
-    bool accessibilityIsolatedTreeMode() const { return m_accessibilityIsolatedTreeMode; }
-#endif
-    
     // Geolocation.
     void setGeolocationPermission(bool);
     void setMockGeolocationPosition(double latitude, double longitude, double accuracy, Optional<double> altitude, Optional<double> altitudeAccuracy, Optional<double> heading, Optional<double> speed, Optional<double> floorLevel);
@@ -151,7 +147,7 @@ public:
     void resetUserMediaPermissionRequestCountForOrigin(WKStringRef userMediaDocumentOriginString, WKStringRef topLevelDocumentOriginString);
 
     // Device Orientation / Motion.
-    bool handleDeviceOrientationAndMotionAccessRequest(WKSecurityOriginRef);
+    bool handleDeviceOrientationAndMotionAccessRequest(WKSecurityOriginRef, WKFrameInfoRef);
 
     // Content Extensions.
     void configureContentExtensionForTest(const TestInvocation&);
@@ -204,7 +200,7 @@ public:
     void setIgnoresViewportScaleLimits(bool);
 
     void setShouldDownloadUndisplayableMIMETypes(bool value) { m_shouldDownloadUndisplayableMIMETypes = value; }
-    void setShouldAllowDeviceOrientationAndMotionAccess(bool value) { m_shouldAllowDeviceOrientationAndMotionAccess = value; }
+    void setShouldAllowDeviceOrientationAndMotionAccess(bool);
 
     void clearStatisticsDataForDomain(WKStringRef domain);
     bool doesStatisticsDomainIDExistInDatabase(unsigned domainID);
@@ -266,6 +262,9 @@ public:
     void clearLoadedSubresourceDomains();
     void clearAppBoundSession();
     void reinitializeAppBoundDomains();
+    void appBoundRequestContextDataForDomain(WKStringRef);
+    void clearAppBoundNavigationData();
+
     void updateBundleIdentifierInNetworkProcess(const std::string& bundleIdentifier);
     void clearBundleIdentifierInNetworkProcess();
 
@@ -281,7 +280,6 @@ public:
     void terminateServiceWorkers();
 
     void resetQuota();
-    void setQuotaLoggingEnabled(bool);
 
     void removeAllSessionCredentials();
 
@@ -349,7 +347,7 @@ public:
     void simulateResourceLoadStatisticsSessionRestart();
     void setPrivateClickMeasurementTokenPublicKeyURLForTesting(WKURLRef);
     void setPrivateClickMeasurementTokenSignatureURLForTesting(WKURLRef);
-    void setPrivateClickMeasurementAttributionReportURLForTesting(WKURLRef);
+    void setPrivateClickMeasurementAttributionReportURLsForTesting(WKURLRef sourceURL, WKURLRef destinationURL);
     void markPrivateClickMeasurementsAsExpiredForTesting();
     void setPCMFraudPreventionValuesForTesting(WKStringRef unlinkableToken, WKStringRef secretToken, WKStringRef signature, WKStringRef keyID);
 
@@ -362,6 +360,8 @@ public:
 
     void completeMediaKeySystemPermissionCheck(WKMediaKeySystemPermissionCallbackRef);
     void setIsMediaKeySystemPermissionGranted(bool);
+
+    void didNotHandleTapAsMeaningfulClick();
 
 private:
     WKRetainPtr<WKPageConfigurationRef> generatePageConfiguration(const TestOptions&);
@@ -385,9 +385,10 @@ private:
     void platformInitializeContext();
     void platformCreateWebView(WKPageConfigurationRef, const TestOptions&);
     static PlatformWebView* platformCreateOtherPage(PlatformWebView* parentView, WKPageConfigurationRef, const TestOptions&);
-    void platformResetPreferencesToConsistentValues();
+
     // Returns false if the reset timed out.
     bool platformResetStateToConsistentValues(const TestOptions&);
+
 #if PLATFORM(COCOA)
     void cocoaPlatformInitialize();
     void cocoaResetStateToConsistentValues(const TestOptions&);
@@ -464,6 +465,7 @@ private:
     void downloadDidFail(WKDownloadRef, WKErrorRef);
     static bool downloadDidReceiveServerRedirectToURL(WKDownloadRef, WKURLResponseRef, WKURLRequestRef, const void*);
     bool downloadDidReceiveServerRedirectToURL(WKDownloadRef, WKURLRequestRef);
+    static void downloadDidReceiveAuthenticationChallenge(WKDownloadRef, WKAuthenticationChallengeRef, const void *clientInfo);
     
     static void processDidCrash(WKPageRef, const void* clientInfo);
     void processDidCrash();
@@ -539,6 +541,7 @@ private:
     bool m_gcBetweenTests { false };
     bool m_shouldDumpPixelsForAllTests { false };
     bool m_createdOtherPage { false };
+    bool m_enableAllExperimentalFeatures { true };
     std::vector<std::string> m_paths;
     std::set<std::string> m_allowedHosts;
     TestFeatures m_globalFeatures;
@@ -612,10 +615,6 @@ private:
 
     bool m_allowAnyHTTPSCertificateForAllowedHosts { false };
 
-#if ENABLE(ACCESSIBILITY_ISOLATED_TREE)
-    bool m_accessibilityIsolatedTreeMode { false };
-#endif
-    
     bool m_shouldDecideNavigationPolicyAfterDelay { false };
     bool m_shouldDecideResponsePolicyAfterDelay { false };
 

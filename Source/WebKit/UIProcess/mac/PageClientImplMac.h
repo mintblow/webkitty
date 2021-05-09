@@ -132,11 +132,14 @@ private:
 
 #if ENABLE(IMAGE_EXTRACTION)
     void requestImageExtraction(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::ImageExtractionResult&&)>&&) override;
+    void computeCanRevealImage(const URL&, ShareableBitmap&, CompletionHandler<void(bool)>&&) override;
 #endif
 
     RefPtr<WebPopupMenuProxy> createPopupMenuProxy(WebPageProxy&) override;
 #if ENABLE(CONTEXT_MENUS)
     Ref<WebContextMenuProxy> createContextMenuProxy(WebPageProxy&, ContextMenuContextData&&, const UserData&) override;
+    void didShowContextMenu() override;
+    void didDismissContextMenu() override;
 #endif
 
 #if ENABLE(INPUT_TYPE_COLOR)
@@ -225,6 +228,8 @@ private:
 
     void requestDOMPasteAccess(const WebCore::IntRect&, const String&, CompletionHandler<void(WebCore::DOMPasteAccessResponse)>&&) final;
 
+    void makeViewBlank(bool) final;
+
     NSView *activeView() const;
     NSWindow *activeWindow() const;
 
@@ -278,7 +283,7 @@ private:
 
 #if HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
     bool canHandleContextMenuTranslation() const override;
-    void handleContextMenuTranslation(const String&, const WebCore::IntRect&, const WebCore::IntPoint&) override;
+    void handleContextMenuTranslation(const WebCore::TranslationContextMenuInfo&) override;
 #endif
 
     NSView *m_view;

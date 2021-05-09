@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2019-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,16 +43,8 @@ void GPUProcessCreationParameters::encode(IPC::Encoder& encoder) const
 {
 #if ENABLE(MEDIA_STREAM)
     encoder << useMockCaptureDevices;
-    encoder << cameraSandboxExtensionHandle;
-#if HAVE(AUDIT_TOKEN)
-    encoder << appleCameraServicePathSandboxExtensionHandle;
-#if HAVE(ADDITIONAL_APPLE_CAMERA_SERVICE)
-    encoder << additionalAppleCameraServicePathSandboxExtensionHandle;
-#endif
-#endif // HAVE(AUDIT_TOKEN)
+#if PLATFORM(MAC)
     encoder << microphoneSandboxExtensionHandle;
-#if PLATFORM(IOS)
-    encoder << tccSandboxExtensionHandle;
 #endif
 #endif
     encoder << parentPID;
@@ -61,6 +53,11 @@ void GPUProcessCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << containerCachesDirectoryExtensionHandle;
     encoder << containerTemporaryDirectoryExtensionHandle;
 #endif
+#if PLATFORM(IOS_FAMILY)
+    encoder << compilerServiceExtensionHandles;
+    encoder << dynamicIOKitExtensionHandles;
+    encoder << dynamicMachExtensionHandles;
+#endif
 }
 
 bool GPUProcessCreationParameters::decode(IPC::Decoder& decoder, GPUProcessCreationParameters& result)
@@ -68,20 +65,8 @@ bool GPUProcessCreationParameters::decode(IPC::Decoder& decoder, GPUProcessCreat
 #if ENABLE(MEDIA_STREAM)
     if (!decoder.decode(result.useMockCaptureDevices))
         return false;
-    if (!decoder.decode(result.cameraSandboxExtensionHandle))
-        return false;
-#if HAVE(AUDIT_TOKEN)
-    if (!decoder.decode(result.appleCameraServicePathSandboxExtensionHandle))
-        return false;
-#if HAVE(ADDITIONAL_APPLE_CAMERA_SERVICE)
-    if (!decoder.decode(result.additionalAppleCameraServicePathSandboxExtensionHandle))
-        return false;
-#endif
-#endif // HAVE(AUDIT_TOKEN)
+#if PLATFORM(MAC)
     if (!decoder.decode(result.microphoneSandboxExtensionHandle))
-        return false;
-#if PLATFORM(IOS)
-    if (!decoder.decode(result.tccSandboxExtensionHandle))
         return false;
 #endif
 #endif
@@ -100,6 +85,25 @@ bool GPUProcessCreationParameters::decode(IPC::Decoder& decoder, GPUProcessCreat
     if (!containerTemporaryDirectoryExtensionHandle)
         return false;
     result.containerTemporaryDirectoryExtensionHandle = WTFMove(*containerTemporaryDirectoryExtensionHandle);
+#endif
+#if PLATFORM(IOS_FAMILY)
+    Optional<SandboxExtension::HandleArray> compilerServiceExtensionHandles;
+    decoder >> compilerServiceExtensionHandles;
+    if (!compilerServiceExtensionHandles)
+        return false;
+    result.compilerServiceExtensionHandles = WTFMove(*compilerServiceExtensionHandles);
+
+    Optional<SandboxExtension::HandleArray> dynamicIOKitExtensionHandles;
+    decoder >> dynamicIOKitExtensionHandles;
+    if (!dynamicIOKitExtensionHandles)
+        return false;
+    result.dynamicIOKitExtensionHandles = WTFMove(*dynamicIOKitExtensionHandles);
+
+    Optional<SandboxExtension::HandleArray> dynamicMachExtensionHandles;
+    decoder >> dynamicMachExtensionHandles;
+    if (!dynamicMachExtensionHandles)
+        return false;
+    result.dynamicMachExtensionHandles = WTFMove(*dynamicMachExtensionHandles);
 #endif
 
     return true;

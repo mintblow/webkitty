@@ -102,7 +102,7 @@ static void reboxAccordingToFormat(
 
 static void compileRecovery(
     CCallHelpers& jit, const ExitValue& value,
-    Vector<B3::ValueRep>& valueReps,
+    const FixedVector<B3::ValueRep>& valueReps,
     char* registerScratch,
     const HashMap<ExitTimeObjectMaterialization*, EncodedJSValue*>& materializationToPointer)
 {
@@ -543,7 +543,7 @@ JSC_DEFINE_JIT_OPERATION(operationCompileFTLOSRExit, void*, (CallFrame* callFram
     DeferGCForAWhile deferGC(vm.heap);
 
     JITCode* jitCode = codeBlock->jitCode()->ftl();
-    OSRExit& exit = jitCode->osrExit[exitID];
+    OSRExit& exit = jitCode->m_osrExit[exitID];
     
     if (shouldDumpDisassembly() || Options::verboseOSR() || Options::verboseFTLOSRExit()) {
         dataLog("    Owning block: ", pointerDump(codeBlock), "\n");

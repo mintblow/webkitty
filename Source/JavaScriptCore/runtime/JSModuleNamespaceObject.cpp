@@ -58,14 +58,16 @@ void JSModuleNamespaceObject::finishCreation(JSGlobalObject* globalObject, Abstr
     });
 
     m_moduleRecord.set(vm, this, moduleRecord);
-    m_names.reserveCapacity(resolutions.size());
+    m_names = FixedVector<Identifier>(resolutions.size());
     {
         auto locker = holdLock(cellLock());
+        unsigned index = 0;
         for (const auto& pair : resolutions) {
-            m_names.append(pair.first);
+            m_names[index] = pair.first;
             auto addResult = m_exports.add(pair.first.impl(), ExportEntry());
             addResult.iterator->value.localName = pair.second.localName;
             addResult.iterator->value.moduleRecord.set(vm, this, pair.second.moduleRecord);
+            ++index;
         }
     }
 
@@ -76,7 +78,7 @@ void JSModuleNamespaceObject::finishCreation(JSGlobalObject* globalObject, Abstr
     // http://www.ecma-international.org/ecma-262/6.0/#sec-module-namespace-exotic-objects-isextensible
     // http://www.ecma-international.org/ecma-262/6.0/#sec-module-namespace-exotic-objects-preventextensions
     methodTable(vm)->preventExtensions(this, globalObject);
-    scope.assertNoException();
+    scope.assertNoExceptionExceptTermination();
 }
 
 void JSModuleNamespaceObject::destroy(JSCell* cell)

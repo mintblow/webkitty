@@ -8,7 +8,7 @@ DROP TABLE IF EXISTS committers CASCADE;
 DROP TABLE IF EXISTS commits CASCADE;
 DROP TABLE IF EXISTS build_commits CASCADE;
 DROP TABLE IF EXISTS commit_ownerships CASCADE;
-DROP TABLE IF EXISTS build_slaves CASCADE;
+DROP TABLE IF EXISTS build_workers CASCADE;
 DROP TABLE IF EXISTS builders CASCADE;
 DROP TABLE IF EXISTS repositories CASCADE;
 DROP TABLE IF EXISTS platforms CASCADE;
@@ -74,15 +74,15 @@ CREATE TABLE builders (
     builder_password_hash character(64),
     builder_build_url varchar(1024));
 
-CREATE TABLE build_slaves (
-    slave_id serial PRIMARY KEY,
-    slave_name varchar(64) NOT NULL UNIQUE,
-    slave_password_hash character(64));
+CREATE TABLE build_workers (
+    worker_id serial PRIMARY KEY,
+    worker_name varchar(64) NOT NULL UNIQUE,
+    worker_password_hash character(64));
 
 CREATE TABLE builds (
     build_id serial PRIMARY KEY,
     build_builder integer REFERENCES builders ON DELETE CASCADE,
-    build_slave integer REFERENCES build_slaves ON DELETE CASCADE,
+    build_worker integer REFERENCES build_workers ON DELETE CASCADE,
     build_tag varchar(64) NOT NULL,
     build_time timestamp NOT NULL,
     build_latest_revision timestamp,
@@ -102,6 +102,7 @@ CREATE TABLE commits (
     commit_id serial PRIMARY KEY,
     commit_repository integer NOT NULL REFERENCES repositories ON DELETE CASCADE,
     commit_revision varchar(64) NOT NULL,
+    commit_revision_identifier varchar(64) DEFAULT NULL,
     commit_previous_commit integer REFERENCES commits ON DELETE CASCADE,
     commit_time timestamp,
     commit_order integer,
@@ -109,7 +110,8 @@ CREATE TABLE commits (
     commit_message text,
     commit_reported boolean NOT NULL DEFAULT FALSE,
     commit_testability varchar(128) DEFAULT NULL,
-    CONSTRAINT commit_in_repository_must_be_unique UNIQUE(commit_repository, commit_revision));
+    CONSTRAINT commit_in_repository_must_be_unique UNIQUE(commit_repository, commit_revision),
+    CONSTRAINT commit_string_identifier_in_repository_must_be_unique UNIQUE(commit_repository, commit_revision_identifier));
 CREATE INDEX commit_time_index ON commits(commit_time);
 CREATE INDEX commit_order_index ON commits(commit_order);
 
@@ -191,7 +193,7 @@ CREATE TRIGGER update_config_last_modified AFTER INSERT OR UPDATE OR DELETE ON t
 CREATE TABLE reports (
     report_id serial PRIMARY KEY,
     report_builder integer NOT NULL REFERENCES builders ON DELETE RESTRICT,
-    report_slave integer REFERENCES build_slaves ON DELETE RESTRICT,
+    report_worker integer REFERENCES build_workers ON DELETE RESTRICT,
     report_build_tag varchar(64),
     report_build integer REFERENCES builds,
     report_created_at timestamp NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),

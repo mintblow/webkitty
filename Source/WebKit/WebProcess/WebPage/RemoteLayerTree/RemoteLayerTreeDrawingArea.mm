@@ -38,6 +38,7 @@
 #import "WebPage.h"
 #import "WebPageCreationParameters.h"
 #import "WebPageProxyMessages.h"
+#import "WebPreferencesKeys.h"
 #import "WebProcess.h"
 #import <QuartzCore/QuartzCore.h>
 #import <WebCore/DebugPageOverlays.h>
@@ -66,13 +67,6 @@ RemoteLayerTreeDrawingArea::RemoteLayerTreeDrawingArea(WebPage& webPage, const W
     m_rootLayer->setName("drawing area root");
 
     m_commitQueue = adoptOSObject(dispatch_queue_create("com.apple.WebKit.WebContent.RemoteLayerTreeDrawingArea.CommitQueue", nullptr));
-
-    // In order to ensure that we get a unique DisplayRefreshMonitor per-DrawingArea (necessary because DisplayRefreshMonitor
-    // is driven by this class), give each page a unique DisplayID derived from WebPage's unique ID.
-    // FIXME: While using the high end of the range of DisplayIDs makes a collision with real, non-RemoteLayerTreeDrawingArea
-    // DisplayIDs less likely, it is not entirely safe to have a RemoteLayerTreeDrawingArea and TiledCoreAnimationDrawingArea
-    // coeexist in the same process.
-    webPage.windowScreenDidChange(std::numeric_limits<uint32_t>::max() - webPage.identifier().toUInt64(), WTF::nullopt);
 
     if (auto viewExposedRect = parameters.viewExposedRect)
         setViewExposedRect(viewExposedRect);
@@ -168,7 +162,7 @@ bool RemoteLayerTreeDrawingArea::shouldUseTiledBackingForFrameView(const FrameVi
     return frameView.frame().isMainFrame() || m_webPage.corePage()->settings().asyncFrameScrollingEnabled();
 }
 
-void RemoteLayerTreeDrawingArea::updatePreferences(const WebPreferencesStore&)
+void RemoteLayerTreeDrawingArea::updatePreferences(const WebPreferencesStore& preferences)
 {
     Settings& settings = m_webPage.corePage()->settings();
 
@@ -177,6 +171,8 @@ void RemoteLayerTreeDrawingArea::updatePreferences(const WebPreferencesStore&)
     settings.setAcceleratedCompositingForFixedPositionEnabled(true);
 
     m_rootLayer->setShowDebugBorder(settings.showDebugBorders());
+
+    m_remoteLayerTreeContext->setUseCGDisplayListsForDOMRendering(preferences.getBoolValueForKey(WebPreferencesKey::useCGDisplayListsForDOMRenderingKey()));
 
     DebugPageOverlays::settingsChanged(*m_webPage.corePage());
 }

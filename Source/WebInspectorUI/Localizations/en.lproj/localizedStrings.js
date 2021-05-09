@@ -152,6 +152,8 @@ localizedStrings["All Timeouts @ Event Breakpoint"] = "All Timeouts";
 localizedStrings["All items in \u0022%s\u0022 must be error objects"] = "All items in \u0022%s\u0022 must be error objects";
 localizedStrings["All items in \u0022%s\u0022 must be non-empty strings"] = "All items in \u0022%s\u0022 must be non-empty strings";
 localizedStrings["All items in \u0022%s\u0022 must be valid DOM nodes"] = "All items in \u0022%s\u0022 must be valid DOM nodes";
+/* Label for setting that allows the user to inspect the Web Inspector user interface. */
+localizedStrings["Allow Inspecting Web Inspector @ Experimental Settings"] = "Allow Inspecting Web Inspector";
 localizedStrings["Allow Media Capture on Insecure Sites"] = "Allow Media Capture on Insecure Sites";
 /* Property title for `font-variant-alternates`. */
 localizedStrings["Alternate Glyphs @ Font Details Sidebar Property"] = "Alternate Glyphs";
@@ -456,6 +458,8 @@ localizedStrings["Details Sidebars: @ Settings Elements Pane"] = "Details Sideba
 localizedStrings["Device %d"] = "Device %d";
 localizedStrings["Device Settings"] = "Device Settings";
 localizedStrings["Diagnoses common accessibility problems affecting screen readers and other assistive technology."] = "Diagnoses common accessibility problems affecting screen readers and other assistive technology.";
+/* Category label for experimental settings related to Web Inspector diagnostics. */
+localizedStrings["Diagnostics: @ Experimental Settings"] = "Diagnostics:";
 /* Property value for `font-variant-numeric: diagonal-fractions`. */
 localizedStrings["Diagonal Fractions @ Font Details Sidebar Property Value"] = "Diagonal Fractions";
 localizedStrings["Dimensions"] = "Dimensions";
@@ -1017,7 +1021,8 @@ localizedStrings["Online"] = "Online";
 localizedStrings["Only show resources with issues"] = "Only show resources with issues";
 localizedStrings["Only show visual actions"] = "Only show visual actions";
 localizedStrings["Open"] = "Open";
-localizedStrings["Open in New Tab"] = "Open in New Tab";
+/* Context menu item for opening the target item in a new window. */
+localizedStrings["Open in New Window @ Context Menu Item"] = "Open in New Window";
 localizedStrings["Option-click to show source"] = "Option-click to show source";
 localizedStrings["Options"] = "Options";
 /* Property value for `font-variant-numeric: ordinal`. */
@@ -1316,7 +1321,6 @@ localizedStrings["Show All Nodes (%d More)"] = "Show All Nodes (%d More)";
 localizedStrings["Show Console"] = "Show Console";
 localizedStrings["Show Console tab"] = "Show Console tab";
 localizedStrings["Show Elements"] = "Show Elements";
-localizedStrings["Show Layout panel"] = "Show Layout panel";
 localizedStrings["Show Path"] = "Show Path";
 localizedStrings["Show Remaining (%d)"] = "Show Remaining (%d)";
 localizedStrings["Show Scope Chain on pause"] = "Show Scope Chain on pause";

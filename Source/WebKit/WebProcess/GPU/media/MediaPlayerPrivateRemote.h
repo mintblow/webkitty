@@ -90,6 +90,7 @@ public:
     WebCore::MediaPlayer* player() const { return m_player; }
 
     WebCore::MediaPlayer::ReadyState readyState() const final { return m_cachedState.readyState; }
+    void setReadyState(WebCore::MediaPlayer::ReadyState);
 
     void networkStateChanged(RemoteMediaPlayerState&&);
     void readyStateChanged(RemoteMediaPlayerState&&);
@@ -98,7 +99,7 @@ public:
     void timeChanged(RemoteMediaPlayerState&&);
     void durationChanged(RemoteMediaPlayerState&&);
     void rateChanged(double);
-    void playbackStateChanged(bool);
+    void playbackStateChanged(bool, MediaTime&&, MonotonicTime&&);
     void engineFailedToLoad(long);
     void updateCachedState(RemoteMediaPlayerState&&);
     void characteristicChanged(RemoteMediaPlayerState&&);
@@ -106,8 +107,10 @@ public:
     void firstVideoFrameAvailable();
     void renderingModeChanged();
 #if PLATFORM(COCOA)
-    void setVideoInlineSizeFenced(const WebCore::IntSize&, const WTF::MachSendRight&);
+    void setVideoInlineSizeFenced(const WebCore::FloatSize&, const WTF::MachSendRight&);
 #endif
+
+    void currentTimeChanged(const MediaTime&, const MonotonicTime&);
 
     void addRemoteAudioTrack(TrackPrivateRemoteIdentifier, TrackPrivateRemoteConfiguration&&);
     void removeRemoteAudioTrack(TrackPrivateRemoteIdentifier);
@@ -143,8 +146,12 @@ public:
 
     void activeSourceBuffersChanged();
 
+#if PLATFORM(COCOA)
+    bool inVideoFullscreenOrPictureInPicture() const;
+#endif
+
 #if ENABLE(ENCRYPTED_MEDIA)
-    void waitingForKeyChanged();
+    void waitingForKeyChanged(bool);
     void initializationDataEncountered(const String&, IPC::DataReference&&);
 #endif
 
@@ -238,7 +245,7 @@ private:
 
     void setVisible(bool) final;
 
-    MediaTime durationMediaTime() const final { return m_cachedState.duration; }
+    MediaTime durationMediaTime() const final;
     MediaTime currentMediaTime() const final;
 
     MediaTime getStartDate() const final;
@@ -364,6 +371,7 @@ private:
     size_t extraMemoryCost() const final;
 
     Optional<WebCore::VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() final;
+    void updateVideoPlaybackMetricsUpdateInterval(const Seconds&);
 
 #if ENABLE(AVF_CAPTIONS)
     void notifyTrackModeChanged() final;
@@ -413,6 +421,11 @@ private:
     WebCore::SecurityOriginData m_documentSecurityOrigin;
     mutable HashMap<WebCore::SecurityOriginData, Optional<bool>> m_wouldTaintOriginCache;
 
+    MediaTime m_cachedMediaTime;
+    MonotonicTime m_cachedMediaTimeQueryTime;
+
+    MonotonicTime m_lastPlaybackQualityMetricsQueryTime;
+    Seconds m_videoPlaybackMetricsUpdateInterval;
     double m_volume { 1 };
     double m_rate { 1 };
     long m_platformErrorCode { 0 };
@@ -420,7 +433,7 @@ private:
     bool m_seeking { false };
     bool m_isCurrentPlaybackTargetWireless { false };
     bool m_invalid { false };
-    bool m_wantPlaybackQualityMetrics { false };
+    bool m_waitingForKey { false };
 };
 
 } // namespace WebKit

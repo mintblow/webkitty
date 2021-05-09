@@ -64,6 +64,8 @@ static void XPCServiceEventHandler(xpc_connection_t peer)
 {
     static NeverDestroyed<OSObjectPtr<xpc_object_t>> priorityBoostMessage;
 
+    OSObjectPtr<xpc_connection_t> retainedPeerConnection(peer);
+
     xpc_connection_set_target_queue(peer, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
     xpc_connection_set_event_handler(peer, ^(xpc_object_t event) {
         xpc_type_t type = xpc_get_type(event);
@@ -117,8 +119,8 @@ static void XPCServiceEventHandler(xpc_connection_t peer)
                 if (fd != -1)
                     dup2(fd, STDERR_FILENO);
 
-                WorkQueue::main().dispatchSync([&] {
-                    initializerFunctionPtr(peer, event, priorityBoostMessage.get().get());
+                WorkQueue::main().dispatchSync([initializerFunctionPtr, event = OSObjectPtr<xpc_object_t>(event), retainedPeerConnection] {
+                    initializerFunctionPtr(retainedPeerConnection.get(), event.get(), priorityBoostMessage.get().get());
 
                     setAppleLanguagesPreference();
                 });
@@ -148,12 +150,25 @@ NEVER_INLINE NO_RETURN_DUE_TO_CRASH static void crashDueWebKitFrameworkVersionMi
 
 #endif // PLATFORM(MAC)
 
+#if ENABLE(CFPREFS_DIRECT_MODE)
+static bool shouldEnableCFPrefsDirectMode(int argc, const char** argv)
+{
+    if (argc <= 0 || !argv[0])
+        return false;
+    if (strstr(argv[0], "com.apple.WebKit.WebContent"))
+        return true;
+    if (strstr(argv[0], "com.apple.WebKit.GPU"))
+        return true;
+    return false;
+}
+#endif
+
 int XPCServiceMain(int argc, const char** argv)
 {
     ASSERT(argc >= 1);
     ASSERT(argv[0]);
 #if ENABLE(CFPREFS_DIRECT_MODE)
-    if (argc >= 1 && argv[0] && strstr(argv[0], "com.apple.WebKit.WebContent")) {
+    if (shouldEnableCFPrefsDirectMode(argc, argv)) {
         // Enable CFPrefs direct mode to avoid unsuccessfully attempting to connect to the daemon and getting blocked by the sandbox.
         _CFPrefsSetDirectModeEnabled(YES);
 #if HAVE(CF_PREFS_SET_READ_ONLY)

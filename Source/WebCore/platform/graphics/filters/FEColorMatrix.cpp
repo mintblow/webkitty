@@ -35,16 +35,16 @@
 
 namespace WebCore {
 
-FEColorMatrix::FEColorMatrix(Filter& filter, ColorMatrixType type, const Vector<float>& values)
+FEColorMatrix::FEColorMatrix(Filter& filter, ColorMatrixType type, Vector<float>&& values)
     : FilterEffect(filter, Type::ColorMatrix)
     , m_type(type)
-    , m_values(values)
+    , m_values(WTFMove(values))
 {
 }
 
-Ref<FEColorMatrix> FEColorMatrix::create(Filter& filter, ColorMatrixType type, const Vector<float>& values)
+Ref<FEColorMatrix> FEColorMatrix::create(Filter& filter, ColorMatrixType type, Vector<float>&& values)
 {
-    return adoptRef(*new FEColorMatrix(filter, type, values));
+    return adoptRef(*new FEColorMatrix(filter, type, WTFMove(values)));
 }
 
 bool FEColorMatrix::setType(ColorMatrixType type)
@@ -87,7 +87,7 @@ inline void saturateAndHueRotate(float& red, float& green, float& blue, const fl
     blue    = r * components[6] + g * components[7] + b * components[8];
 }
 
-// FIXME: this should use luminance(const ColorComponents<float>& sRGBCompontents).
+// FIXME: this should use the luminance(...) function in ColorLuminance.h.
 inline void luminance(float& red, float& green, float& blue, float& alpha)
 {
     alpha = 0.2125 * red + 0.7154 * green + 0.0721 * blue;
@@ -290,7 +290,7 @@ void FEColorMatrix::platformApplySoftware()
     if (!imageData)
         return;
 
-    auto* pixelArray = imageData->data();
+    auto& pixelArray = imageData->data();
     IntSize pixelArrayDimensions = imageData->size();
 
     Vector<float> values = normalizedFloats(m_values);
@@ -299,16 +299,16 @@ void FEColorMatrix::platformApplySoftware()
     case FECOLORMATRIX_TYPE_UNKNOWN:
         break;
     case FECOLORMATRIX_TYPE_MATRIX:
-        effectType<FECOLORMATRIX_TYPE_MATRIX>(*pixelArray, values, pixelArrayDimensions);
+        effectType<FECOLORMATRIX_TYPE_MATRIX>(pixelArray, values, pixelArrayDimensions);
         break;
     case FECOLORMATRIX_TYPE_SATURATE: 
-        effectType<FECOLORMATRIX_TYPE_SATURATE>(*pixelArray, values, pixelArrayDimensions);
+        effectType<FECOLORMATRIX_TYPE_SATURATE>(pixelArray, values, pixelArrayDimensions);
         break;
     case FECOLORMATRIX_TYPE_HUEROTATE:
-        effectType<FECOLORMATRIX_TYPE_HUEROTATE>(*pixelArray, values, pixelArrayDimensions);
+        effectType<FECOLORMATRIX_TYPE_HUEROTATE>(pixelArray, values, pixelArrayDimensions);
         break;
     case FECOLORMATRIX_TYPE_LUMINANCETOALPHA:
-        effectType<FECOLORMATRIX_TYPE_LUMINANCETOALPHA>(*pixelArray, values, pixelArrayDimensions);
+        effectType<FECOLORMATRIX_TYPE_LUMINANCETOALPHA>(pixelArray, values, pixelArrayDimensions);
         setIsAlphaImage(true);
         break;
     }

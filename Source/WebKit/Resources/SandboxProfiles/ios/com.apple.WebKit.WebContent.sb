@@ -1,4 +1,4 @@
-; Copyright (C) 2010-2020 Apple Inc. All rights reserved.
+; Copyright (C) 2010-2021 Apple Inc. All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without
 ; modification, are permitted provided that the following conditions
@@ -23,6 +23,7 @@
 
 (version 1)
 (deny default (with partial-symbolication))
+(deny nvram*)
 (allow system-audit file-read-metadata)
 
 ;;;
@@ -238,6 +239,18 @@
             (extension "com.apple.webkit.extension.iokit")
             (iokit-connection "IOGPU")
         )
+        (when (defined? 'iokit-external-method)
+            (apply-message-filter
+                (deny (with telemetry)
+                    iokit-external-trap)
+                (allow (with telemetry) (with message "IOGPU")
+                    iokit-async-external-method
+                    iokit-external-method)
+            )
+        )
+    )
+
+    (allow iokit-open
         (require-all
             (extension "com.apple.webkit.extension.iokit")
             (iokit-user-client-class "AGXDeviceUserClient") ;; Used by WebGL
@@ -246,9 +259,41 @@
             (apply-message-filter
                 (deny (with telemetry)
                     iokit-external-trap)
-                (allow
+                (deny (with telemetry) (with message "AGXDeviceUserClient")
                     iokit-async-external-method
-                    iokit-external-method)
+                    iokit-external-method
+                )
+                (allow iokit-async-external-method
+                    (iokit-method-number
+                        43
+                    )
+                )
+                (allow iokit-external-method
+                    (iokit-method-number
+                        0
+                        2
+                        4
+                        5
+                        6
+                        7
+                        8
+                        9
+                        10
+                        11
+                        12
+                        13
+                        14
+                        15
+                        16
+                        25
+                        26
+                        27
+                        36
+                        38
+                        44
+                    )
+                )
+
             )
         )
     )
@@ -342,22 +387,6 @@
     (allow file-read* file-write-data file-ioctl
            (literal "/dev/aes_0")))
 
-(define-once (logd-diagnostic-paths)
-    (require-any
-        (subpath "/private/var/db/diagnostics")
-        (subpath "/private/var/db/timesync")
-        (subpath "/private/var/db/uuidtext")
-        (subpath "/private/var/userdata/diagnostics")))
-(define-once (logd-diagnostic-client)
-    (with-filter
-        (require-all
-            (require-any
-                (require-entitlement "com.apple.private.logging.diagnostic")
-                (require-entitlement "com.apple.diagnosticd.diagnostic"))
-            (extension "com.apple.logd.read-only"))
-        (allow file-read*
-               (logd-diagnostic-paths))))
-
 (define required-etc-files
   (literal "/private/etc/fstab"
            "/private/etc/hosts"
@@ -380,6 +409,42 @@
     (allow file-read*
         (home-subpath "/Library/VoiceServices/Assets")
         (home-subpath "/Library/Assets/com_apple_MobileAsset_VoiceServicesVocalizerVoice"))
+)
+
+(define (IOSurfaceRootUserClientMethodFilter)
+    (when (defined? 'iokit-external-method)
+        (apply-message-filter
+            (deny (with telemetry)
+                iokit-async-external-method
+                iokit-external-trap)
+            (deny (with telemetry) (with message "IOSurfaceRootUserClient")
+                iokit-external-method)
+            (allow iokit-external-method
+                (iokit-method-number
+                    0
+                    1
+                    2
+                    3
+                    5
+                    9
+                    10
+                    11
+                    12
+                    13
+                    14
+                    15
+                    20
+                    21
+                    23
+                    27
+                    31
+                    32
+                    34
+                    35
+                )
+            )
+        )
+    )
 )
 
 ;; Things required by UIKit
@@ -416,8 +481,13 @@
                 (deny (with telemetry)
                     iokit-async-external-method
                     iokit-external-trap)
-                (allow
+                (deny (with telemetry) (with message "IOSurfaceAcceleratorClient")
                     iokit-external-method)
+                (allow iokit-external-method
+                    (iokit-method-number
+                        1
+                    )
+                )
             )
         )
     )
@@ -427,15 +497,7 @@
             (extension "com.apple.webkit.extension.iokit")
             (iokit-user-client-class "IOSurfaceRootUserClient") ;; Needed by Tiled Grid code.
         )
-        (when (defined? 'iokit-external-method)
-            (apply-message-filter
-                (deny (with telemetry)
-                    iokit-async-external-method
-                    iokit-external-trap)
-                (allow
-                    iokit-external-method)
-            )
-        )
+        (IOSurfaceRootUserClientMethodFilter)
     )
 
     ;; Silence sandbox violations from apps trying to create the empty plist if it doesn't exist.
@@ -644,25 +706,22 @@
 (allow mach-lookup
     (global-name "com.apple.system.notification_center")
     (apply-message-filter
-        (allow mach-message-send (with telemetry-backtrace))
+        (deny mach-message-send (with telemetry))
         (deny mach-message-send (with no-report) (message-number 1023))
-        (allow mach-message-send (with telemetry-backtrace) (message-number
+        (allow mach-message-send (message-number
             1002
-            1003
-            1004
-            1005
+            1009
+            1010
             1011
             1012
-            1013
-            1014
-            1015
             1016
             1017
             1018
+            1019
             1021
+            1022
             1025
             1026
-            1027
         ))
         (allow mach-message-send (message-number
             1028
@@ -675,8 +734,6 @@
 )
 (allow ipc-posix-shm-read*
        (ipc-posix-name "apple.shm.notification_center"))
-
-(logd-diagnostic-client)
 
 (managed-configuration-read-public)
 
@@ -691,6 +748,8 @@
 
 (allow mach-task-name (target self))
 
+;;; process-info* defaults to allow; deny it and then allow operations we actually need.
+(deny process-info*)
 (allow process-info-pidinfo (target self))
 (allow process-info-pidfdinfo (target self))
 (allow process-info-pidfileportinfo (target self))
@@ -853,6 +912,7 @@
 (deny file-read* (with no-report)
     (home-literal
         "/Library/Preferences/com.apple.WebKit.WebContent.plist"
+        "/Library/Preferences/com.apple.CFNetwork.plist"
     )
 )
 
@@ -1024,15 +1084,7 @@
             "IOSurfaceRootUserClient"
         )
     )
-    (when (defined? 'iokit-external-method)
-        (apply-message-filter
-            (deny (with telemetry)
-                iokit-async-external-method
-                iokit-external-trap)
-            (allow
-                iokit-external-method)
-        )
-    )
+    (IOSurfaceRootUserClientMethodFilter)
 )
 
 (deny iokit-open (with telemetry-backtrace)
@@ -1090,7 +1142,17 @@
             ;;; FIXME(207716): End services to remove.
 )))
 
-(allow mach-lookup (with telemetry-backtrace)
+;; Silence warnings about these connections if we have decided not to extend access to them:
+(deny mach-lookup (with no-report)
+    (require-all
+        (require-not (extension "com.apple.webkit.extension.mach"))
+        (global-name
+            "com.apple.audio.AudioComponentRegistrar"
+        )
+    )
+)
+
+(allow mach-lookup
     (require-all
         (extension "com.apple.webkit.extension.mach")
         (global-name
@@ -1317,7 +1379,7 @@
 )
 
 (when (defined? 'file-ioctl)
-    (allow file-ioctl (with telemetry))
+    (deny file-ioctl (with telemetry))
     ;; restrict to the two ioctl's /dev/aes_0 needs
     (allow file-ioctl (with telemetry)
        (ioctl-command (_IO "T" 101)) ;; IOAES_GET_INFO
@@ -1325,36 +1387,50 @@
 )
 
 (when (defined? 'socket-ioctl)
-    (allow socket-ioctl (with telemetry))
+    (deny socket-ioctl (with telemetry))
 )
 
 (when (defined? 'system-fcntl)
-    (allow system-fcntl (with telemetry))
+    (deny system-fcntl (with telemetry))
     (allow system-fcntl
+        (fcntl-command F_BARRIERFSYNC)
+        (fcntl-command F_GETCONFINED)
+        (fcntl-command F_GETFL) ;; LibJPEGReadPlugin::copyImageBlockSetStandard
+        (fcntl-command F_GETLK)
+        (fcntl-command F_GETSIGSINFO)
+        (fcntl-command F_NOCACHE)
+        (fcntl-command F_OFD_GETLK)
+        (fcntl-command F_OFD_SETLKWTIMEOUT)
+        (fcntl-command F_RDADVISE)
+        (fcntl-command F_SETCONFINED)
         (fcntl-command F_GETPATH) ;; used by dyld4 and CGFontURLCreate, getcwd (at least)
         (fcntl-command F_ADDFILESIGS_RETURN) ;; ImageLoaderMachO::loadCodeSignature
         (fcntl-command F_CHECK_LV) ;; ImageLoaderMachO::loadCodeSignature
         (fcntl-command F_SPECULATIVE_READ) ;; ImageLoaderMachO::mapSegments
         (fcntl-command F_SETFD) ;; libwebrtc.dylib (no backtrace)
         (fcntl-command F_GETFD) ;; libwebrtc.dylib (no backtrace)
-        (fcntl-command F_GETFL) ;; LibJPEGReadPlugin::copyImageBlockSetStandard
         (fcntl-command F_SETFL) ;; CMCapture uses when camera is enabled
         (fcntl-command F_SETNOSIGPIPE)) ;; CMCapture uses when camera is enabled
 
+    (allow system-fcntl (with telemetry-backtrace)
+        (fcntl-command F_OFD_SETLK))
+
     (allow system-fcntl
-        (fcntl-command F_GETPROTECTIONCLASS))
+        (fcntl-command F_GETPROTECTIONCLASS)
+        (fcntl-command F_SETPROTECTIONCLASS))
 )
 
 (when (defined? 'process-codesigning*)
     ;; csops/csops_audittoken
-    (allow process-codesigning-status-set (with telemetry))
-    (allow process-codesigning-text-offset-get (with telemetry))
-    (allow process-codesigning-cdhash-get (with telemetry))
-    (allow process-codesigning-blob-get (with telemetry))
-    (allow process-codesigning-teamid-get (with telemetry))
-    (allow process-codesigning-identity-get (with telemetry)) ;; codeSigningIdentifierForCurrentProcess
+    (deny process-codesigning-status-set (with telemetry))
+    (deny process-codesigning-text-offset-get (with telemetry))
+    (deny process-codesigning-cdhash-get (with telemetry))
+    (deny process-codesigning-blob-get (with telemetry))
+    (deny process-codesigning-teamid-get (with telemetry))
+    (allow process-codesigning-identity-get (target self)) ;; codeSigningIdentifierForCurrentProcess
     (allow process-codesigning-entitlements-blob-get) ;; WK reading entitlments via SecTaskCopyValueForEntitlement and _getSelfParsedEntitlements (accessibility)
     (allow process-codesigning-status-get) ;; _xpc_get_entitlements
+    (allow process-codesigning-status-set (target self))
     (deny process-info-codesignature (with no-report)) ;; SecTaskCopyValueForEntitlement - granting this grants all the process-codesign-* checks
 )
 
@@ -1364,7 +1440,7 @@
 
 (when (defined? 'socket-option-get)
     ;; getsockopt
-    (allow socket-option-get (with telemetry))
+    (deny socket-option-get (with telemetry))
     (allow socket-option-get
         (require-all
             (socket-option-level SOL_SOCKET)
@@ -1373,25 +1449,40 @@
 
 (when (defined? 'socket-option-set)
     ;; setsockopt
-    (allow socket-option-set (with telemetry))
+    (deny socket-option-set (with telemetry))
 )
 
-(when (defined? 'mach-bootstrap)
+(define-once (mach-bootstrap-message-numbers)
+    (message-number
+        206
+        207
+        711
+        712
+        718
+        800
+        802
+        803
+        804
+        805
+    )
+)
+
+(if (defined? '*sbpl-version*)
+    (allow mach-bootstrap
+        (apply-message-filter
+            (deny mach-message-send (with telemetry))
+            (allow mach-message-send
+                (mach-bootstrap-message-numbers)
+            )
+        )
+    )
+;; else
     (allow mach-bootstrap
         (apply-message-filter
             (deny xpc-message-send (with telemetry))
-            (allow xpc-message-send (message-number
-                206
-                207
-                711
-                712
-                718
-                800
-                802
-                803
-                804
-                805
-            ))
+            (allow xpc-message-send
+                (mach-bootstrap-message-numbers)
+            )
         )
     )
 )

@@ -39,6 +39,10 @@ class Commit(object):
     class Encoder(json.JSONEncoder):
 
         def default(self, obj):
+            if isinstance(obj, dict):
+                return {key: self.default(value) for key, value in obj.items()}
+            if isinstance(obj, list):
+                return [self.default(value) for value in obj]
             if not isinstance(obj, Commit):
                 return super(Commit.Encoder, self).default(obj)
 
@@ -146,6 +150,27 @@ class Commit(object):
             raise ValueError("'{}' cannot be converted to a commit object".format(arg))
         return None
 
+    @classmethod
+    def from_json(cls, data):
+        data = data if isinstance(data, dict) else json.loads(data)
+        hash_from_id = None
+        revision_from_id = cls._parse_revision(data.get('id'))
+        if not revision_from_id:
+            hash_from_id = cls._parse_hash(data.get('id'))
+
+        return cls(
+            repository_id=data.get('repository_id'),
+            branch=data.get('branch'),
+            hash=data.get('hash', hash_from_id),
+            revision=data.get('revision', revision_from_id),
+            timestamp=data.get('timestamp'),
+            identifier=data.get('identifier'),
+            branch_point=data.get('branch_point'),
+            order=data.get('order'),
+            author=data.get('author', data.get('committer')),
+            message=data.get('message'),
+        )
+
     def __init__(
         self,
         hash=None,
@@ -184,16 +209,22 @@ class Commit(object):
                 ),
             )
 
+        if isinstance(timestamp, six.string_types) and timestamp.isdigit():
+            timestamp = int(timestamp)
         if timestamp and not isinstance(timestamp, int):
             raise TypeError("Expected 'timestamp' to be of type int, got '{}'".format(timestamp))
         self.timestamp = timestamp
 
+        if isinstance(order, six.string_types) and order.isdigit():
+            order = int(order)
         if order and not isinstance(order, int):
             raise TypeError("Expected 'order' to be of type int, got '{}'".format(order))
         self.order = order or 0
 
         if author and isinstance(author, dict) and author.get('name'):
             self.author = Contributor(author.get('name'), author.get('emails'))
+        elif author and isinstance(author, six.string_types) and '@' in author:
+            self.author = Contributor(author, [author])
         elif author and not isinstance(author, Contributor):
             raise TypeError("Expected 'author' to be of type {}, got '{}'".format(Contributor, author))
         else:
@@ -243,7 +274,7 @@ class Commit(object):
 
     @property
     def uuid(self):
-        if not self.timestamp:
+        if self.timestamp is None:
             return None
         return self.timestamp * self.UUID_MULTIPLIER + self.order
 
@@ -258,7 +289,7 @@ class Commit(object):
             return self.hash[:self.HASH_LABEL_SIZE]
         if self.identifier is not None:
             return str(self.identifier)
-        raise ValueError('Incomplete commit format')
+        return '?'
 
     def __hash__(self):
         if self.identifier and self.branch:
@@ -274,8 +305,11 @@ class Commit(object):
     def __cmp__(self, other):
         if not isinstance(other, Commit):
             raise ValueError('Cannot compare commit and {}'.format(type(other)))
-        if self.uuid and other.uuid and self.uuid != other.uuid:
-            return self.uuid - other.uuid
+        if self.uuid and other.uuid:
+            if self.uuid != other.uuid:
+                return self.uuid - other.uuid
+            if self.repository_id != other.repository_id:
+                return 1 if self.repository_id > other.repository_id else -1
         if self.revision and other.revision:
             return self.revision - other.revision
         if self.identifier and other.identifier and self.branch == other.branch:

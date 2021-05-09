@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,7 +37,7 @@
 #include "DOMJITSignature.h"
 #include "GetByStatus.h"
 #include "GetterSetter.h"
-#include "HashMapImpl.h"
+#include "HashMapImplInlines.h"
 #include "JITOperations.h"
 #include "JSAsyncGenerator.h"
 #include "JSGenerator.h"
@@ -3411,7 +3411,9 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
     case GetById:
     case GetByIdFlush: {
         AbstractValue& value = forNode(node->child1());
-        if (value.m_structure.isFinite()
+
+        if (Options::useAccessInlining()
+            && value.m_structure.isFinite()
             && (node->child1().useKind() == CellUse || !(value.m_type & ~SpecCell))) {
             UniquedStringImpl* uid = node->cacheableIdentifier().uid();
             GetByStatus status = GetByStatus::computeFor(value.m_structure.toStructureSet(), uid);
@@ -4110,7 +4112,7 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
     case PutByIdFlush:
     case PutByIdDirect: {
         AbstractValue& value = forNode(node->child1());
-        if (value.m_structure.isFinite()) {
+        if (Options::useAccessInlining() && value.m_structure.isFinite()) {
             bool isDirect = node->op() == PutByIdDirect || node->op() == PutPrivateNameById;
             auto privateFieldPutKind = node->op() == PutPrivateNameById ? node->privateFieldPutKind() : PrivateFieldPutKind::none();
             PutByIdStatus status = PutByIdStatus::computeFor(

@@ -29,6 +29,7 @@
 #import "APIString.h"
 #import "AuthenticationChallengeDispositionCocoa.h"
 #import "CompletionHandlerCallChecker.h"
+#import "NetworkProcessProxy.h"
 #import "ShouldGrandfatherStatistics.h"
 #import "WKHTTPCookieStoreInternal.h"
 #import "WKNSArray.h"
@@ -543,6 +544,17 @@ static Vector<WebKit::WebsiteDataRecord> toWebsiteDataRecords(NSArray *dataRecor
 #endif
 }
 
+- (void)_isRelationshipOnlyInDatabaseOnce:(NSURL *)firstPartyURL thirdParty:(NSURL *)thirdPartyURL completionHandler:(void (^)(BOOL))completionHandler
+{
+#if ENABLE(RESOURCE_LOAD_STATISTICS)
+    _websiteDataStore->isRelationshipOnlyInDatabaseOnce(thirdPartyURL, firstPartyURL, [completionHandler = makeBlockPtr(completionHandler)] (bool result) {
+        completionHandler(result);
+    });
+#else
+    completionHandler(NO);
+#endif
+}
+
 - (void)_isRegisteredAsSubresourceUnderFirstParty:(NSURL *)firstPartyURL thirdParty:(NSURL *)thirdPartyURL completionHandler:(void (^)(BOOL))completionHandler
 {
 #if ENABLE(RESOURCE_LOAD_STATISTICS)
@@ -562,6 +574,21 @@ static Vector<WebKit::WebsiteDataRecord> toWebsiteDataRecords(NSArray *dataRecor
     });
 #else
     completionHandler(NO);
+#endif
+}
+
+- (void)_statisticsDatabaseColumnsForTable:(NSString *)table completionHandler:(void (^)(NSArray<NSString *> *))completionHandler
+{
+#if ENABLE(RESOURCE_LOAD_STATISTICS)
+    _websiteDataStore->statisticsDatabaseColumnsForTable(table, [completionHandler = makeBlockPtr(completionHandler)](auto&& columns) {
+        Vector<RefPtr<API::Object>> apiColumns;
+        apiColumns.reserveInitialCapacity(columns.size());
+        for (auto& column : columns)
+            apiColumns.uncheckedAppend(API::String::create(column));
+        completionHandler(wrapper(API::Array::create(WTFMove(apiColumns))));
+    });
+#else
+    completionHandler(nil);
 #endif
 }
 
@@ -707,6 +734,11 @@ static Vector<WebKit::WebsiteDataRecord> toWebsiteDataRecords(NSArray *dataRecor
 - (BOOL)_networkProcessExists
 {
     return !!_websiteDataStore->networkProcessIfExists();
+}
+
++ (BOOL)_defaultNetworkProcessExists
+{
+    return !!WebKit::NetworkProcessProxy::defaultNetworkProcess();
 }
 
 @end

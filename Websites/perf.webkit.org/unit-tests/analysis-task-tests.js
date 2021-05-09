@@ -75,6 +75,7 @@ function measurementCluster()
                             10,
                             '791451',
                             null,
+                            null,
                             1454481204649
                         ],
                         [
@@ -82,12 +83,14 @@ function measurementCluster()
                             11,
                             '196051',
                             null,
+                            null,
                             1454481246108
                         ],
                         [
                             105502,
                             9,
                             '10.11 15D21',
+                            null,
                             1504021,
                             0
                         ]
@@ -449,7 +452,7 @@ describe('AnalysisTask', () => {
             AnalysisTask.create('confirm', startPoint, endPoint);
             assert.equal(requests[0].url, '/privileged-api/create-analysis-task');
             assert.equal(requests.length, 1);
-            assert.deepEqual(requests[0].data, {name: 'confirm', startRun: 1, endRun: 2, slaveName: 'worker', slavePassword: 'password'});
+            assert.deepEqual(requests[0].data, {name: 'confirm', startRun: 1, endRun: 2, workerName: 'worker', workerPassword: 'password'});
         });
 
         it('should create analysis task with confirming repetition count specified', () => {
@@ -458,7 +461,7 @@ describe('AnalysisTask', () => {
             assert.equal(requests[0].url, '/privileged-api/create-analysis-task');
             assert.equal(requests.length, 1);
             assert.deepEqual(requests[0].data, {name: 'confirm', repetitionCount: 4, needsNotification: true,
-                startRun: 1, endRun: 2, slaveName: 'worker', slavePassword: 'password',
+                startRun: 1, endRun: 2, workerName: 'worker', workerPassword: 'password',
                 testGroupName: 'Confirm', revisionSets: [
                     {'11': {revision: 'webkit-revision-1', ownerRevision: null, patch: null},
                         '22': {revision: 'ios-revision-1', ownerRevision: null, patch: null}},

@@ -131,7 +131,23 @@ class TestRunResults(object):
     def merge(self, test_run_results):
         if not test_run_results:
             return self
+
         # self.expectations should be the same for both
+        # FIXME: this isn't actually true when we run on multiple device_types
+        # if self.expectations != test_run_results.expectations:
+        #     raise ValueError("different TestExpectations")
+
+        def merge_dict_sets(a, b):
+            merged = {}
+            keys = set(a.keys()) | set(b.keys())
+            for k in keys:
+                v_a = a.get(k, set())
+                assert isinstance(v_a, set)
+                v_b = b.get(k, set())
+                assert isinstance(v_b, set)
+                merged[k] = v_a | v_b
+            return merged
+
         self.total += test_run_results.total
         self.remaining += test_run_results.remaining
         self.expected += test_run_results.expected
@@ -139,16 +155,14 @@ class TestRunResults(object):
         self.unexpected_failures += test_run_results.unexpected_failures
         self.unexpected_crashes += test_run_results.unexpected_crashes
         self.unexpected_timeouts += test_run_results.unexpected_timeouts
-        self.tests_by_expectation.update(test_run_results.tests_by_expectation)
-        self.tests_by_timeline.update(test_run_results.tests_by_timeline)
+        self.tests_by_expectation = merge_dict_sets(self.tests_by_expectation, test_run_results.tests_by_expectation)
+        self.tests_by_timeline = merge_dict_sets(self.tests_by_timeline, test_run_results.tests_by_timeline)
         self.results_by_name.update(test_run_results.results_by_name)
         self.all_results += test_run_results.all_results
         self.unexpected_results_by_name.update(test_run_results.unexpected_results_by_name)
         self.failures_by_name.update(test_run_results.failures_by_name)
         self.total_failures += test_run_results.total_failures
         self.expected_skips += test_run_results.expected_skips
-        self.tests_by_expectation.update(test_run_results.tests_by_expectation)
-        self.tests_by_timeline.update(test_run_results.tests_by_timeline)
         self.slow_tests.update(test_run_results.slow_tests)
 
         self.interrupted |= test_run_results.interrupted
@@ -360,7 +374,7 @@ def summarize_results(port_obj, expectations_by_type, initial_results, retry_res
         # FIXME: Do we really need to populate this both here and in the json_results_generator?
         if port_obj.get_option("builder_name"):
             port_obj.host.initialize_scm()
-            results['revision'] = port_obj.commits_for_upload()[0]['id']
+            results['revision'] = str(port_obj.commits_for_upload()[0].get('revision', port_obj.commits_for_upload()[0].get('id')))
     except Exception as e:
         _log.warn("Failed to determine svn revision for checkout (cwd: %s, webkit_base: %s), leaving 'revision' key blank in full_results.json.\n%s" % (port_obj._filesystem.getcwd(), port_obj.path_from_webkit_base(), e))
         # Handle cases where we're running outside of version control.

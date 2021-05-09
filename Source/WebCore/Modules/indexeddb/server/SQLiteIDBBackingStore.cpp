@@ -26,8 +26,6 @@
 #include "config.h"
 #include "SQLiteIDBBackingStore.h"
 
-#if ENABLE(INDEXED_DATABASE)
-
 #include "IDBBindingUtilities.h"
 #include "IDBCursorInfo.h"
 #include "IDBGetAllRecordsData.h"
@@ -1267,12 +1265,27 @@ IDBError SQLiteIDBBackingStore::getOrEstablishDatabaseInfo(IDBDatabaseInfo& info
     return IDBError { };
 }
 
+uint64_t SQLiteIDBBackingStore::databaseVersion()
+{
+    if (m_databaseInfo)
+        return m_databaseInfo->version();
+
+    String dbFilename = fullDatabasePath();
+    if (!FileSystem::fileExists(dbFilename))
+        return 0;
+
+    auto databaseNameAndVersion = databaseNameAndVersionFromFile(dbFilename);
+    return databaseNameAndVersion ? databaseNameAndVersion->version : 0;
+}
+
 uint64_t SQLiteIDBBackingStore::databasesSizeForDirectory(const String& directory)
 {
     uint64_t diskUsage = 0;
     for (auto& dbDirectory : FileSystem::listDirectory(directory, "*")) {
-        for (auto& file : FileSystem::listDirectory(dbDirectory, "*.sqlite3"_s))
-            diskUsage += SQLiteFileSystem::getDatabaseFileSize(file);
+        for (auto& file : FileSystem::listDirectory(dbDirectory, "*.sqlite3"_s)) {
+            auto fileSize = SQLiteFileSystem::getDatabaseFileSize(file);
+            diskUsage += fileSize;
+        }
     }
     return diskUsage;
 }
@@ -3085,5 +3098,3 @@ bool SQLiteIDBBackingStore::hasTransaction(const IDBResourceIdentifier& transact
 
 } // namespace IDBServer
 } // namespace WebCore
-
-#endif // ENABLE(INDEXED_DATABASE)

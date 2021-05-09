@@ -433,9 +433,6 @@ public:
         @(static_cast<int>(InterpolationQuality::Low)), WebKitInterpolationQualityPreferenceKey,
         @NO, WebKitNetworkDataUsageTrackingEnabledPreferenceKey,
         @"", WebKitNetworkInterfaceNamePreferenceKey,
-#if HAVE(AVKIT)
-        @YES, WebKitAVKitEnabled,
-#endif
 #endif
         nil];
 
@@ -2100,18 +2097,6 @@ static RetainPtr<NSString>& classIBCreatorID()
     [self _setUnsignedIntValue:override forKey:WebKitAudioSessionCategoryOverride];
 }
 
-- (BOOL)avKitEnabled
-{
-    return [self _boolValueForKey:WebKitAVKitEnabled];
-}
-
-- (void)setAVKitEnabled:(BOOL)flag
-{
-#if HAVE(AVKIT)
-    [self _setBoolValue:flag forKey:WebKitAVKitEnabled];
-#endif
-}
-
 - (BOOL)networkDataUsageTrackingEnabled
 {
     return [self _boolValueForKey:WebKitNetworkDataUsageTrackingEnabledPreferenceKey];
@@ -2774,16 +2759,6 @@ static RetainPtr<NSString>& classIBCreatorID()
     [self _setBoolValue:flag forKey:WebKitCSSOMViewScrollingAPIEnabledPreferenceKey];
 }
 
-- (BOOL)modernMediaControlsEnabled
-{
-    return [self _boolValueForKey:WebKitModernMediaControlsEnabledPreferenceKey];
-}
-
-- (void)setModernMediaControlsEnabled:(BOOL)flag
-{
-    [self _setBoolValue:flag forKey:WebKitModernMediaControlsEnabledPreferenceKey];
-}
-
 - (BOOL)menuItemElementEnabled
 {
     return [self _boolValueForKey:WebKitMenuItemElementEnabledPreferenceKey];
@@ -3083,26 +3058,6 @@ static RetainPtr<NSString>& classIBCreatorID()
 - (void)setUserGesturePromisePropagationEnabled:(BOOL)flag
 {
     [self _setBoolValue:flag forKey:WebKitUserGesturePromisePropagationEnabledPreferenceKey];
-}
-
-- (BOOL)modernUnprefixedWebAudioEnabled
-{
-    return [self _boolValueForKey:WebKitModernUnprefixedWebAudioEnabledPreferenceKey];
-}
-
-- (void)setModernUnprefixedWebAudioEnabled:(BOOL)enabled
-{
-    [self _setBoolValue:enabled forKey:WebKitModernUnprefixedWebAudioEnabledPreferenceKey];
-}
-
-- (BOOL)audioWorkletEnabled
-{
-    return [self _boolValueForKey:WebKitAudioWorkletEnabledPreferenceKey];
-}
-
-- (void)setAudioWorkletEnabled:(BOOL)enabled
-{
-    [self _setBoolValue:enabled forKey:WebKitAudioWorkletEnabledPreferenceKey];
 }
 
 - (BOOL)requestIdleCallbackEnabled

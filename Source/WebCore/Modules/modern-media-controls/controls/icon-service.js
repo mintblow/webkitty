@@ -32,7 +32,7 @@ const Icons = {
     Forward         : { name: "Forward", type: "svg", label: UIString("Forward") },
     InvalidCircle   : { name: "InvalidCircle", type: "pdf", label: UIString("Invalid") },
     InvalidPlacard  : { name: "invalid-placard", type: "png", label: UIString("Invalid") },
-    Overflow        : { name: "Overflow", type: "svg", label: UIString("More...") },
+    Overflow        : { name: "Overflow", type: "svg", label: UIString("More\u2026") },
     Pause           : { name: "Pause", type: "svg", label: UIString("Pause") },
     PiPPlacard      : { name: "pip-placard", type: "png", label: UIString("Picture in Picture") },
     Play            : { name: "Play", type: "svg", label: UIString("Play") },
@@ -40,7 +40,7 @@ const Icons = {
     Rewind          : { name: "Rewind", type: "svg", label: UIString("Rewind") },
     SkipBack        : { name: "SkipBack15", type: "svg", label: UIString("Skip Back %s Seconds", SkipSeconds) },
     SkipForward     : { name: "SkipForward15", type: "svg", label: UIString("Skip Forward %s Seconds", SkipSeconds) },
-    SpinnerSprite   : { name: "SpinnerSprite", type: "png", label: UIString("Loading…") },
+    SpinnerSprite   : { name: "SpinnerSprite", type: "png", label: UIString("Loading\u2026") },
     Tracks          : { name: "MediaSelector", type: "svg", label: UIString("Media Selection") },
     Volume0         : { name: "Volume0", type: "svg", label: UIString("Mute") },
     Volume0RTL      : { name: "Volume0-RTL", type: "svg", label: UIString("Mute") },
@@ -82,10 +82,19 @@ const iconService = new class IconService {
 
         image = this.images[path] = new Image;
 
+        // Prevent this image from being shown if it's ever attached to the DOM.
+        image.style.display = "none";
+
+        // Must attach the `<img>` to the UA shadow root before setting `src` so that `isInUserAgentShadowTree` is correct.
+        this.shadowRoot?.appendChild(image);
+
         if (this.mediaControlsHost)
             image.src = `data:${MimeTypes[icon.type]};base64,${this.mediaControlsHost.base64StringForIconNameAndType(fileName, icon.type)}`;
         else
             image.src = `${this.directoryPath}/${path}`;
+
+        // Remove the `<img>` from the shadow root once the `src` has been set as `isInUserAgentShadowTree` has already been checked by this point.
+        image.remove();
 
         return image;
     }

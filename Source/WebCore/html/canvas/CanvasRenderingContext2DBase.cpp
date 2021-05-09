@@ -1045,26 +1045,33 @@ void CanvasRenderingContext2DBase::fillInternal(const Path& path, CanvasFillRule
     if (gradient && gradient->isZeroSize())
         return;
 
-    if (!path.isEmpty()) {
-        auto savedFillRule = c->fillRule();
-        c->setFillRule(toWindRule(windingRule));
+    if (path.isEmpty())
+        return;
 
-        if (isFullCanvasCompositeMode(state().globalComposite)) {
-            beginCompositeLayer();
-            c->fillPath(path);
-            endCompositeLayer();
-            didDrawEntireCanvas();
-        } else if (state().globalComposite == CompositeOperator::Copy) {
-            clearCanvas();
-            c->fillPath(path);
-            didDrawEntireCanvas();
-        } else {
-            c->fillPath(path);
-            didDraw(path.fastBoundingRect());
-        }
-        
-        c->setFillRule(savedFillRule);
-    }
+    auto savedFillRule = c->fillRule();
+    c->setFillRule(toWindRule(windingRule));
+
+    bool repaintEntireCanvas = false;
+    if (isFullCanvasCompositeMode(state().globalComposite)) {
+        beginCompositeLayer();
+        c->fillPath(path);
+        endCompositeLayer();
+        repaintEntireCanvas = true;
+    } else if (state().globalComposite == CompositeOperator::Copy) {
+        clearCanvas();
+        c->fillPath(path);
+        repaintEntireCanvas = true;
+    } else
+        c->fillPath(path);
+    
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else
+        didDraw(path.fastBoundingRect());
+
+    c->setFillRule(savedFillRule);
 }
 
 void CanvasRenderingContext2DBase::strokeInternal(const Path& path)
@@ -1080,22 +1087,30 @@ void CanvasRenderingContext2DBase::strokeInternal(const Path& path)
     if (gradient && gradient->isZeroSize())
         return;
 
-    if (!path.isEmpty()) {
-        if (isFullCanvasCompositeMode(state().globalComposite)) {
-            beginCompositeLayer();
-            c->strokePath(path);
-            endCompositeLayer();
-            didDrawEntireCanvas();
-        } else if (state().globalComposite == CompositeOperator::Copy) {
-            clearCanvas();
-            c->strokePath(path);
-            didDrawEntireCanvas();
-        } else {
-            FloatRect dirtyRect = path.fastBoundingRect();
-            inflateStrokeRect(dirtyRect);
-            c->strokePath(path);
-            didDraw(dirtyRect);
-        }
+    if (path.isEmpty())
+        return;
+
+    bool repaintEntireCanvas = false;
+    if (isFullCanvasCompositeMode(state().globalComposite)) {
+        beginCompositeLayer();
+        c->strokePath(path);
+        endCompositeLayer();
+        repaintEntireCanvas = true;
+    } else if (state().globalComposite == CompositeOperator::Copy) {
+        clearCanvas();
+        c->strokePath(path);
+        repaintEntireCanvas = true;
+    } else
+        c->strokePath(path);
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else {
+        auto dirtyRect = path.fastBoundingRect();
+        inflateStrokeRect(dirtyRect);
+        didDraw(dirtyRect);
     }
 }
 
@@ -1242,22 +1257,28 @@ void CanvasRenderingContext2DBase::fillRect(float x, float y, float width, float
 
     FloatRect rect(x, y, width, height);
 
+    bool repaintEntireCanvas = false;
     if (rectContainsCanvas(rect)) {
         c->fillRect(rect);
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (isFullCanvasCompositeMode(state().globalComposite)) {
         beginCompositeLayer();
         c->fillRect(rect);
         endCompositeLayer();
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (state().globalComposite == CompositeOperator::Copy) {
         clearCanvas();
         c->fillRect(rect);
-        didDrawEntireCanvas();
-    } else {
+        repaintEntireCanvas = true;
+    } else
         c->fillRect(rect);
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else
         didDraw(rect);
-    }
 }
 
 void CanvasRenderingContext2DBase::strokeRect(float x, float y, float width, float height)
@@ -1279,19 +1300,26 @@ void CanvasRenderingContext2DBase::strokeRect(float x, float y, float width, flo
         return;
 
     FloatRect rect(x, y, width, height);
+    bool repaintEntireCanvas = false;
     if (isFullCanvasCompositeMode(state().globalComposite)) {
         beginCompositeLayer();
         c->strokeRect(rect, state().lineWidth);
         endCompositeLayer();
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (state().globalComposite == CompositeOperator::Copy) {
         clearCanvas();
         c->strokeRect(rect, state().lineWidth);
-        didDrawEntireCanvas();
-    } else {
-        FloatRect boundingRect = rect;
-        boundingRect.inflate(state().lineWidth / 2);
+        repaintEntireCanvas = true;
+    } else
         c->strokeRect(rect, state().lineWidth);
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else {
+        auto boundingRect = rect;
+        boundingRect.inflate(state().lineWidth / 2);
         didDraw(boundingRect);
     }
 }
@@ -1551,21 +1579,27 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(Document& document, Ca
 
     ImagePaintingOptions options = { op, blendMode, orientation };
 
+    bool repaintEntireCanvas = false;
     if (rectContainsCanvas(normalizedDstRect)) {
         c->drawImage(*image, normalizedDstRect, normalizedSrcRect, options);
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (isFullCanvasCompositeMode(op)) {
         fullCanvasCompositedDrawImage(*image, normalizedDstRect, normalizedSrcRect, op);
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (op == CompositeOperator::Copy) {
         clearCanvas();
         c->drawImage(*image, normalizedDstRect, normalizedSrcRect, options);
-        didDrawEntireCanvas();
-    } else {
+        repaintEntireCanvas = true;
+    } else
         c->drawImage(*image, normalizedDstRect, normalizedSrcRect, options);
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else
         didDraw(normalizedDstRect);
-    }
-    
+
     if (image->isSVGImage())
         image->setImageObserver(observer);
 
@@ -1600,15 +1634,16 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(CanvasBase& sourceCanv
 
     sourceCanvas.makeRenderingResultsAvailable();
 
+    bool repaintEntireCanvas = false;
     if (rectContainsCanvas(dstRect)) {
         c->drawImageBuffer(*buffer, dstRect, srcRect, { state().globalComposite, state().globalBlend });
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (isFullCanvasCompositeMode(state().globalComposite)) {
         fullCanvasCompositedDrawImage(*buffer, dstRect, srcRect, state().globalComposite);
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (state().globalComposite == CompositeOperator::Copy) {
         if (&sourceCanvas == &canvasBase()) {
-            if (auto copy = buffer->copyRectToBuffer(srcRect, DestinationColorSpace::SRGB, *c)) {
+            if (auto copy = buffer->copyRectToBuffer(srcRect, colorSpace(), *c)) {
                 clearCanvas();
                 c->drawImageBuffer(*copy, dstRect, { { }, srcRect.size() }, { state().globalComposite, state().globalBlend });
             }
@@ -1616,11 +1651,16 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(CanvasBase& sourceCanv
             clearCanvas();
             c->drawImageBuffer(*buffer, dstRect, srcRect, { state().globalComposite, state().globalBlend });
         }
-        didDrawEntireCanvas();
-    } else {
+        repaintEntireCanvas = true;
+    } else
         c->drawImageBuffer(*buffer, dstRect, srcRect, { state().globalComposite, state().globalBlend });
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else
         didDraw(dstRect);
-    }
 
     return { };
 }
@@ -1650,7 +1690,10 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(HTMLVideoElement& vide
 #if USE(CG)
     if (auto image = video.nativeImageForCurrentTime()) {
         c->drawNativeImage(*image, FloatSize(video.videoWidth(), video.videoHeight()), dstRect, srcRect);
-        if (rectContainsCanvas(dstRect))
+
+        if (isEntireBackingStoreDirty())
+            didDraw(WTF::nullopt);
+        else if (rectContainsCanvas(dstRect))
             didDrawEntireCanvas();
         else
             didDraw(dstRect);
@@ -1666,7 +1709,11 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(HTMLVideoElement& vide
     c->translate(-srcRect.location());
     video.paintCurrentFrameInContext(*c, FloatRect(FloatPoint(), size(video)));
     stateSaver.restore();
-    didDraw(dstRect);
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else
+        didDraw(dstRect);
 
     return { };
 }
@@ -1700,20 +1747,26 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(ImageBitmap& imageBitm
 
     checkOrigin(&imageBitmap);
 
+    bool repaintEntireCanvas = false;
     if (rectContainsCanvas(dstRect)) {
         c->drawImageBuffer(*buffer, dstRect, srcRect, { state().globalComposite, state().globalBlend });
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (isFullCanvasCompositeMode(state().globalComposite)) {
         fullCanvasCompositedDrawImage(*buffer, dstRect, srcRect, state().globalComposite);
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (state().globalComposite == CompositeOperator::Copy) {
         clearCanvas();
         c->drawImageBuffer(*buffer, dstRect, srcRect, { state().globalComposite, state().globalBlend });
-        didDrawEntireCanvas();
-    } else {
+        repaintEntireCanvas = true;
+    } else
         c->drawImageBuffer(*buffer, dstRect, srcRect, { state().globalComposite, state().globalBlend });
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else
         didDraw(dstRect);
-    }
 
     return { };
 }
@@ -1776,7 +1829,7 @@ template<class T> IntRect CanvasRenderingContext2DBase::calculateCompositingBuff
 
 RefPtr<ImageBuffer> CanvasRenderingContext2DBase::createCompositingBuffer(const IntRect& bufferRect)
 {
-    return ImageBuffer::create(bufferRect.size(), isAccelerated() ? RenderingMode::Accelerated : RenderingMode::Unaccelerated);
+    return ImageBuffer::create(bufferRect.size(), isAccelerated() ? RenderingMode::Accelerated : RenderingMode::Unaccelerated, 1, colorSpace(), pixelFormat());
 }
 
 void CanvasRenderingContext2DBase::compositeBuffer(ImageBuffer& buffer, const IntRect& bufferRect, CompositeOperator op)
@@ -1973,7 +2026,7 @@ ExceptionOr<RefPtr<CanvasPattern>> CanvasRenderingContext2DBase::createPattern(H
 #endif
 
     auto renderingMode = !drawingContext() || drawingContext()->isAcceleratedContext() ? RenderingMode::Accelerated : RenderingMode::Unaccelerated;
-    auto imageBuffer = videoElement.createBufferForPainting(size(videoElement), renderingMode);
+    auto imageBuffer = videoElement.createBufferForPainting(size(videoElement), renderingMode, colorSpace(), pixelFormat());
     if (!imageBuffer)
         return nullptr;
 
@@ -2000,24 +2053,32 @@ ExceptionOr<RefPtr<CanvasPattern>> CanvasRenderingContext2DBase::createPattern(T
 
 void CanvasRenderingContext2DBase::didDrawEntireCanvas()
 {
-    didDraw(FloatRect(FloatPoint::zero(), canvasBase().size()), DidDrawOption::ApplyClip);
+    didDraw(backingStoreBounds(), DidDrawOption::ApplyClip);
 }
 
-void CanvasRenderingContext2DBase::didDraw(const FloatRect& r, OptionSet<DidDrawOption> options)
+void CanvasRenderingContext2DBase::didDraw(Optional<FloatRect> rect, OptionSet<DidDrawOption> options)
 {
     if (!drawingContext())
         return;
-    if (!state().hasInvertibleTransform)
+
+    if (!rect) {
+        canvasBase().didDraw(WTF::nullopt);
+        return;
+    }
+
+    auto dirtyRect = rect.value();
+    if (dirtyRect.isEmpty())
         return;
 
-    FloatRect dirtyRect = r;
+    if (!state().hasInvertibleTransform)
+        return;
 
     if (options.contains(DidDrawOption::ApplyTransform))
         dirtyRect = state().transform.mapRect(dirtyRect);
 
     if (options.contains(DidDrawOption::ApplyShadow) && state().shadowColor.isVisible()) {
         // The shadow gets applied after transformation
-        FloatRect shadowRect(dirtyRect);
+        auto shadowRect = dirtyRect;
         shadowRect.move(state().shadowOffset);
         shadowRect.inflate(state().shadowBlur);
         dirtyRect.unite(shadowRect);
@@ -2025,7 +2086,22 @@ void CanvasRenderingContext2DBase::didDraw(const FloatRect& r, OptionSet<DidDraw
 
     // FIXME: This does not apply the clip because we have no way of reading the clip out of the GraphicsContext.
 
-    canvasBase().didDraw(dirtyRect);
+    if (m_dirtyRect.contains(dirtyRect))
+        canvasBase().didDraw(WTF::nullopt);
+    else {
+        m_dirtyRect.unite(dirtyRect);
+        canvasBase().didDraw(m_dirtyRect);
+    }
+}
+
+void CanvasRenderingContext2DBase::clearAccumulatedDirtyRect()
+{
+    m_dirtyRect = { };
+}
+
+bool CanvasRenderingContext2DBase::isEntireBackingStoreDirty() const
+{
+    return m_dirtyRect == backingStoreBounds();
 }
 
 const Vector<CanvasRenderingContext2DBase::State, 1>& CanvasRenderingContext2DBase::stateStack()
@@ -2044,7 +2120,7 @@ void CanvasRenderingContext2DBase::paintRenderingResultsToCanvas()
     auto& displayList = m_recordingContext->displayList();
     if (!displayList.isEmpty()) {
         DisplayList::Replayer replayer(*canvasBase().drawingContext(), displayList);
-        replayer.replay({ FloatPoint::zero(), canvasBase().size() });
+        replayer.replay(backingStoreBounds());
         displayList.clear();
     }
 }
@@ -2079,7 +2155,7 @@ static RefPtr<ImageData> createEmptyImageData(const IntSize& size)
 {
     auto data = ImageData::create(size);
     if (data)
-        data->data()->zeroFill();
+        data->data().zeroFill();
     return data;
 }
 
@@ -2088,25 +2164,16 @@ RefPtr<ImageData> CanvasRenderingContext2DBase::createImageData(ImageData& image
     return createEmptyImageData(imageData.size());
 }
 
-ExceptionOr<RefPtr<ImageData>> CanvasRenderingContext2DBase::createImageData(float sw, float sh) const
+ExceptionOr<RefPtr<ImageData>> CanvasRenderingContext2DBase::createImageData(int sw, int sh) const
 {
     if (!sw || !sh)
         return Exception { IndexSizeError };
 
-    FloatSize logicalSize(std::abs(sw), std::abs(sh));
-    if (!logicalSize.isExpressibleAsIntSize())
-        return nullptr;
-
-    IntSize size = expandedIntSize(logicalSize);
-    if (size.width() < 1)
-        size.setWidth(1);
-    if (size.height() < 1)
-        size.setHeight(1);
-
+    IntSize size { std::abs(sw), std::abs(sh) };
     return createEmptyImageData(size);
 }
 
-ExceptionOr<RefPtr<ImageData>> CanvasRenderingContext2DBase::getImageData(float sx, float sy, float sw, float sh) const
+ExceptionOr<RefPtr<ImageData>> CanvasRenderingContext2DBase::getImageData(int sx, int sy, int sw, int sh) const
 {
     if (!canvasBase().originClean()) {
         static NeverDestroyed<String> consoleMessage(MAKE_STATIC_STRING_IMPL("Unable to get image data from canvas because the canvas has been tainted by cross-origin data."));
@@ -2126,15 +2193,7 @@ ExceptionOr<RefPtr<ImageData>> CanvasRenderingContext2DBase::getImageData(float 
         sh = -sh;
     }
 
-    FloatRect logicalRect(sx, sy, sw, sh);
-    if (logicalRect.width() < 1)
-        logicalRect.setWidth(1);
-    if (logicalRect.height() < 1)
-        logicalRect.setHeight(1);
-    if (!logicalRect.isExpressibleAsIntRect())
-        return nullptr;
-
-    IntRect imageDataRect = enclosingIntRect(logicalRect);
+    IntRect imageDataRect { sx, sy, sw, sh };
 
     ImageBuffer* buffer = canvasBase().buffer();
     if (!buffer)
@@ -2150,18 +2209,18 @@ ExceptionOr<RefPtr<ImageData>> CanvasRenderingContext2DBase::getImageData(float 
     return imageData;
 }
 
-void CanvasRenderingContext2DBase::putImageData(ImageData& data, float dx, float dy)
+void CanvasRenderingContext2DBase::putImageData(ImageData& data, int dx, int dy)
 {
     putImageData(data, dx, dy, 0, 0, data.width(), data.height());
 }
 
-void CanvasRenderingContext2DBase::putImageData(ImageData& data, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight)
+void CanvasRenderingContext2DBase::putImageData(ImageData& data, int dx, int dy, int dirtyX, int dirtyY, int dirtyWidth, int dirtyHeight)
 {
     ImageBuffer* buffer = canvasBase().buffer();
     if (!buffer)
         return;
 
-    if (!data.data() || data.data()->isDetached())
+    if (data.data().isDetached())
         return;
 
     if (dirtyWidth < 0) {
@@ -2174,22 +2233,22 @@ void CanvasRenderingContext2DBase::putImageData(ImageData& data, float dx, float
         dirtyHeight = -dirtyHeight;
     }
 
-    FloatRect clipRect(dirtyX, dirtyY, dirtyWidth, dirtyHeight);
-    clipRect.intersect(IntRect(0, 0, data.width(), data.height()));
-    IntSize destOffset(static_cast<int>(dx), static_cast<int>(dy));
-    IntRect destRect = enclosingIntRect(clipRect);
+    IntRect clipRect { dirtyX, dirtyY, dirtyWidth, dirtyHeight };
+    clipRect.intersect(IntRect { 0, 0, data.width(), data.height() });
+    IntSize destOffset { dx, dy };
+    IntRect destRect = clipRect;
     destRect.move(destOffset);
-    destRect.intersect(IntRect(IntPoint(), buffer->logicalSize()));
+    destRect.intersect(IntRect { { }, buffer->logicalSize() });
     if (destRect.isEmpty())
         return;
-    IntRect sourceRect(destRect);
+    IntRect sourceRect { destRect };
     sourceRect.move(-destOffset);
-    sourceRect.intersect(IntRect(0, 0, data.width(), data.height()));
+    sourceRect.intersect(IntRect { 0, 0, data.width(), data.height() });
 
     if (!sourceRect.isEmpty())
-        buffer->putImageData(AlphaPremultiplication::Unpremultiplied, data, sourceRect, IntPoint(destOffset));
+        buffer->putImageData(AlphaPremultiplication::Unpremultiplied, data, sourceRect, IntPoint { destOffset });
 
-    didDraw(destRect, { }); // ignore transform, shadow and clip
+    didDraw(FloatRect { destRect }, { }); // ignore transform, shadow and clip
 }
 
 void CanvasRenderingContext2DBase::inflateStrokeRect(FloatRect& rect) const
@@ -2289,8 +2348,6 @@ bool CanvasRenderingContext2DBase::canDrawText(float x, float y, bool fill, Opti
 {
     if (!fontProxy()->realized())
         return false;
-
-    ScriptDisallowedScope::InMainThread scriptDisallowedScope;
 
     auto* c = drawingContext();
     if (!c)
@@ -2433,7 +2490,7 @@ void CanvasRenderingContext2DBase::drawTextUnchecked(const TextRun& textRun, flo
             }
         };
 
-        if (c->clipToDrawingCommands(maskRect, DestinationColorSpace::SRGB, WTFMove(paintMaskImage)) == GraphicsContext::ClipToDrawingCommandsResult::FailedToCreateImageBuffer)
+        if (c->clipToDrawingCommands(maskRect, colorSpace(), WTFMove(paintMaskImage)) == GraphicsContext::ClipToDrawingCommandsResult::FailedToCreateImageBuffer)
             return;
 
         drawStyle.applyFillColor(*c);
@@ -2452,19 +2509,25 @@ void CanvasRenderingContext2DBase::drawTextUnchecked(const TextRun& textRun, flo
         location = FloatPoint();
     }
 
+    bool repaintEntireCanvas = false;
     if (isFullCanvasCompositeMode(state().globalComposite)) {
         beginCompositeLayer();
         fontProxy.drawBidiText(*c, textRun, location, FontCascade::UseFallbackIfFontNotReady);
         endCompositeLayer();
-        didDrawEntireCanvas();
+        repaintEntireCanvas = true;
     } else if (state().globalComposite == CompositeOperator::Copy) {
         clearCanvas();
         fontProxy.drawBidiText(*c, textRun, location, FontCascade::UseFallbackIfFontNotReady);
-        didDrawEntireCanvas();
-    } else {
+        repaintEntireCanvas = true;
+    } else
         fontProxy.drawBidiText(*c, textRun, location, FontCascade::UseFallbackIfFontNotReady);
+
+    if (isEntireBackingStoreDirty())
+        didDraw(WTF::nullopt);
+    else if (repaintEntireCanvas)
+        didDrawEntireCanvas();
+    else
         didDraw(textRect);
-    }
 }
 
 Ref<TextMetrics> CanvasRenderingContext2DBase::measureTextInternal(const String& text)

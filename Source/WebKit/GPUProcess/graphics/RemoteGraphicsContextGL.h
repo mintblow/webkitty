@@ -31,10 +31,12 @@
 #include "GPUConnectionToWebProcess.h"
 #include "GraphicsContextGLIdentifier.h"
 #include "RemoteRenderingBackend.h"
+#include "ScopedWebGLRenderingResourcesRequest.h"
 #include "StreamServerConnection.h"
 #include <WebCore/ExtensionsGL.h>
 #include <WebCore/GraphicsContextGLOpenGL.h>
 #include <WebCore/NotImplemented.h>
+#include <wtf/ThreadAssertions.h>
 #include <wtf/WeakPtr.h>
 
 #if PLATFORM(COCOA)
@@ -107,10 +109,14 @@ protected:
 
     WeakPtr<GPUConnectionToWebProcess> m_gpuConnectionToWebProcess;
     RefPtr<IPC::StreamServerConnection<RemoteGraphicsContextGL>> m_streamConnection;
-    RefPtr<WebCore::GraphicsContextGLOpenGL> m_context;
+    RefPtr<WebCore::GraphicsContextGLOpenGL> m_context WTF_GUARDED_BY_LOCK(m_streamThread);
     GraphicsContextGLIdentifier m_graphicsContextGLIdentifier;
     Ref<RemoteRenderingBackend> m_renderingBackend;
+    ScopedWebGLRenderingResourcesRequest m_renderingResourcesRequest;
+    NO_UNIQUE_ADDRESS ThreadAssertion m_streamThread;
 };
+
+IPC::StreamConnectionWorkQueue& remoteGraphicsContextGLStreamWorkQueue();
 
 } // namespace WebKit
 

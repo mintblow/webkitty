@@ -92,9 +92,9 @@ void compile(State& state, Safepoint::Result& safepointResult)
         if (inlineCallFrame->argumentCountRegister.isValid())
             inlineCallFrame->argumentCountRegister += localsOffset;
         
-        for (unsigned argument = inlineCallFrame->argumentsWithFixup.size(); argument-- > 1;) {
-            inlineCallFrame->argumentsWithFixup[argument] =
-                inlineCallFrame->argumentsWithFixup[argument].withLocalsOffset(localsOffset);
+        for (unsigned argument = inlineCallFrame->m_argumentsWithFixup.size(); argument-- > 1;) {
+            inlineCallFrame->m_argumentsWithFixup[argument] =
+                inlineCallFrame->m_argumentsWithFixup[argument].withLocalsOffset(localsOffset);
         }
         
         if (inlineCallFrame->isClosureCall) {
@@ -154,9 +154,9 @@ void compile(State& state, Safepoint::Result& safepointResult)
         BytecodeIndex catchBytecodeIndex = pair.value;
         unsigned entrypointIndex = pair.key;
         Vector<FlushFormat> argumentFormats = state.graph.m_argumentFormats[entrypointIndex];
-        state.jitCode->common.appendCatchEntrypoint(catchBytecodeIndex, state.finalizer->b3CodeLinkBuffer->locationOf<ExceptionHandlerPtrTag>(state.proc->code().entrypointLabel(entrypointIndex)), WTFMove(argumentFormats));
+        state.graph.appendCatchEntrypoint(catchBytecodeIndex, state.finalizer->b3CodeLinkBuffer->locationOf<ExceptionHandlerPtrTag>(state.proc->code().entrypointLabel(entrypointIndex)), WTFMove(argumentFormats));
     }
-    state.jitCode->common.finalizeCatchEntrypoints();
+    state.jitCode->common.finalizeCatchEntrypoints(WTFMove(state.graph.m_catchEntrypoints));
 
     if (B3::Air::Disassembler* disassembler = state.proc->code().disassembler()) {
         PrintStream& out = WTF::dataFile();

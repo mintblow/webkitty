@@ -31,6 +31,7 @@
 #import "DataReference.h"
 #import "Decoder.h"
 #import "Encoder.h"
+#import <string.h>
 #import <wtf/FileSystem.h>
 #import <wtf/spi/darwin/SandboxSPI.h>
 #import <wtf/text/CString.h>
@@ -93,6 +94,8 @@ private:
         uint32_t extensionFlags = 0;
         if (flags & SandboxExtension::Flags::NoReport)
             extensionFlags |= SANDBOX_EXTENSION_NO_REPORT;
+        if (flags & SandboxExtension::Flags::DoNotCanonicalize)
+            extensionFlags |= SANDBOX_EXTENSION_CANONICAL;
 
         switch (type) {
         case SandboxExtension::Type::ReadOnly:
@@ -244,7 +247,9 @@ RefPtr<SandboxExtension> SandboxExtension::create(Handle&& handle)
 
 String stringByResolvingSymlinksInPath(const String& path)
 {
-    return [(NSString *)path stringByResolvingSymlinksInPath];
+    char resolvedPath[PATH_MAX] = { 0 };
+    realpath(path.utf8().data(), resolvedPath);
+    return String::fromUTF8(resolvedPath);
 }
 
 String resolveAndCreateReadWriteDirectoryForSandboxExtension(const String& path)
@@ -275,7 +280,7 @@ bool SandboxExtension::createHandleWithoutResolvingPath(const String& path, Type
 {
     ASSERT(!handle.m_sandboxExtension);
 
-    handle.m_sandboxExtension = SandboxExtensionImpl::create(path.utf8().data(), type);
+    handle.m_sandboxExtension = SandboxExtensionImpl::create(path.utf8().data(), type, WTF::nullopt, SandboxExtension::Flags::DoNotCanonicalize);
     if (!handle.m_sandboxExtension) {
         LOG_ERROR("Could not create a sandbox extension for '%s'", path.utf8().data());
         return false;

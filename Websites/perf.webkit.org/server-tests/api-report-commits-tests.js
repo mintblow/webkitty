@@ -3,19 +3,19 @@
 const assert = require('assert');
 
 const TestServer = require('./resources/test-server.js');
-const addSlaveForReport = require('./resources/common-operations.js').addSlaveForReport;
+const addWorkerForReport = require('./resources/common-operations.js').addWorkerForReport;
 const prepareServerTest = require('./resources/common-operations.js').prepareServerTest;
 
 describe("/api/report-commits/ with insert=true", function () {
     prepareServerTest(this);
 
     const emptyReport = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
     };
     const subversionCommit = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -26,9 +26,23 @@ describe("/api/report-commits/ with insert=true", function () {
             }
         ],
     };
+    const subversionCommitWithRevisionIdentifier = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "WebKit",
+                "revision": "141977",
+                "revisionIdentifier": "127231@main",
+                "time": "2013-02-06T08:55:20.9Z",
+                "author": {"name": "Commit Queue", "account": "commit-queue@webkit.org"},
+                "message": "some message",
+            }
+        ],
+    };
     const subversionInvalidCommit = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -40,8 +54,8 @@ describe("/api/report-commits/ with insert=true", function () {
         ],
     };
     const subversionTwoCommits = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -62,8 +76,8 @@ describe("/api/report-commits/ with insert=true", function () {
     };
 
     const subversionInvalidPreviousCommit = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -76,15 +90,53 @@ describe("/api/report-commits/ with insert=true", function () {
         ]
     }
 
-    it("should reject error when slave name is missing", () => {
+    const duplicatedCommitRevisionIdentifierCommits = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "WebKit",
+                "revision": "210948",
+                "revisionIdentifier": "184276@main",
+                "time": "2017-01-20T02:52:34.577Z",
+                "author": {"name": "Zalan Bujtas", "account": "zalan@apple.com"},
+                "message": "a message",
+            },
+            {
+                "repository": "WebKit",
+                "revision": "210949",
+                "revisionIdentifier": "184276@main",
+                "time": "2017-01-20T03:23:50.645Z",
+                "author": {"name": "Chris Dumez", "account": "cdumez@apple.com"},
+                "message": "some message",
+            },
+        ]
+    }
+
+    const invalidCommitRevisionIdentifierCommits = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "WebKit",
+                "revision": "210948",
+                "revisionIdentifier": "184276",
+                "time": "2017-01-20T02:52:34.577Z",
+                "author": {"name": "Zalan Bujtas", "account": "zalan@apple.com"},
+                "message": "a message",
+            },
+        ]
+    }
+
+    it("should reject error when worker name is missing", () => {
         return TestServer.remoteAPI().postJSON('/api/report-commits/', {}).then((response) => {
-            assert.strictEqual(response['status'], 'MissingSlaveName');
+            assert.strictEqual(response['status'], 'MissingWorkerName');
         });
     });
 
-    it("should reject when there are no slaves", () => {
+    it("should reject when there are no workers", () => {
         return TestServer.remoteAPI().postJSON('/api/report-commits/', emptyReport).then((response) => {
-            assert.strictEqual(response['status'], 'SlaveNotFound');
+            assert.strictEqual(response['status'], 'WorkerNotFound');
             return TestServer.database().selectAll('commits');
         }).then((rows) => {
             assert.strictEqual(rows.length, 0);
@@ -92,7 +144,7 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     it("should accept an empty report", () => {
-        return addSlaveForReport(emptyReport).then(() => {
+        return addWorkerForReport(emptyReport).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', emptyReport);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -100,7 +152,7 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     it("should add a missing repository", () => {
-        return addSlaveForReport(subversionCommit).then(() => {
+        return addWorkerForReport(subversionCommit).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', subversionCommit);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -111,8 +163,8 @@ describe("/api/report-commits/ with insert=true", function () {
         });
     });
 
-    it("should store a commit from a valid slave", () => {
-        return addSlaveForReport(subversionCommit).then(() => {
+    it("should store a commit from a valid worker", () => {
+        return addWorkerForReport(subversionCommit).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', subversionCommit);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -135,7 +187,7 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     it("should reject an invalid revision number", () => {
-        return addSlaveForReport(subversionCommit).then(() => {
+        return addWorkerForReport(subversionCommit).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', subversionInvalidCommit);
         }).then((response) => {
             assert.strictEqual(response['status'], 'InvalidRevision');
@@ -145,8 +197,24 @@ describe("/api/report-commits/ with insert=true", function () {
         });
     });
 
-    it("should store two commits from a valid slave", () => {
-        return addSlaveForReport(subversionTwoCommits).then(() => {
+    it("should reject an invalid revision label", async () => {
+        await addWorkerForReport(subversionCommit);
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', invalidCommitRevisionIdentifierCommits);
+        assert.strictEqual(response['status'], 'InvalidRevisionIdentifier');
+        const rows = await TestServer.database().selectAll('commits');
+        assert.strictEqual(rows.length, 0);
+    });
+
+    it("should reject with duplicated commit revision labels", async () => {
+        await addWorkerForReport(subversionCommit);
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', duplicatedCommitRevisionIdentifierCommits);
+        assert.strictEqual(response['status'], 'DuplicatedRevisionIdentifier');
+        const rows = await TestServer.database().selectAll('commits');
+        assert.strictEqual(rows.length, 0);
+    });
+
+    it("should store two commits from a valid worker", () => {
+        return addWorkerForReport(subversionTwoCommits).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', subversionTwoCommits);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -179,7 +247,7 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     it("should fail if previous commit is invalid", () => {
-        return addSlaveForReport(subversionInvalidPreviousCommit).then(() => {
+        return addWorkerForReport(subversionInvalidPreviousCommit).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', subversionInvalidPreviousCommit);
         }).then((response) => {
             assert.strictEqual(response['status'], 'FailedToFindPreviousCommit');
@@ -192,7 +260,7 @@ describe("/api/report-commits/ with insert=true", function () {
     it("should update an existing commit if there is one", () => {
         const db = TestServer.database();
         const reportedData = subversionCommit.commits[0];
-        return addSlaveForReport(subversionCommit).then(() => {
+        return addWorkerForReport(subversionCommit).then(() => {
             return Promise.all([
                 db.insert('repositories', {'id': 1, 'name': 'WebKit'}),
                 db.insert('commits', {'repository': 1, 'revision': reportedData['revision'], 'time': reportedData['time']})
@@ -215,11 +283,30 @@ describe("/api/report-commits/ with insert=true", function () {
         });
     });
 
+    it("should update an existing commit with commit label if there is one", async () => {
+        const db = TestServer.database();
+        const reportedData = subversionCommitWithRevisionIdentifier.commits[0];
+        await addWorkerForReport(subversionCommitWithRevisionIdentifier);
+        await db.insert('repositories', {'id': 1, 'name': 'WebKit'}),
+        await db.insert('commits', {'repository': 1, 'revision': reportedData['revision'], 'time': reportedData['time']})
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', subversionCommitWithRevisionIdentifier);
+        assert.strictEqual(response['status'], 'OK');
+        const commits = await db.selectAll('commits');
+        const committers = await db.selectAll('committers');
+        assert.strictEqual(commits.length, 1);
+        assert.strictEqual(committers.length, 1);
+        assert.strictEqual(commits[0]['message'], reportedData['message']);
+        assert.strictEqual(commits[0]['revision_identifier'], reportedData['revisionIdentifier']);
+        assert.strictEqual(commits[0]['committer'], committers[0]['id']);
+        assert.strictEqual(committers[0]['name'], reportedData['author']['name']);
+        assert.strictEqual(committers[0]['account'], reportedData['author']['account']);
+    });
+
     it("should not update an unrelated commit", () => {
         const db = TestServer.database();
         const firstData = subversionTwoCommits.commits[0];
         const secondData = subversionTwoCommits.commits[1];
-        return addSlaveForReport(subversionCommit).then(() => {
+        return addWorkerForReport(subversionCommit).then(() => {
             return Promise.all([
                 db.insert('repositories', {'id': 1, 'name': 'WebKit'}),
                 db.insert('commits', {'id': 2, 'repository': 1, 'revision': firstData['revision'], 'time': firstData['time']}),
@@ -251,7 +338,7 @@ describe("/api/report-commits/ with insert=true", function () {
     it("should update an existing committer if there is one", () => {
         const db = TestServer.database();
         const author = subversionCommit.commits[0]['author'];
-        return addSlaveForReport(subversionCommit).then(() => {
+        return addWorkerForReport(subversionCommit).then(() => {
             return Promise.all([
                 db.insert('repositories', {'id': 1, 'name': 'WebKit'}),
                 db.insert('committers', {'repository': 1, 'account': author['account']}),
@@ -269,8 +356,8 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     const sameRepositoryNameInOwnedCommitAndMajorCommit = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "OSX",
@@ -299,7 +386,7 @@ describe("/api/report-commits/ with insert=true", function () {
     };
 
     it("should distinguish between repositories with the same name but with a different owner.", () => {
-        return addSlaveForReport(sameRepositoryNameInOwnedCommitAndMajorCommit).then(() => {
+        return addWorkerForReport(sameRepositoryNameInOwnedCommitAndMajorCommit).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', sameRepositoryNameInOwnedCommitAndMajorCommit);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -315,8 +402,8 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     const systemVersionCommitWithOwnedCommits = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "OSX",
@@ -340,7 +427,7 @@ describe("/api/report-commits/ with insert=true", function () {
 
     it("should accept inserting one commit with some owned commits", () => {
         const db = TestServer.database();
-        return addSlaveForReport(systemVersionCommitWithOwnedCommits).then(() => {
+        return addWorkerForReport(systemVersionCommitWithOwnedCommits).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', systemVersionCommitWithOwnedCommits);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -403,8 +490,8 @@ describe("/api/report-commits/ with insert=true", function () {
     })
 
     const multipleSystemVersionCommitsWithOwnedCommits = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "OSX",
@@ -445,7 +532,7 @@ describe("/api/report-commits/ with insert=true", function () {
 
     it("should accept inserting multiple commits with multiple owned-commits", () => {
         const db = TestServer.database();
-        return addSlaveForReport(multipleSystemVersionCommitsWithOwnedCommits).then(() => {
+        return addWorkerForReport(multipleSystemVersionCommitsWithOwnedCommits).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', multipleSystemVersionCommitsWithOwnedCommits);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -531,8 +618,8 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     const systemVersionCommitWithEmptyOwnedCommits = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "OSX",
@@ -545,7 +632,7 @@ describe("/api/report-commits/ with insert=true", function () {
     }
 
     it("should accept inserting one commit with no owned commits", () => {
-        return addSlaveForReport(systemVersionCommitWithEmptyOwnedCommits).then(() => {
+        return addWorkerForReport(systemVersionCommitWithEmptyOwnedCommits).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', systemVersionCommitWithEmptyOwnedCommits);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OK');
@@ -564,8 +651,8 @@ describe("/api/report-commits/ with insert=true", function () {
     });
 
     const systemVersionCommitAndOwnedCommitWithTimestamp = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "OSX",
@@ -584,11 +671,116 @@ describe("/api/report-commits/ with insert=true", function () {
     }
 
     it("should reject inserting one commit with owned commits that contains timestamp", () => {
-        return addSlaveForReport(systemVersionCommitAndOwnedCommitWithTimestamp).then(() => {
+        return addWorkerForReport(systemVersionCommitAndOwnedCommitWithTimestamp).then(() => {
             return TestServer.remoteAPI().postJSON('/api/report-commits/', systemVersionCommitAndOwnedCommitWithTimestamp);
         }).then((response) => {
             assert.strictEqual(response['status'], 'OwnedCommitShouldNotContainTimestamp');
         });
+    });
+
+    const invalidOwnedCommitUseRevisionIdentifierAsRevison = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "OSX",
+                "revision": "Sierra16D32",
+                "order": 1,
+                "ownedCommits": {
+                    "WebKit": {
+                        "revision": "127232@main",
+                        "author": {"name": "Commit Queue", "account": "commit-queue@webkit.org"},
+                        "message": "WebKit Commit",
+                    }
+                }
+            }
+        ]
+    };
+
+    it("should reject inserting one commit with owned commits that use revision label as revision", async () => {
+        await addWorkerForReport(invalidOwnedCommitUseRevisionIdentifierAsRevison);
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', invalidOwnedCommitUseRevisionIdentifierAsRevison);
+        assert.strictEqual(response['status'], 'InvalidRevision');
+    });
+
+    const invalidRevisionIdentifierOwnedCommit = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "OSX",
+                "revision": "Sierra16D32",
+                "order": 1,
+                "ownedCommits": {
+                    "WebKit": {
+                        "revision": "141978",
+                        "revisionIdentifier": "127232",
+                        "author": {"name": "Commit Queue", "account": "commit-queue@webkit.org"},
+                        "message": "WebKit Commit",
+                    }
+                }
+            }
+        ]
+    };
+
+    it("should reject inserting one commit with owned commits that have invalid revision label", async () => {
+        await addWorkerForReport(invalidRevisionIdentifierOwnedCommit);
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', invalidRevisionIdentifierOwnedCommit);
+        assert.strictEqual(response['status'], 'InvalidRevisionIdentifier');
+    });
+
+    const invalidAuthorOwnedCommit = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "OSX",
+                "revision": "Sierra16D32",
+                "order": 1,
+                "ownedCommits": {
+                    "WebKit": {
+                        "revision": "141978",
+                        "revisionIdentifier": "127232@main",
+                        "author": null,
+                        "message": "WebKit Commit",
+                    }
+                }
+            }
+        ]
+    };
+    it("should reject inserting one commit with owned commits that have invalid author", async () => {
+        await addWorkerForReport(invalidAuthorOwnedCommit);
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', invalidAuthorOwnedCommit);
+        assert.strictEqual(response['status'], 'InvalidAuthorFormat');
+    });
+
+    const ownedCommitWithRevisionIdentifier = {
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
+        "commits": [
+            {
+                "repository": "OSX",
+                "revision": "Sierra16D32",
+                "order": 1,
+                "ownedCommits": {
+                    "WebKit": {
+                        "revision": "141978",
+                        "revisionIdentifier": "127232@main",
+                        "author": {"name": "Commit Queue", "account": "commit-queue@webkit.org"},
+                        "message": "WebKit Commit",
+                    }
+                }
+            }
+        ]
+    };
+
+    it("should insert one commit with commit revision label", async () => {
+        await addWorkerForReport(ownedCommitWithRevisionIdentifier);
+        const response = await TestServer.remoteAPI().postJSON('/api/report-commits/', ownedCommitWithRevisionIdentifier);
+        assert.strictEqual(response['status'], 'OK');
+        const db = TestServer.database();
+        const commit = await db.selectRows('commits', {'revision': '141978'});
+        assert.strictEqual(commit[0].revision_identifier, ownedCommitWithRevisionIdentifier.commits[0].ownedCommits['WebKit'].revisionIdentifier);
     });
 });
 
@@ -596,8 +788,8 @@ describe("/api/report-commits/ with insert=false", function () {
     prepareServerTest(this);
 
     const subversionCommits = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -618,8 +810,8 @@ describe("/api/report-commits/ with insert=false", function () {
     };
 
     const commitsUpdate = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -646,8 +838,8 @@ describe("/api/report-commits/ with insert=false", function () {
 
 
     const commitsUpdateWithMissingRevision = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -658,8 +850,8 @@ describe("/api/report-commits/ with insert=false", function () {
     };
 
     const commitsUpdateWithMissingRepository = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "revision": "210948",
@@ -670,8 +862,8 @@ describe("/api/report-commits/ with insert=false", function () {
     };
 
     const commitsUpdateWithoutAnyUpdate = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -682,8 +874,8 @@ describe("/api/report-commits/ with insert=false", function () {
     };
 
     const commitsUpdateWithOwnedCommitsUpdate = {
-        "slaveName": "someSlave",
-        "slavePassword": "somePassword",
+        "workerName": "someWorker",
+        "workerPassword": "somePassword",
         "commits": [
             {
                 "repository": "WebKit",
@@ -696,7 +888,7 @@ describe("/api/report-commits/ with insert=false", function () {
 
     async function initialReportCommits()
     {
-        await addSlaveForReport(subversionCommits);
+        await addWorkerForReport(subversionCommits);
         await TestServer.remoteAPI().postJSON('/api/report-commits/', subversionCommits);
         const result = await TestServer.remoteAPI().getJSON('/api/commits/WebKit/');
         assert.strictEqual(result['status'], 'OK');

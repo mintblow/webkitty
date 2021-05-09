@@ -24,6 +24,9 @@
  */
 
 #include "config.h"
+
+#if USE(AVIF)
+
 #include "AVIFImageDecoder.h"
 
 #include "AVIFImageReader.h"
@@ -37,18 +40,49 @@ AVIFImageDecoder::AVIFImageDecoder(AlphaOption alphaOption, GammaAndColorProfile
 
 AVIFImageDecoder::~AVIFImageDecoder() = default;
 
+RepetitionCount AVIFImageDecoder::repetitionCount() const
+{
+    if (failed() || m_frameCount <= 1)
+        return RepetitionCountOnce;
+
+    return m_repetitionCount ? m_repetitionCount : RepetitionCountInfinite;
+}
+
+size_t AVIFImageDecoder::findFirstRequiredFrameToDecode(size_t frameIndex)
+{
+    // The first frame doesn't depend on any other.
+    if (!frameIndex)
+        return 0;
+
+    size_t firstIncompleteFrame = frameIndex;
+    while (firstIncompleteFrame > 0) {
+        if (m_frameBufferCache[firstIncompleteFrame - 1].isComplete())
+            break;
+        --firstIncompleteFrame;
+    }
+
+    return firstIncompleteFrame;
+}
+
 ScalableImageDecoderFrame* AVIFImageDecoder::frameBufferAtIndex(size_t index)
 {
-    if (index)
+    const size_t imageCount = frameCount();
+    if (index >= imageCount)
         return nullptr;
 
-    if (m_frameBufferCache.isEmpty())
-        m_frameBufferCache.grow(1);
+    if ((m_frameBufferCache.size() > index) && m_frameBufferCache[index].isComplete())
+        return &m_frameBufferCache[index];
 
-    auto& frame = m_frameBufferCache[0];
-    if (!frame.isComplete())
-        decode(frame, isAllDataReceived());
-    return &frame;
+    if (imageCount && m_frameBufferCache.size() != imageCount)
+        m_frameBufferCache.resize(imageCount);
+
+    for (size_t i = findFirstRequiredFrameToDecode(index); i <= index; ++i) {
+        if (m_frameBufferCache[i].isComplete())
+            continue;
+        decode(i, isAllDataReceived());
+    }
+
+    return &m_frameBufferCache[index];
 }
 
 bool AVIFImageDecoder::setFailed()
@@ -57,23 +91,46 @@ bool AVIFImageDecoder::setFailed()
     return ScalableImageDecoder::setFailed();
 }
 
+bool AVIFImageDecoder::isComplete()
+{
+    if (m_frameBufferCache.isEmpty())
+        return false;
+
+    for (auto& frameBuffer : m_frameBufferCache) {
+        if (!frameBuffer.isComplete())
+            return false;
+    }
+    return true;
+}
+
 void AVIFImageDecoder::tryDecodeSize(bool allDataReceived)
 {
     if (!m_reader)
         m_reader = makeUnique<AVIFImageReader>(this);
-    m_reader->parseHeader(*m_data, allDataReceived);
+
+    if (!m_reader->parseHeader(*m_data, allDataReceived))
+        return;
+
+    m_frameCount = m_reader->imageCount();
+
+    // FIXME: The avif sequence image can repeat for non-integer times (e.g., 2.5 times)
+    // but ScalableImageDecoder accepts an integer only for the repetition count.
+    // https://github.com/AOMediaCodec/av1-avif/issues/73
+    m_repetitionCount = static_cast<RepetitionCount>(std::round(m_reader->repetitionCount()));
 }
 
-void AVIFImageDecoder::decode(ScalableImageDecoderFrame& frame, bool allDataReceived)
+void AVIFImageDecoder::decode(size_t frameIndex, bool allDataReceived)
 {
     if (failed())
         return;
 
     ASSERT(m_reader);
-    m_reader->decodeFrame(0, frame, *m_data);
+    m_reader->decodeFrame(frameIndex, m_frameBufferCache[frameIndex], *m_data);
 
-    if (allDataReceived && !m_frameBufferCache.isEmpty() && frame.isComplete())
+    if (allDataReceived && !m_frameBufferCache.isEmpty() && isComplete())
         m_reader = nullptr;
 }
 
 }
+
+#endif // USE(AVIF)

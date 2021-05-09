@@ -61,20 +61,22 @@
 #import "WKEditCommand.h"
 #import "WKErrorInternal.h"
 #import "WKFullScreenWindowController.h"
+#import "WKImageExtractionPreviewController.h"
 #import "WKImmediateActionController.h"
 #import "WKNSURLExtras.h"
 #import "WKPDFHUDView.h"
 #import "WKPrintingView.h"
 #import "WKSafeBrowsingWarning.h"
-#import "WKShareSheet.h"
+#import <WebKit/WKShareSheet.h>
 #import "WKTextInputWindowController.h"
 #import "WKViewLayoutStrategy.h"
 #import "WKWebViewInternal.h"
-#import "WKWebViewPrivate.h"
+#import <WebKit/WKWebViewPrivate.h>
+#import <WebKit/WebBackForwardList.h>
 #import "WebBackForwardList.h"
 #import "WebEditCommandProxy.h"
 #import "WebEventFactory.h"
-#import "WebInspectorProxy.h"
+#import "WebInspectorUIProxy.h"
 #import "WebPageProxy.h"
 #import "WebProcessPool.h"
 #import "WebProcessProxy.h"
@@ -94,6 +96,7 @@
 #import <WebCore/Editor.h>
 #import <WebCore/FontAttributeChanges.h>
 #import <WebCore/FontAttributes.h>
+#import <WebCore/ImageExtractionResult.h>
 #import <WebCore/KeypressCommand.h>
 #import <WebCore/LegacyNSPasteboardTypes.h>
 #import <WebCore/LoaderNSURLExtras.h>
@@ -104,6 +107,7 @@
 #import <WebCore/PromisedAttachmentInfo.h>
 #import <WebCore/TextAlternativeWithRange.h>
 #import <WebCore/TextUndoInsertionMarkupMac.h>
+#import <WebCore/TranslationContextMenuInfo.h>
 #import <WebCore/WebActionDisablingCALayerDelegate.h>
 #import <WebCore/WebCoreCALayerExtras.h>
 #import <WebCore/WebCoreFullScreenPlaceholderView.h>
@@ -135,12 +139,16 @@
 #import <wtf/cocoa/VectorCocoa.h>
 #import <wtf/text/StringConcatenate.h>
 
-#if ENABLE(IMAGE_EXTRACTION)
-#import <WebCore/ImageExtractionResult.h>
+#if ENABLE(MEDIA_SESSION_COORDINATOR)
+#include "MediaSessionCoordinatorProxyPrivate.h"
 #endif
 
 #if HAVE(TRANSLATION_UI_SERVICES)
 #import <TranslationUIServices/LTUITranslationViewController.h>
+
+@interface LTUITranslationViewController (Staging_77660675)
+@property (nonatomic, copy) void(^replacementHandler)(NSAttributedString *);
+@end
 
 SOFT_LINK_PRIVATE_FRAMEWORK_OPTIONAL(TranslationUIServices)
 SOFT_LINK_CLASS_OPTIONAL(TranslationUIServices, LTUITranslationViewController)
@@ -883,14 +891,12 @@ static const NSUInteger orderedListSegment = 2;
 
 @interface WKPromisedAttachmentContext : NSObject {
 @private
-    RetainPtr<NSURL> _blobURL;
     RetainPtr<NSString> _fileName;
     RetainPtr<NSString> _attachmentIdentifier;
 }
 
-- (instancetype)initWithIdentifier:(NSString *)identifier blobURL:(NSURL *)url fileName:(NSString *)fileName;
+- (instancetype)initWithIdentifier:(NSString *)identifier fileName:(NSString *)fileName;
 
-@property (nonatomic, readonly) NSURL *blobURL;
 @property (nonatomic, readonly) NSString *fileName;
 @property (nonatomic, readonly) NSString *attachmentIdentifier;
 
@@ -898,20 +904,14 @@ static const NSUInteger orderedListSegment = 2;
 
 @implementation WKPromisedAttachmentContext
 
-- (instancetype)initWithIdentifier:(NSString *)identifier blobURL:(NSURL *)blobURL fileName:(NSString *)fileName
+- (instancetype)initWithIdentifier:(NSString *)identifier fileName:(NSString *)fileName
 {
     if (!(self = [super init]))
         return nil;
 
-    _blobURL = blobURL;
     _fileName = fileName;
     _attachmentIdentifier = identifier;
     return self;
-}
-
-- (NSURL *)blobURL
-{
-    return _blobURL.get();
 }
 
 - (NSString *)fileName
@@ -2661,7 +2661,7 @@ bool WebViewImpl::tryHandlePluginComplexTextInputKeyDown(NSEvent *event)
 void WebViewImpl::pluginFocusOrWindowFocusChanged(bool pluginHasFocusAndWindowHasFocus, uint64_t pluginComplexTextInputIdentifier)
 {
     ASSERT(hasProcessPrivilege(ProcessPrivilege::CanCommunicateWithWindowServer));
-    BOOL inputSourceChanged = m_pluginComplexTextInputIdentifier;
+    bool inputSourceChanged = !!m_pluginComplexTextInputIdentifier;
 
     if (pluginHasFocusAndWindowHasFocus) {
         // Check if we're already allowing text input for this plug-in.
@@ -4232,12 +4232,6 @@ void WebViewImpl::writeToURLForFilePromiseProvider(NSFilePromiseProvider *provid
         return;
     }
 
-    URL blobURL { info.blobURL };
-    if (blobURL.isEmpty()) {
-        completionHandler(webKitUnknownError());
-        return;
-    }
-
     completionHandler(webKitUnknownError());
 }
 
@@ -4283,20 +4277,21 @@ void WebViewImpl::startDrag(const WebCore::DragItem& item, const ShareableBitmap
     ALLOW_DEPRECATED_DECLARATIONS_END
 
     if (auto& info = item.promisedAttachmentInfo) {
-        NSString *utiType = info.contentType;
-        NSString *fileName = info.fileName;
-        if (auto attachment = m_page->attachmentForIdentifier(info.attachmentIdentifier)) {
-            utiType = attachment->utiType();
-            fileName = attachment->fileName();
+        auto attachment = m_page->attachmentForIdentifier(info.attachmentIdentifier);
+        if (!attachment) {
+            m_page->dragCancelled();
+            return;
         }
 
+        NSString *utiType = attachment->utiType();
         if (!utiType.length) {
             m_page->dragCancelled();
             return;
         }
 
+        NSString *fileName = attachment->fileName();
         auto provider = adoptNS([[NSFilePromiseProvider alloc] initWithFileType:utiType delegate:(id <NSFilePromiseProviderDelegate>)m_view.getAutoreleased()]);
-        auto context = adoptNS([[WKPromisedAttachmentContext alloc] initWithIdentifier:info.attachmentIdentifier blobURL:info.blobURL fileName:fileName]);
+        auto context = adoptNS([[WKPromisedAttachmentContext alloc] initWithIdentifier:info.attachmentIdentifier fileName:fileName]);
         [provider setUserInfo:context.get()];
         auto draggingItem = adoptNS([[NSDraggingItem alloc] initWithPasteboardWriter:provider.get()]);
         [draggingItem setDraggingFrame:NSMakeRect(clientDragLocation.x(), clientDragLocation.y() - size.height(), size.width(), size.height()) contents:dragNSImage.get()];
@@ -5582,6 +5577,13 @@ bool WebViewImpl::effectiveUserInterfaceLevelIsElevated()
     return false;
 }
 
+#if ENABLE(MEDIA_SESSION_COORDINATOR)
+void WebViewImpl::setMediaSessionCoordinatorForTesting(MediaSessionCoordinatorProxyPrivate* coordinator)
+{
+    m_coordinatorForTesting = coordinator;
+}
+#endif
+
 #if HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
 
 bool WebViewImpl::canHandleContextMenuTranslation() const
@@ -5589,7 +5591,7 @@ bool WebViewImpl::canHandleContextMenuTranslation() const
     return TranslationUIServicesLibrary() && [getLTUITranslationViewControllerClass() isAvailable];
 }
 
-void WebViewImpl::handleContextMenuTranslation(const String& text, const IntRect& boundsInView, const IntPoint& menuLocation)
+void WebViewImpl::handleContextMenuTranslation(const TranslationContextMenuInfo& info)
 {
     if (!canHandleContextMenuTranslation()) {
         ASSERT_NOT_REACHED();
@@ -5598,8 +5600,15 @@ void WebViewImpl::handleContextMenuTranslation(const String& text, const IntRect
 
     auto view = m_view.get();
     auto translationViewController = adoptNS([allocLTUITranslationViewControllerInstance() init]);
-    auto textToTranslate = adoptNS([[NSAttributedString alloc] initWithString:text]);
-    [translationViewController setText:textToTranslate.get()];
+    [translationViewController setText:adoptNS([[NSAttributedString alloc] initWithString:info.text]).get()];
+    if (info.mode == WebCore::TranslationContextMenuMode::Editable && [translationViewController respondsToSelector:@selector(setReplacementHandler:)]) {
+        [translationViewController setIsSourceEditable:YES];
+        [translationViewController setReplacementHandler:[this, weakThis = makeWeakPtr(*this)](NSAttributedString *string) {
+            if (weakThis)
+                insertText(string.string);
+        }];
+    }
+
     if (NSEqualSizes([translationViewController preferredContentSize], NSZeroSize))
         [translationViewController setPreferredContentSize:NSMakeSize(400, 400)];
 
@@ -5611,17 +5620,59 @@ void WebViewImpl::handleContextMenuTranslation(const String& text, const IntRect
     [popover setContentSize:[translationViewController preferredContentSize]];
 
     NSRectEdge preferredEdge;
-    auto aim = menuLocation.x();
-    auto highlight = boundsInView.center().x();
+    auto aim = info.locationInRootView.x();
+    auto highlight = info.selectionBoundsInRootView.center().x();
     if (aim == highlight)
         preferredEdge = [view userInterfaceLayoutDirection] == NSUserInterfaceLayoutDirectionRightToLeft ? NSRectEdgeMinX : NSRectEdgeMaxX;
     else
         preferredEdge = aim > highlight ? NSRectEdgeMaxX : NSRectEdgeMinX;
 
-    [popover showRelativeToRect:boundsInView ofView:view.get() preferredEdge:preferredEdge];
+    [popover showRelativeToRect:info.selectionBoundsInRootView ofView:view.get() preferredEdge:preferredEdge];
 }
 
 #endif // HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
+
+bool WebViewImpl::acceptsPreviewPanelControl(QLPreviewPanel *)
+{
+#if ENABLE(IMAGE_EXTRACTION)
+    return !!m_page->imageExtractionPreviewController();
+#else
+    return false;
+#endif
+}
+
+void WebViewImpl::beginPreviewPanelControl(QLPreviewPanel *panel)
+{
+#if ENABLE(IMAGE_EXTRACTION)
+    auto controller = m_page->imageExtractionPreviewController();
+    if (!controller)
+        return;
+
+    panel.dataSource = controller;
+    panel.delegate = controller;
+#else
+    UNUSED_PARAM(panel);
+#endif
+}
+
+void WebViewImpl::endPreviewPanelControl(QLPreviewPanel *panel)
+{
+#if ENABLE(IMAGE_EXTRACTION)
+    auto controller = m_page->imageExtractionPreviewController();
+    if (!controller)
+        return;
+
+    if (panel.dataSource == controller)
+        panel.dataSource = nil;
+
+    if (panel.delegate == controller)
+        panel.delegate = nil;
+
+    m_page->resetImageExtractionPreview();
+#else
+    UNUSED_PARAM(panel);
+#endif
+}
 
 } // namespace WebKit
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2008-2021 Apple Inc. All rights reserved.
  * Copyright (C) 2008 Cameron Zwarich <cwzwarich@uwaterloo.ca>
  * Copyright (C) 2012 Igalia, S.L.
  *
@@ -45,7 +45,6 @@
 #include "JSCInlines.h"
 #include "JSImmutableButterfly.h"
 #include "JSTemplateObjectDescriptor.h"
-#include "LinkTimeConstant.h"
 #include "Options.h"
 #include "PrivateFieldPutKind.h"
 #include "StrongInlines.h"
@@ -56,6 +55,7 @@
 #include "UnlinkedMetadataTableInlines.h"
 #include "UnlinkedModuleProgramCodeBlock.h"
 #include "UnlinkedProgramCodeBlock.h"
+#include "VMTrapsInlines.h"
 #include <wtf/BitVector.h>
 #include <wtf/HashSet.h>
 #include <wtf/Optional.h>
@@ -283,7 +283,7 @@ ParserError BytecodeGenerator::generate()
     if (m_isAsync)
         performGeneratorification(*this, m_codeBlock.get(), m_writer, m_generatorFrameSymbolTable.get(), m_generatorFrameSymbolTableIndex);
 
-    RELEASE_ASSERT(static_cast<unsigned>(m_codeBlock->numCalleeLocals()) < static_cast<unsigned>(FirstConstantRegisterIndex));
+    RELEASE_ASSERT(m_codeBlock->numCalleeLocals() < static_cast<unsigned>(FirstConstantRegisterIndex));
     m_codeBlock->finalize(m_writer.finalize());
     if (m_expressionTooDeep)
         return ParserError(ParserError::OutOfMemory);
@@ -889,7 +889,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, EvalNode* evalNode, UnlinkedEvalCod
         else
             variables.append(Identifier::fromUid(m_vm, entry.key.get()));
     }
-    codeBlock->adoptVariables(variables);
+    codeBlock->adoptVariables(WTFMove(variables));
     codeBlock->adoptFunctionHoistingCandidates(WTFMove(hoistedFunctions));
     
     if (evalNode->needsNewTargetRegisterForThisScope())
@@ -2706,19 +2706,6 @@ RegisterID* BytecodeGenerator::emitGetPrototypeOf(RegisterID* dst, RegisterID* v
     return dst;
 }
 
-RegisterID* BytecodeGenerator::emitDirectSetPrototypeOf(RegisterID* base, RegisterID* prototype)
-{
-    RefPtr<RegisterID> setPrototypeDirect = moveLinkTimeConstant(nullptr, LinkTimeConstant::setPrototypeDirect);
-
-    CallArguments args(*this, nullptr, 1);
-    move(args.thisRegister(), base);
-    move(args.argumentRegister(0), prototype);
-
-    JSTextPosition position;
-    emitCall(newTemporary(), setPrototypeDirect.get(), NoExpectedFunction, args, position, position, position, DebuggableCall::No);
-    return base;
-}
-
 RegisterID* BytecodeGenerator::emitPutByVal(RegisterID* base, RegisterID* property, RegisterID* value)
 {
     OpPutByVal::emit(this, base, property, value, ecmaMode());
@@ -3084,9 +3071,11 @@ RegisterID* BytecodeGenerator::emitNewObject(RegisterID* dst)
 JSValue BytecodeGenerator::addBigIntConstant(const Identifier& identifier, uint8_t radix, bool sign)
 {
     return m_bigIntMap.ensure(BigIntMapEntry(identifier.impl(), radix, sign), [&] {
-        auto scope = DECLARE_CATCH_SCOPE(vm());
+        VM& vm = this->vm();
+        DeferTermination deferScope(vm);
+        auto scope = DECLARE_CATCH_SCOPE(vm);
         auto parseIntSign = sign ? JSBigInt::ParseIntSign::Signed : JSBigInt::ParseIntSign::Unsigned;
-        JSValue bigIntInMap = JSBigInt::parseInt(nullptr, vm(), identifier.string(), radix, JSBigInt::ErrorParseMode::ThrowExceptions, parseIntSign);
+        JSValue bigIntInMap = JSBigInt::parseInt(nullptr, vm, identifier.string(), radix, JSBigInt::ErrorParseMode::ThrowExceptions, parseIntSign);
         scope.assertNoException();
         addConstantValue(bigIntInMap);
 
@@ -4001,7 +3990,7 @@ void BytecodeGenerator::emitPushFunctionNameScope(const Identifier& property, Re
     addResult.iterator->value.setIsConst(); // The function name scope name acts like a const variable.
     unsigned numVars = m_codeBlock->numVars();
     pushLexicalScopeInternal(nameScopeEnvironment, TDZCheckOptimization::Optimize, NestedScopeType::IsNotNested, nullptr, TDZRequirement::NotUnderTDZ, ScopeType::FunctionNameScope, ScopeRegisterType::Var);
-    ASSERT_UNUSED(numVars, m_codeBlock->numVars() == static_cast<int>(numVars + 1)); // Should have only created one new "var" for the function name scope.
+    ASSERT_UNUSED(numVars, m_codeBlock->numVars() == numVars + 1); // Should have only created one new "var" for the function name scope.
     bool shouldTreatAsLexicalVariable = ecmaMode().isStrict();
     Variable functionVar = variableForLocalEntry(property, m_lexicalScopeStack.last().m_symbolTable->get(NoLockingNecessary, property.impl()), m_lexicalScopeStack.last().m_symbolTableConstantIndex, shouldTreatAsLexicalVariable);
     emitPutToScope(m_lexicalScopeStack.last().m_scope, functionVar, callee, ThrowIfNotFound, InitializationMode::NotInitialization);
@@ -4036,20 +4025,20 @@ void BytecodeGenerator::beginSwitch(RegisterID* scrutineeRegister, SwitchInfo::S
 {
     switch (type) {
     case SwitchInfo::SwitchImmediate: {
-        size_t tableIndex = m_codeBlock->numberOfSwitchJumpTables();
-        m_codeBlock->addSwitchJumpTable();
+        size_t tableIndex = m_codeBlock->numberOfUnlinkedSwitchJumpTables();
+        m_codeBlock->addUnlinkedSwitchJumpTable();
         OpSwitchImm::emit(this, tableIndex, BoundLabel(), scrutineeRegister);
         break;
     }
     case SwitchInfo::SwitchCharacter: {
-        size_t tableIndex = m_codeBlock->numberOfSwitchJumpTables();
-        m_codeBlock->addSwitchJumpTable();
+        size_t tableIndex = m_codeBlock->numberOfUnlinkedSwitchJumpTables();
+        m_codeBlock->addUnlinkedSwitchJumpTable();
         OpSwitchChar::emit(this, tableIndex, BoundLabel(), scrutineeRegister);
         break;
     }
     case SwitchInfo::SwitchString: {
-        size_t tableIndex = m_codeBlock->numberOfStringSwitchJumpTables();
-        m_codeBlock->addStringSwitchJumpTable();
+        size_t tableIndex = m_codeBlock->numberOfUnlinkedStringSwitchJumpTables();
+        m_codeBlock->addUnlinkedStringSwitchJumpTable();
         OpSwitchString::emit(this, tableIndex, BoundLabel(), scrutineeRegister);
         break;
     }
@@ -4091,9 +4080,9 @@ static void prepareJumpTableForSwitch(
     const Vector<Ref<Label>, 8>& labels, ExpressionNode** nodes, int32_t min, int32_t max,
     int32_t (*keyGetter)(ExpressionNode*, int32_t min, int32_t max))
 {
-    jumpTable.min = min;
-    jumpTable.branchOffsets = RefCountedArray<int32_t>(max - min + 1);
-    std::fill(jumpTable.branchOffsets.begin(), jumpTable.branchOffsets.end(), 0);
+    jumpTable.m_min = min;
+    jumpTable.m_branchOffsets = FixedVector<int32_t>(max - min + 1);
+    std::fill(jumpTable.m_branchOffsets.begin(), jumpTable.m_branchOffsets.end(), 0);
     for (uint32_t i = 0; i < clauseCount; ++i) {
         // We're emitting this after the clause labels should have been fixed, so 
         // the labels should not be "forward" references
@@ -4111,7 +4100,9 @@ static void prepareJumpTableForStringSwitch(UnlinkedStringJumpTable& jumpTable, 
         
         ASSERT(nodes[i]->isString());
         StringImpl* clause = static_cast<StringNode*>(nodes[i])->value().impl();
-        jumpTable.offsetTable.add(clause, UnlinkedStringJumpTable::OffsetLocation { labels[i]->bind(switchAddress) });
+        auto result = jumpTable.m_offsetTable.add(clause, UnlinkedStringJumpTable::OffsetLocation { labels[i]->bind(switchAddress), 0 });
+        if (result.isNewEntry)
+            result.iterator->value.m_indexInTable = jumpTable.m_offsetTable.size() - 1;
     }
 }
 
@@ -4127,7 +4118,7 @@ void BytecodeGenerator::endSwitch(uint32_t clauseCount, const Vector<Ref<Label>,
             return BoundLabel();
         });
 
-        UnlinkedSimpleJumpTable& jumpTable = m_codeBlock->switchJumpTable(bytecode.m_tableIndex);
+        UnlinkedSimpleJumpTable& jumpTable = m_codeBlock->unlinkedSwitchJumpTable(bytecode.m_tableIndex);
         prepareJumpTableForSwitch(
             jumpTable, switchInfo.bytecodeOffset, clauseCount, labels, nodes, min, max,
             switchInfo.switchType == SwitchInfo::SwitchImmediate
@@ -4152,7 +4143,7 @@ void BytecodeGenerator::endSwitch(uint32_t clauseCount, const Vector<Ref<Label>,
             return BoundLabel();
         });
 
-        UnlinkedStringJumpTable& jumpTable = m_codeBlock->stringSwitchJumpTable(ref->as<OpSwitchString>().m_tableIndex);
+        UnlinkedStringJumpTable& jumpTable = m_codeBlock->unlinkedStringSwitchJumpTable(ref->as<OpSwitchString>().m_tableIndex);
         prepareJumpTableForStringSwitch(jumpTable, switchInfo.bytecodeOffset, clauseCount, labels, nodes);
         break;
     }

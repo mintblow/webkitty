@@ -103,6 +103,7 @@ WebKitMediaSrc* PlaybackPipeline::webKitMediaSrc()
 
 MediaSourcePrivate::AddStatus PlaybackPipeline::addSourceBuffer(RefPtr<SourceBufferPrivateGStreamer> sourceBufferPrivate)
 {
+    ASSERT(m_webKitMediaSrc);
     WebKitMediaSrcPrivate* priv = m_webKitMediaSrc->priv;
 
     if (priv->allTracksConfigured) {
@@ -114,7 +115,10 @@ MediaSourcePrivate::AddStatus PlaybackPipeline::addSourceBuffer(RefPtr<SourceBuf
 
     Stream* stream = new Stream{ };
     stream->parent = m_webKitMediaSrc.get();
-    stream->appsrc = gst_element_factory_make("appsrc", nullptr);
+
+    // Ensure ownership is not transfered to the bin. The appsrc element is managed by its parent Stream.
+    stream->appsrc = GST_ELEMENT_CAST(gst_object_ref_sink(gst_element_factory_make("appsrc", nullptr)));
+
     stream->appsrcNeedDataFlag = false;
     stream->sourceBuffer = sourceBufferPrivate.get();
 
@@ -137,7 +141,7 @@ MediaSourcePrivate::AddStatus PlaybackPipeline::addSourceBuffer(RefPtr<SourceBuf
     priv->streams.append(stream);
     GST_OBJECT_UNLOCK(m_webKitMediaSrc.get());
 
-    gst_bin_add(GST_BIN(m_webKitMediaSrc.get()), stream->appsrc);
+    gst_bin_add(GST_BIN_CAST(m_webKitMediaSrc.get()), stream->appsrc);
     gst_element_sync_state_with_parent(stream->appsrc);
 
     return MediaSourcePrivate::AddStatus::Ok;
@@ -255,6 +259,7 @@ void PlaybackPipeline::reattachTrack(RefPtr<SourceBufferPrivateGStreamer> source
 
 void PlaybackPipeline::notifyDurationChanged()
 {
+    ASSERT(m_webKitMediaSrc);
     gst_element_post_message(GST_ELEMENT(m_webKitMediaSrc.get()), gst_message_new_duration_changed(GST_OBJECT(m_webKitMediaSrc.get())));
     // WebKitMediaSrc will ask MediaPlayerPrivateGStreamerMSE for the new duration later, when somebody asks for it.
 }

@@ -39,30 +39,6 @@
 
 namespace JSC {
 
-STATIC_ASSERT_IS_TRIVIALLY_DESTRUCTIBLE(TerminatedExecutionError);
-
-const ClassInfo TerminatedExecutionError::s_info = { "TerminatedExecutionError", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(TerminatedExecutionError) };
-
-JSValue TerminatedExecutionError::defaultValue(const JSObject*, JSGlobalObject* globalObject, PreferredPrimitiveType hint)
-{
-    if (hint == PreferString)
-        return jsNontrivialString(globalObject->vm(), String("JavaScript execution terminated."_s));
-    return JSValue(PNaN);
-}
-
-JSObject* createTerminatedExecutionException(VM* vm)
-{
-    return TerminatedExecutionError::create(*vm);
-}
-
-bool isTerminatedExecutionException(VM& vm, Exception* exception)
-{
-    if (!exception->value().isObject())
-        return false;
-
-    return exception->value().inherits<TerminatedExecutionError>(vm);
-}
-
 JSObject* createStackOverflowError(JSGlobalObject* globalObject)
 {
     auto* error = createRangeError(globalObject, "Maximum call stack size exceeded."_s);
@@ -262,6 +238,18 @@ static String invalidParameterInstanceofhasInstanceValueNotFunctionSourceAppende
     return invalidParameterInstanceofSourceAppender("[Symbol.hasInstance] is not a function, undefined, or null"_s, originalMessage, sourceText, runtimeType, occurrence);
 }
 
+static String invalidPrototypeSourceAppender(const String& originalMessage, const String& sourceText, RuntimeType, ErrorInstance::SourceTextWhereErrorOccurred occurrence)
+{
+    if (occurrence == ErrorInstance::FoundApproximateSource)
+        return defaultApproximateSourceError(originalMessage, sourceText);
+
+    auto extendsIndex = sourceText.reverseFind("extends");
+    if (extendsIndex == notFound || sourceText.find("extends") != extendsIndex)
+        return makeString(originalMessage, " (evaluating '", sourceText, "')");
+
+    return "The value of the superclass's prototype property is not an object or null."_s;
+}
+
 JSObject* createError(JSGlobalObject* globalObject, JSValue value, const String& message, ErrorInstance::SourceAppender appender)
 {
     VM& vm = globalObject->vm();
@@ -321,6 +309,11 @@ JSObject* createNotAnObjectError(JSGlobalObject* globalObject, JSValue value)
     return createError(globalObject, value, "is not an object"_s, defaultSourceAppender);
 }
 
+JSObject* createInvalidPrototypeError(JSGlobalObject* globalObject, JSValue value)
+{
+    return createError(globalObject, value, "is not an object or null"_s, invalidPrototypeSourceAppender);
+}
+
 JSObject* createErrorForInvalidGlobalAssignment(JSGlobalObject* globalObject, const String& propertyName)
 {
     return createReferenceError(globalObject, makeString("Strict mode forbids implicit creation of global property '", propertyName, '\''));
@@ -366,13 +359,6 @@ Exception* throwStackOverflowError(JSGlobalObject* globalObject, ThrowScope& sco
     VM& vm = globalObject->vm();
     ErrorHandlingScope errorScope(vm);
     return throwException(globalObject, scope, createStackOverflowError(globalObject));
-}
-
-Exception* throwTerminatedExecutionException(JSGlobalObject* globalObject, ThrowScope& scope)
-{
-    VM& vm = globalObject->vm();
-    ErrorHandlingScope errorScope(vm);
-    return throwException(globalObject, scope, createTerminatedExecutionException(&vm));
 }
 
 } // namespace JSC

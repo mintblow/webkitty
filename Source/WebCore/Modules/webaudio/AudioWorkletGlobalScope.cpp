@@ -150,10 +150,13 @@ RefPtr<AudioWorkletProcessor> AudioWorkletGlobalScope::createProcessor(const Str
     ASSERT(!!scope.exception() == !object);
     RETURN_IF_EXCEPTION(scope, nullptr);
 
-    auto& jsProcessor = *JSC::jsCast<JSAudioWorkletProcessor*>(object);
-    jsProcessor.wrapped().setProcessCallback(makeUnique<JSCallbackDataStrong>(&jsProcessor, globalObject));
+    auto* jsProcessor = JSC::jsDynamicCast<JSAudioWorkletProcessor*>(vm, object);
+    if (!jsProcessor)
+        return nullptr;
 
-    return &jsProcessor.wrapped();
+    jsProcessor->wrapped().setProcessCallback(makeUnique<JSCallbackDataStrong>(jsProcessor, globalObject));
+
+    return &jsProcessor->wrapped();
 }
 
 void AudioWorkletGlobalScope::prepareForDestruction()
@@ -187,8 +190,13 @@ void AudioWorkletGlobalScope::handlePostRenderTasks(size_t currentFrame)
 {
     m_currentFrame = currentFrame;
 
-    // This takes care of processing the MicroTask queue after rendering.
-    m_lockDuringRendering = WTF::nullopt;
+    {
+        // Heap allocations are forbidden on the audio thread for performance reasons so we need to
+        // explicitly allow the following allocation(s).
+        DisableMallocRestrictionsForCurrentThreadScope disableMallocRestrictions;
+        // This takes care of processing the MicroTask queue after rendering.
+        m_lockDuringRendering = WTF::nullopt;
+    }
 }
 
 } // namespace WebCore

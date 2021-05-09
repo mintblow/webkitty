@@ -39,6 +39,7 @@
 #include "Event.h"
 #include "EventHandler.h"
 #include "EventNames.h"
+#include "FocusOptions.h"
 #include "Frame.h"
 #include "FrameSelection.h"
 #include "FrameTree.h"
@@ -56,6 +57,7 @@
 #include "Range.h"
 #include "RenderWidget.h"
 #include "ScrollAnimator.h"
+#include "SelectionRestorationMode.h"
 #include "Settings.h"
 #include "ShadowRoot.h"
 #include "SpatialNavigation.h"
@@ -533,8 +535,7 @@ bool FocusController::advanceFocusInDocumentOrder(FocusDirection direction, Keyb
         }
     }
 
-    element->setHasFocusVisible(true);
-    element->focus(SelectionRestorationMode::SelectAll, direction);
+    element->focus({ SelectionRestorationMode::SelectAll, direction, { }, { }, FocusVisibility::Visible });
     return true;
 }
 
@@ -826,7 +827,7 @@ static bool shouldClearSelectionWhenChangingFocusedElement(const Page& page, Ref
     return true;
 }
 
-bool FocusController::setFocusedElement(Element* element, Frame& newFocusedFrame, FocusDirection direction)
+bool FocusController::setFocusedElement(Element* element, Frame& newFocusedFrame, const FocusOptions& options)
 {
     Ref<Frame> protectedNewFocusedFrame = newFocusedFrame;
     RefPtr<Frame> oldFocusedFrame = focusedFrame();
@@ -873,7 +874,7 @@ bool FocusController::setFocusedElement(Element* element, Frame& newFocusedFrame
 
     Ref<Element> protect(*element);
 
-    bool successfullyFocused = newDocument->setFocusedElement(element, direction);
+    bool successfullyFocused = newDocument->setFocusedElement(element, options);
     if (!successfullyFocused)
         return false;
 
@@ -1108,7 +1109,7 @@ bool FocusController::advanceFocusDirectionallyInContainer(Node* container, cons
     Element* element = downcast<Element>(focusCandidate.focusableNode);
     ASSERT(element);
 
-    element->focus(SelectionRestorationMode::SelectAll, direction);
+    element->focus({ SelectionRestorationMode::SelectAll, direction });
     return true;
 }
 

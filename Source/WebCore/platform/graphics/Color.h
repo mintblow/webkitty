@@ -106,9 +106,8 @@ public:
     uint8_t alphaByte() const { return isOutOfLine() ? convertFloatAlphaTo<uint8_t>(asOutOfLine().alpha()) : asInline().alpha; }
     float alphaAsFloat() const { return isOutOfLine() ? asOutOfLine().alpha() : convertByteAlphaTo<float>(asInline().alpha); }
 
-    WEBCORE_EXPORT float luminance() const;
-    WEBCORE_EXPORT float lightness() const; // FIXME: Replace remaining uses with luminance.
-    WEBCORE_EXPORT static float contrastRatio(const Color&, const Color&);
+    WEBCORE_EXPORT double luminance() const;
+    WEBCORE_EXPORT double lightness() const; // FIXME: Replace remaining uses with luminance.
 
     template<typename Functor> decltype(auto) callOnUnderlyingType(Functor&&) const;
 
@@ -121,7 +120,10 @@ public:
     // wrapper around toColorTypeLossy<>().
     template<typename T> SRGBA<T> toSRGBALossy() const { return toColorTypeLossy<SRGBA<T>>(); }
 
-    WEBCORE_EXPORT std::pair<ColorSpace, ColorComponents<float>> colorSpaceAndComponents() const;
+    ColorComponents<float, 4> toColorComponentsInColorSpace(ColorSpace) const;
+    ColorComponents<float, 4> toColorComponentsInColorSpace(DestinationColorSpace) const;
+
+    WEBCORE_EXPORT std::pair<ColorSpace, ColorComponents<float, 4>> colorSpaceAndComponents() const;
 
     WEBCORE_EXPORT Color lightened() const;
     WEBCORE_EXPORT Color darkened() const;
@@ -187,21 +189,21 @@ public:
 private:
     class OutOfLineComponents : public ThreadSafeRefCounted<OutOfLineComponents> {
     public:
-        static Ref<OutOfLineComponents> create(ColorComponents<float> components)
+        static Ref<OutOfLineComponents> create(ColorComponents<float, 4> components)
         {
             return adoptRef(*new OutOfLineComponents(components));
         }
 
         float alpha() const { return m_components[3]; }
-        ColorComponents<float> components() const { return m_components; }
+        ColorComponents<float, 4> components() const { return m_components; }
 
     private:
-        OutOfLineComponents(ColorComponents<float> components)
+        OutOfLineComponents(ColorComponents<float, 4> components)
             : m_components(components)
         {
         }
 
-        ColorComponents<float> m_components;
+        ColorComponents<float, 4> m_components;
     };
     Color(Ref<OutOfLineComponents>&&, ColorSpace, OptionSet<Flags> = { });
 

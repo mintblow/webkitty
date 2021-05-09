@@ -24,7 +24,7 @@
  */
 
 [
-    EnabledAtRuntime=WebXR,
+    EnabledBySetting=WebXR,
     Conditional=WEBXR,
     SecureContext,
     Exposed=Window,
@@ -33,7 +33,7 @@
     SkipVTableValidation,
     InterfaceName=XRReferenceSpace
 ] interface WebXRReferenceSpace : WebXRSpace {
-    [NewObject, MayThrowException] WebXRReferenceSpace getOffsetReferenceSpace(WebXRRigidTransform originOffset);
+    [NewObject] WebXRReferenceSpace getOffsetReferenceSpace(WebXRRigidTransform originOffset);
 
     attribute EventHandler onreset;
 };

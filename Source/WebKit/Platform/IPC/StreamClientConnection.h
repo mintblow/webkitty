@@ -67,10 +67,16 @@ private:
     };
     static constexpr size_t minimumMessageSize = StreamConnectionEncoder::minimumMessageSize;
     static constexpr size_t messageAlignment = StreamConnectionEncoder::messageAlignment;
+    template<typename T>
+    bool trySendStream(T& message, Span&);
+    template<typename T>
+    Optional<SendSyncResult> trySendSyncStream(T& message, typename T::Reply&, Timeout, Span&);
     bool trySendDestinationIDIfNeeded(uint64_t destinationID, Timeout);
     void sendProcessOutOfStreamMessage(Span&&);
 
     Optional<Span> tryAcquire(Timeout);
+    Optional<Span> tryAcquireAll(Timeout);
+
     enum class WakeUpServer : bool {
         No,
         Yes
@@ -96,9 +102,7 @@ private:
 
     size_t m_clientOffset { 0 };
     StreamConnectionBuffer m_buffer;
-#if PLATFORM(COCOA)
     Optional<Semaphore> m_wakeUpSemaphore;
-#endif
 };
 
 template<typename T, typename U>
@@ -110,19 +114,27 @@ bool StreamClientConnection::send(T&& message, ObjectIdentifier<U> destinationID
     auto span = tryAcquire(timeout);
     if (!span)
         return false;
-    {
-        StreamConnectionEncoder messageEncoder { T::name(), span->data, span->size };
-        if (messageEncoder << message.arguments()) {
-            auto wakeupResult = release(messageEncoder.size());
-            if (wakeupResult == StreamClientConnection::WakeUpServer::Yes)
-                wakeUpServer();
+    if constexpr(T::isStreamEncodable) {
+        if (trySendStream(message, *span))
             return true;
-        }
     }
     sendProcessOutOfStreamMessage(WTFMove(*span));
     if (!m_connection.send(WTFMove(message), destinationID, IPC::SendOption::DispatchMessageEvenWhenWaitingForSyncReply))
         return false;
     return true;
+}
+
+template<typename T>
+bool StreamClientConnection::trySendStream(T& message, Span& span)
+{
+    StreamConnectionEncoder messageEncoder { T::name(), span.data, span.size };
+    if (messageEncoder << message.arguments()) {
+        auto wakeupResult = release(messageEncoder.size());
+        if (wakeupResult == StreamClientConnection::WakeUpServer::Yes)
+            wakeUpServer();
+        return true;
+    }
+    return false;
 }
 
 template<typename T, typename U>
@@ -134,10 +146,55 @@ StreamClientConnection::SendSyncResult StreamClientConnection::sendSync(T&& mess
     auto span = tryAcquire(timeout);
     if (!span)
         return { };
-    // FIXME: implement send through stream.
-    // FIXME: implement receive through stream.
+    if constexpr(T::isStreamEncodable) {
+        auto maybeSendResult = trySendSyncStream(message, reply, timeout, *span);
+        if (maybeSendResult)
+            return WTFMove(*maybeSendResult);
+    }
     sendProcessOutOfStreamMessage(WTFMove(*span));
     return m_connection.sendSync(WTFMove(message), WTFMove(reply), destinationID.toUInt64(), timeout);
+}
+
+template<typename T>
+Optional<StreamClientConnection::SendSyncResult> StreamClientConnection::trySendSyncStream(T& message, typename T::Reply& reply, Timeout timeout, Span& span)
+{
+    // In this function, SendSyncResult { } means error happened and caller should stop processing.
+    // WTF::nullopt means we couldn't send through the stream, so try sending out of stream.
+    auto syncRequestID = m_connection.makeSyncRequestID();
+    if (!m_connection.pushPendingSyncRequestID(syncRequestID))
+        return SendSyncResult { };
+
+    auto result = [&]() -> Optional<SendSyncResult> {
+        StreamConnectionEncoder messageEncoder { T::name(), span.data, span.size };
+        if (!(messageEncoder << syncRequestID << message.arguments()))
+            return WTF::nullopt;
+        auto wakeupResult = release(messageEncoder.size());
+
+        if (wakeupResult == StreamClientConnection::WakeUpServer::Yes)
+            wakeUpServer();
+        if constexpr(T::isReplyStreamEncodable) {
+            auto replySpan = tryAcquireAll(timeout);
+            if (!replySpan)
+                return SendSyncResult { };
+            auto decoder = std::unique_ptr<Decoder> { new Decoder(replySpan->data, replySpan->size, m_currentDestinationID) };
+            if (decoder->messageName() != MessageName::ProcessOutOfStreamMessage) {
+                ASSERT(decoder->messageName() == MessageName::SyncMessageReply);
+                return decoder;
+            }
+        } else
+            m_clientOffset = 0;
+        return m_connection.waitForSyncReply(syncRequestID, T::name(), timeout, { });
+    }();
+    m_connection.popPendingSyncRequestID(syncRequestID);
+    if (result && *result) {
+        auto& decoder = **result;
+        Optional<typename T::ReplyArguments> replyArguments;
+        decoder >> replyArguments;
+        if (!replyArguments)
+            return SendSyncResult { };
+        moveTuple(WTFMove(*replyArguments), reply);
+    }
+    return result;
 }
 
 inline bool StreamClientConnection::trySendDestinationIDIfNeeded(uint64_t destinationID, Timeout timeout)
@@ -181,17 +238,12 @@ inline Optional<StreamClientConnection::Span> StreamClientConnection::tryAcquire
         }
         if (timeout.didTimeOut())
             break;
-#if PLATFORM(COCOA)
         ClientLimit oldClientLimit = sharedClientLimit().compareExchangeStrong(clientLimit, ClientLimit::clientIsWaitingTag, std::memory_order_acq_rel, std::memory_order_acq_rel);
         if (clientLimit == oldClientLimit) {
             m_buffer.clientWaitSemaphore().waitFor(timeout);
             clientLimit = sharedClientLimit().load(std::memory_order_acquire);
         } else
             clientLimit = oldClientLimit;
-#else
-        Thread::yield();
-        clientLimit = sharedClientLimit().load(std::memory_order_acquire);
-#endif
         // The alignedSpan uses the minimumMessageSize to calculate the next beginning position in the buffer,
         // and not the size. The size might be more or less what is needed, depending on where the reader is.
         // If there is no capacity for minimum message size, wait until more is available.
@@ -199,6 +251,34 @@ inline Optional<StreamClientConnection::Span> StreamClientConnection::tryAcquire
         // 0 < result.size < minimumMessageSize.
     }
     return WTF::nullopt;
+}
+
+inline Optional<StreamClientConnection::Span> StreamClientConnection::tryAcquireAll(Timeout timeout)
+{
+    // This would mean we try to send messages after a timeout. It is a programming error.
+    // Since the value is trusted, we only assert.
+    ASSERT(sharedClientLimit().load(std::memory_order_acquire) != ClientLimit::clientIsWaitingTag);
+
+    // The server acknowledges that sync message has been processed by setting clientOffset == clientLimit == 0.
+    // Wait for this condition, or then the condition where server says that it started to sleep after setting that condition.
+    // The wait sequence involves two variables, so form a transaction by setting clientLimit == clientIsWaitingTag.
+    // The transaction is cancelled if the server has already set clientOffset == clientLimit == 0, otherwise it commits.
+    // If the transaction commits, server is guaranteed to signal.
+
+    for (;;) {
+        ClientLimit clientLimit = sharedClientLimit().exchange(ClientLimit::clientIsWaitingTag, std::memory_order_acq_rel);
+        ClientOffset clientOffset = sharedClientOffset().load(std::memory_order_acquire);
+        if (!clientLimit && (clientOffset == ClientOffset::serverIsSleepingTag || !clientOffset))
+            break;
+
+        m_buffer.clientWaitSemaphore().waitFor(timeout);
+        if (timeout.didTimeOut())
+            return WTF::nullopt;
+    }
+    // In case the transaction was cancelled, undo the transaction marker.
+    sharedClientLimit().store(static_cast<ClientLimit>(0), std::memory_order_release);
+    m_clientOffset = 0;
+    return alignedSpan(m_clientOffset, 0);
 }
 
 inline StreamClientConnection::WakeUpServer StreamClientConnection::release(size_t size)

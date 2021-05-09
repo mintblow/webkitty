@@ -45,13 +45,15 @@ namespace WebCore {
 using namespace PAL;
 using namespace JSC;
 
-Ref<AudioSampleDataSource> AudioSampleDataSource::create(size_t maximumSampleCount, LoggerHelper& loggerHelper)
+Ref<AudioSampleDataSource> AudioSampleDataSource::create(size_t maximumSampleCount, LoggerHelper& loggerHelper, size_t waitToStartForPushCount)
 {
-    return adoptRef(*new AudioSampleDataSource(maximumSampleCount, loggerHelper));
+    return adoptRef(*new AudioSampleDataSource(maximumSampleCount, loggerHelper, waitToStartForPushCount));
 }
 
-AudioSampleDataSource::AudioSampleDataSource(size_t maximumSampleCount, LoggerHelper& loggerHelper)
-    : m_inputSampleOffset(MediaTime::invalidTime())
+AudioSampleDataSource::AudioSampleDataSource(size_t maximumSampleCount, LoggerHelper& loggerHelper, size_t waitToStartForPushCount)
+    : m_waitToStartForPushCount(waitToStartForPushCount)
+    , m_inputSampleOffset(MediaTime::invalidTime())
+    , m_ringBuffer(makeUniqueRef<CARingBuffer>())
     , m_maximumSampleCount(maximumSampleCount)
 #if !RELEASE_LOG_DISABLED
     , m_logger(loggerHelper.logger())
@@ -65,13 +67,8 @@ AudioSampleDataSource::AudioSampleDataSource(size_t maximumSampleCount, LoggerHe
 
 AudioSampleDataSource::~AudioSampleDataSource()
 {
-    m_inputDescription = nullptr;
-    m_outputDescription = nullptr;
-    m_ringBuffer = nullptr;
-    if (m_converter) {
+    if (m_converter)
         AudioConverterDispose(m_converter);
-        m_converter = nullptr;
-    }
 }
 
 OSStatus AudioSampleDataSource::setupConverter()
@@ -101,7 +98,7 @@ OSStatus AudioSampleDataSource::setInputFormat(const CAAudioStreamDescription& f
 {
     ASSERT(format.sampleRate() >= 0);
 
-    m_inputDescription = makeUnique<CAAudioStreamDescription>(format);
+    m_inputDescription = CAAudioStreamDescription { format };
     if (m_outputDescription)
         return setupConverter();
 
@@ -113,12 +110,15 @@ OSStatus AudioSampleDataSource::setOutputFormat(const CAAudioStreamDescription& 
     ASSERT(m_inputDescription);
     ASSERT(format.sampleRate() >= 0);
 
-    m_outputDescription = makeUnique<CAAudioStreamDescription>(format);
-    if (!m_ringBuffer)
-        m_ringBuffer = makeUnique<CARingBuffer>();
+    m_outputDescription = CAAudioStreamDescription { format };
 
-    m_ringBuffer->allocate(format, static_cast<size_t>(m_maximumSampleCount));
-    m_scratchBuffer = AudioSampleBufferList::create(m_outputDescription->streamDescription(), m_maximumSampleCount);
+    {
+        // Heap allocations are forbidden on the audio thread for performance reasons so we need to
+        // explicitly allow the following allocation(s).
+        DisableMallocRestrictionsForCurrentThreadScope disableMallocRestrictions;
+        m_ringBuffer->allocate(format, static_cast<size_t>(m_maximumSampleCount));
+        m_scratchBuffer = AudioSampleBufferList::create(m_outputDescription->streamDescription(), m_maximumSampleCount);
+    }
 
     return setupConverter();
 }
@@ -160,12 +160,8 @@ void AudioSampleDataSource::pushSamplesInternal(const AudioBufferList& bufferLis
         sampleTime = m_expectedNextPushedSampleTime;
     m_expectedNextPushedSampleTime = sampleTime + MediaTime(sampleCount, sampleTime.timeScale());
 
-    if (m_inputSampleOffset == MediaTime::invalidTime()) {
+    if (m_inputSampleOffset == MediaTime::invalidTime())
         m_inputSampleOffset = MediaTime(1 - sampleTime.timeValue(), sampleTime.timeScale());
-        RunLoop::main().dispatch([logIdentifier = LOGIDENTIFIER, inputSampleOffset = m_inputSampleOffset.timeValue(), maximumSampleCount = m_maximumSampleCount, this, protectedThis = makeRefPtr(*this)] {
-            ALWAYS_LOG(logIdentifier, "input sample offset is ", inputSampleOffset, ", maximumSampleCount is ", maximumSampleCount);
-        });
-    }
     sampleTime += m_inputSampleOffset;
 
 #if !LOG_DISABLED
@@ -181,8 +177,7 @@ void AudioSampleDataSource::pushSamplesInternal(const AudioBufferList& bufferLis
 void AudioSampleDataSource::pushSamples(const AudioStreamBasicDescription& sampleDescription, CMSampleBufferRef sampleBuffer)
 {
     ASSERT_UNUSED(sampleDescription, *m_inputDescription == sampleDescription);
-    ASSERT(m_ringBuffer);
-    
+
     WebAudioBufferList list(*m_inputDescription, sampleBuffer);
     pushSamplesInternal(list, PAL::toMediaTime(PAL::CMSampleBufferGetPresentationTimeStamp(sampleBuffer)), PAL::CMSampleBufferGetNumSamples(sampleBuffer));
 }
@@ -214,12 +209,14 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
 
     ASSERT(buffer.mNumberBuffers == m_ringBuffer->channelCount());
     if (buffer.mNumberBuffers != m_ringBuffer->channelCount()) {
-        AudioSampleBufferList::zeroABL(buffer, byteCount);
+        if (mode != AudioSampleDataSource::Mix)
+            AudioSampleBufferList::zeroABL(buffer, byteCount);
         return false;
     }
 
-    if (!m_ringBuffer || m_muted || m_inputSampleOffset == MediaTime::invalidTime()) {
-        AudioSampleBufferList::zeroABL(buffer, byteCount);
+    if (m_muted || m_inputSampleOffset == MediaTime::invalidTime()) {
+        if (mode != AudioSampleDataSource::Mix)
+            AudioSampleBufferList::zeroABL(buffer, byteCount);
         return false;
     }
 
@@ -229,28 +226,35 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
 
     if (m_shouldComputeOutputSampleOffset) {
         uint64_t buffered = endFrame - startFrame;
-        if (buffered < sampleCount * 2 || (m_endFrameWhenNotEnoughData && m_endFrameWhenNotEnoughData == endFrame)) {
-            AudioSampleBufferList::zeroABL(buffer, byteCount);
-            return false;
+        if (m_isFirstPull) {
+            if (buffered >= m_waitToStartForPushCount * m_lastPushedSampleCount) {
+                m_outputSampleOffset = startFrame - timeStamp;
+                m_shouldComputeOutputSampleOffset = false;
+                m_endFrameWhenNotEnoughData = 0;
+            } else {
+                // We wait for one chunk of value before starting to play.
+                if (mode != AudioSampleDataSource::Mix)
+                    AudioSampleBufferList::zeroABL(buffer, byteCount);
+                return false;
+            }
+        } else {
+            if (buffered < sampleCount * 2 || (m_endFrameWhenNotEnoughData && m_endFrameWhenNotEnoughData == endFrame)) {
+                if (mode != AudioSampleDataSource::Mix)
+                    AudioSampleBufferList::zeroABL(buffer, byteCount);
+                return false;
+            }
+
+            m_shouldComputeOutputSampleOffset = false;
+            m_endFrameWhenNotEnoughData = 0;
+
+            m_outputSampleOffset = (endFrame - sampleCount) - timeStamp;
+            m_outputSampleOffset -= computeOffsetDelay(m_outputDescription->sampleRate(), m_lastPushedSampleCount);
         }
-
-        m_shouldComputeOutputSampleOffset = false;
-        m_endFrameWhenNotEnoughData = 0;
-
-        m_outputSampleOffset = (endFrame - sampleCount) - timeStamp;
-        m_outputSampleOffset -= computeOffsetDelay(m_outputDescription->sampleRate(), m_lastPushedSampleCount);
-        RunLoop::main().dispatch([logIdentifier = LOGIDENTIFIER, outputSampleOffset = m_outputSampleOffset, this, protectedThis = makeRefPtr(*this)] {
-            ALWAYS_LOG(logIdentifier, "setting new offset to ", outputSampleOffset);
-        });
     }
 
     timeStamp += m_outputSampleOffset;
 
     if (timeStamp < startFrame || timeStamp + sampleCount > endFrame) {
-        RunLoop::main().dispatch([logIdentifier = LOGIDENTIFIER, timeStamp, startFrame, endFrame, sampleCount, outputSampleOffset = m_outputSampleOffset, this, protectedThis = makeRefPtr(*this)] {
-            ERROR_LOG(logIdentifier, "not enough data, sample ", timeStamp, " with offset ", outputSampleOffset, ", trying to get ", sampleCount, " samples, but not completely in range [", startFrame, " .. ", endFrame, "]");
-        });
-
         if (timeStamp < startFrame || timeStamp >= endFrame) {
             // We are out of the window, let's restart the offset computation.
             m_shouldComputeOutputSampleOffset = true;
@@ -260,13 +264,13 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
         } else {
             // We are too close from endFrame, let's wait for more data to be pushed.
             m_outputSampleOffset -= sampleCount;
-            RunLoop::main().dispatch([logIdentifier = LOGIDENTIFIER, outputSampleOffset = m_outputSampleOffset, this, protectedThis = makeRefPtr(*this)] {
-                ALWAYS_LOG(logIdentifier, "updating offset to ", outputSampleOffset);
-            });
         }
-        AudioSampleBufferList::zeroABL(buffer, byteCount);
+        if (mode != AudioSampleDataSource::Mix)
+            AudioSampleBufferList::zeroABL(buffer, byteCount);
         return false;
     }
+
+    m_isFirstPull = false;
 
     if (mode == Copy) {
         m_ringBuffer->fetch(&buffer, sampleCount, timeStamp, CARingBuffer::Copy);
@@ -280,7 +284,7 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
         return true;
     }
 
-    if (m_scratchBuffer->copyFrom(*m_ringBuffer.get(), sampleCount, timeStamp, CARingBuffer::Copy))
+    if (m_scratchBuffer->copyFrom(m_ringBuffer.get(), sampleCount, timeStamp, CARingBuffer::Copy))
         return false;
 
     m_scratchBuffer->applyGain(m_volume);
@@ -291,11 +295,8 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
     return true;
 }
 
-bool AudioSampleDataSource::pullAvalaibleSamplesAsChunks(AudioBufferList& buffer, size_t sampleCountPerChunk, uint64_t timeStamp, Function<void()>&& consumeFilledBuffer)
+bool AudioSampleDataSource::pullAvailableSamplesAsChunks(AudioBufferList& buffer, size_t sampleCountPerChunk, uint64_t timeStamp, Function<void()>&& consumeFilledBuffer)
 {
-    if (!m_ringBuffer)
-        return false;
-
     ASSERT(buffer.mNumberBuffers == m_ringBuffer->channelCount());
     if (buffer.mNumberBuffers != m_ringBuffer->channelCount())
         return false;
@@ -334,22 +335,11 @@ bool AudioSampleDataSource::pullAvalaibleSamplesAsChunks(AudioBufferList& buffer
 
 bool AudioSampleDataSource::pullSamples(AudioBufferList& buffer, size_t sampleCount, uint64_t timeStamp, double hostTime, PullMode mode)
 {
-    if (!m_ringBuffer) {
-        size_t byteCount = sampleCount * m_outputDescription->bytesPerFrame();
-        AudioSampleBufferList::zeroABL(buffer, byteCount);
-        return false;
-    }
-
     return pullSamplesInternal(buffer, sampleCount, timeStamp, hostTime, mode);
 }
 
 bool AudioSampleDataSource::pullSamples(AudioSampleBufferList& buffer, size_t sampleCount, uint64_t timeStamp, double hostTime, PullMode mode)
 {
-    if (!m_ringBuffer) {
-        buffer.zero();
-        return false;
-    }
-
     if (!pullSamplesInternal(buffer.bufferList(), sampleCount, timeStamp, hostTime, mode))
         return false;
 

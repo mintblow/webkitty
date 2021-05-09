@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -72,6 +72,7 @@
 #import <wtf/cocoa/RuntimeApplicationChecksCocoa.h>
 #import <wtf/spi/darwin/SandboxSPI.h>
 #import <wtf/spi/darwin/dyldSPI.h>
+#import <wtf/text/TextStream.h>
 
 #if ENABLE(REMOTE_INSPECTOR)
 #import <JavaScriptCore/RemoteInspector.h>
@@ -233,36 +234,6 @@ static const Vector<ASCIILiteral>& nonBrowserServices()
     });
     return services;
 }
-
-static const Vector<ASCIILiteral>& agxCompilerClasses()
-{
-    ASSERT(isMainRunLoop());
-    static const auto iokitClasses = makeNeverDestroyed(Vector<ASCIILiteral> {
-        "AGXCommandQueue"_s,
-        "AGXDevice"_s,
-        "AGXSharedUserClient"_s,
-        "IOAccelContext"_s,
-        "IOAccelContext2"_s,
-        "IOAccelDevice"_s,
-        "IOAccelDevice2"_s,
-        "IOAccelSharedUserClient"_s,
-        "IOAccelSharedUserClient2"_s,
-        "IOAccelSubmitter2"_s,
-    });
-    return iokitClasses;
-}
-#endif
-
-#if PLATFORM(IOS)
-static const Vector<ASCIILiteral>& agxCompilerServices()
-{
-    ASSERT(isMainRunLoop());
-    static const auto services = makeNeverDestroyed(Vector<ASCIILiteral> {
-        "com.apple.AGXCompilerService"_s,
-        "com.apple.AGXCompilerService-S2A8"_s
-    });
-    return services;
-}
 #endif
 
 static const Vector<ASCIILiteral>& diagnosticServices()
@@ -320,7 +291,6 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
     SandboxExtension::createHandleWithoutResolvingPath(parameters.uiProcessBundleResourcePath, SandboxExtension::Type::ReadOnly, parameters.uiProcessBundleResourcePathExtensionHandle);
 
     parameters.uiProcessBundleIdentifier = applicationBundleIdentifier();
-    parameters.uiProcessSDKVersion = applicationSDKVersion();
 
     parameters.latencyQOS = webProcessLatencyQOS();
     parameters.throughputQOS = webProcessThroughputQOS();
@@ -403,7 +373,7 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
     
 #if PLATFORM(IOS)
     if (WebCore::deviceHasAGXCompilerService())
-        parameters.compilerServiceExtensionHandles = SandboxExtension::createHandlesForMachLookup(agxCompilerServices(), WTF::nullopt);
+        parameters.compilerServiceExtensionHandles = SandboxExtension::createHandlesForMachLookup(WebCore::agxCompilerServices(), WTF::nullopt);
 #endif
 
 #if PLATFORM(IOS_FAMILY)
@@ -411,7 +381,7 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
         parameters.dynamicMachExtensionHandles = SandboxExtension::createHandlesForMachLookup(nonBrowserServices(), WTF::nullopt);
 
     if (WebCore::deviceHasAGXCompilerService())
-        parameters.dynamicIOKitExtensionHandles = SandboxExtension::createHandlesForIOKitClassExtensions(agxCompilerClasses(), WTF::nullopt);
+        parameters.dynamicIOKitExtensionHandles = SandboxExtension::createHandlesForIOKitClassExtensions(WebCore::agxCompilerClasses(), WTF::nullopt);
 #endif
 
     if (isInternalInstall())
@@ -432,6 +402,7 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
     parameters.cssValueToSystemColorMap = RenderThemeIOS::cssValueToSystemColorMap();
     parameters.focusRingColor = RenderThemeIOS::systemFocusRingColor();
     parameters.localizedDeviceModel = localizedDeviceModel();
+    parameters.contentSizeCategory = RenderThemeCocoa::singleton().contentSizeCategory();
 #endif
 
 #if ENABLE(CFPREFS_DIRECT_MODE) && PLATFORM(IOS_FAMILY)
@@ -482,7 +453,6 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
 void WebProcessPool::platformInitializeNetworkProcess(NetworkProcessCreationParameters& parameters)
 {
     parameters.uiProcessBundleIdentifier = applicationBundleIdentifier();
-    parameters.uiProcessSDKVersion = applicationSDKVersion();
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
@@ -606,10 +576,8 @@ void WebProcessPool::colorPreferencesDidChangeCallback(CFNotificationCenterRef c
 void WebProcessPool::remoteWebInspectorEnabledCallback(CFNotificationCenterRef, void *observer, CFStringRef name, const void *, CFDictionaryRef userInfo)
 {
     auto* pool = reinterpret_cast<WebProcessPool*>(observer);
-    for (size_t i = 0; i < pool->m_processes.size(); ++i) {
-        auto process = pool->m_processes[i];
+    for (auto& process : pool->m_processes)
         process->enableRemoteInspectorIfNeeded();
-    }
 }
 #endif
 
@@ -699,11 +667,11 @@ void WebProcessPool::registerNotificationObservers()
     m_accessibilityEnabledObserver = [[NSNotificationCenter defaultCenter] addObserverForName:(__bridge id)kAXSApplicationAccessibilityEnabledNotification object:nil queue:[NSOperationQueue currentQueue] usingBlock:^(NSNotification *) {
         if (!_AXSApplicationAccessibilityEnabled())
             return;
-        for (size_t i = 0; i < m_processes.size(); ++i) {
+        for (auto& process : m_processes) {
 #if ENABLE(CFPREFS_DIRECT_MODE)
-            m_processes[i]->unblockPreferenceServiceIfNeeded();
+            process->unblockPreferenceServiceIfNeeded();
 #endif
-            m_processes[i]->unblockAccessibilityServerIfNeeded();
+            process->unblockAccessibilityServerIfNeeded();
         }
     }];
 #if ENABLE(CFPREFS_DIRECT_MODE)
@@ -781,16 +749,16 @@ Optional<unsigned> WebProcessPool::nominalFramesPerSecondForDisplay(WebCore::Pla
     return frameRate;
 }
 
-void WebProcessPool::startDisplayLink(IPC::Connection& connection, DisplayLinkObserverID observerID, PlatformDisplayID displayID)
+void WebProcessPool::startDisplayLink(IPC::Connection& connection, DisplayLinkObserverID observerID, PlatformDisplayID displayID, WebCore::FramesPerSecond preferredFramesPerSecond)
 {
     for (auto& displayLink : m_displayLinks) {
         if (displayLink->displayID() == displayID) {
-            displayLink->addObserver(connection, observerID);
+            displayLink->addObserver(connection, observerID, preferredFramesPerSecond);
             return;
         }
     }
     auto displayLink = makeUnique<DisplayLink>(displayID);
-    displayLink->addObserver(connection, observerID);
+    displayLink->addObserver(connection, observerID, preferredFramesPerSecond);
     m_displayLinks.append(WTFMove(displayLink));
 }
 
@@ -809,6 +777,32 @@ void WebProcessPool::stopDisplayLinks(IPC::Connection& connection)
     for (auto& displayLink : m_displayLinks)
         displayLink->removeObservers(connection);
 }
+
+void WebProcessPool::setDisplayLinkPreferredFramesPerSecond(IPC::Connection& connection, DisplayLinkObserverID observerID, PlatformDisplayID displayID, WebCore::FramesPerSecond preferredFramesPerSecond)
+{
+    LOG_WITH_STREAM(DisplayLink, stream << "[UI ] WebProcessPool::setDisplayLinkPreferredFramesPerSecond - display " << displayID << " observer " << observerID << " fps " << preferredFramesPerSecond);
+
+    for (auto& displayLink : m_displayLinks) {
+        if (displayLink->displayID() == displayID) {
+            displayLink->setPreferredFramesPerSecond(connection, observerID, preferredFramesPerSecond);
+            return;
+        }
+    }
+}
+
+void WebProcessPool::setDisplayLinkForDisplayWantsFullSpeedUpdates(IPC::Connection& connection, WebCore::PlatformDisplayID displayID, bool wantsFullSpeedUpdates)
+{
+    for (auto& displayLink : m_displayLinks) {
+        if (displayLink->displayID() == displayID) {
+            if (wantsFullSpeedUpdates)
+                displayLink->incrementFullSpeedRequestClientCount(connection);
+            else
+                displayLink->decrementFullSpeedRequestClientCount(connection);
+            return;
+        }
+    }
+}
+
 #endif // HAVE(CVDISPLAYLINK)
 
 // FIXME: Deprecated. Left here until a final decision is made.

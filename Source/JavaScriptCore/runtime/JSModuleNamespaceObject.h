@@ -27,13 +27,14 @@
 
 #include "AbstractModuleRecord.h"
 #include "JSDestructibleObject.h"
+#include <wtf/FixedVector.h>
 
 namespace JSC {
 
 class JSModuleNamespaceObject final : public JSNonFinalObject {
 public:
     using Base = JSNonFinalObject;
-    static constexpr unsigned StructureFlags = Base::StructureFlags | OverridesGetOwnPropertySlot | OverridesGetOwnPropertyNames | InterceptsGetOwnPropertySlotByIndexEvenWhenLengthIsNotZero | GetOwnPropertySlotIsImpureForPropertyAbsence | IsImmutablePrototypeExoticObject;
+    static constexpr unsigned StructureFlags = Base::StructureFlags | OverridesGetOwnPropertySlot | OverridesGetOwnPropertyNames | OverridesPut | InterceptsGetOwnPropertySlotByIndexEvenWhenLengthIsNotZero | GetOwnPropertySlotIsImpureForPropertyAbsence | IsImmutablePrototypeExoticObject;
 
     static constexpr bool needsDestruction = true;
     static void destroy(JSCell*);
@@ -84,7 +85,7 @@ private:
     typedef HashMap<RefPtr<UniquedStringImpl>, ExportEntry, IdentifierRepHash, HashTraits<RefPtr<UniquedStringImpl>>> ExportMap;
 
     ExportMap m_exports;
-    Vector<Identifier> m_names;
+    FixedVector<Identifier> m_names;
     WriteBarrier<AbstractModuleRecord> m_moduleRecord;
 
     friend size_t cellSize(VM&, JSCell*);

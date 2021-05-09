@@ -69,9 +69,8 @@ public:
     virtual ~ScrollAnimator();
 
     enum ScrollBehavior {
-        Default = 0,
-        DoDirectionalSnapping = 1 << 1,
-        NeverAnimate = 1 << 2,
+        DoDirectionalSnapping = 1 << 0,
+        NeverAnimate = 1 << 1,
     };
 
     // Computes a scroll destination for the given parameters.  Returns false if
@@ -172,7 +171,10 @@ public:
 protected:
     virtual void notifyPositionChanged(const FloatSize& delta);
     void updateActiveScrollSnapIndexForOffset();
-    FloatPoint positionFromStep(ScrollbarOrientation, float step, float multiplier);
+
+    FloatPoint offsetFromPosition(const FloatPoint& position);
+    FloatPoint positionFromOffset(const FloatPoint& offset);
+    FloatSize deltaFromStep(ScrollbarOrientation, float step, float multiplier);
 
     ScrollableArea& m_scrollableArea;
     RefPtr<WheelEventTestMonitor> m_wheelEventTestMonitor;

@@ -1,4 +1,4 @@
-; Copyright (C) 2010-2020 Apple Inc. All rights reserved.
+; Copyright (C) 2010-2021 Apple Inc. All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without
 ; modification, are permitted provided that the following conditions
@@ -23,6 +23,7 @@
 
 (version 1)
 (deny default (with partial-symbolication))
+(deny nvram*)
 (allow system-audit file-read-metadata)
 
 ;;;
@@ -109,6 +110,153 @@
     (ipc-posix-name "apple.shm.notification_center")
     (ipc-posix-name-prefix "apple.cfprefs."))
 
+(define (IOAcceleratorMessageFilter)
+    (apply-message-filter
+        (deny (with telemetry) (with message "IOAccelerator")
+            iokit-async-external-method
+            iokit-external-method
+        )
+        (allow iokit-async-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+            (iokit-method-number
+                0
+                47
+            )
+#endif
+        )
+        (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+            (iokit-method-number
+                0
+                1
+                2
+                3
+                4
+                5
+                6
+                7
+                8
+                9
+                10
+                11
+                12
+                13
+                15
+                16
+                17
+                18
+                22
+                23
+                24
+                28
+                29
+                30
+                31
+                40
+                42
+                48
+                256
+                257
+                258
+                259
+                260
+                261
+                262
+                263
+                265
+                267
+                512
+            )
+#endif
+        )
+        (deny (with telemetry)
+            iokit-external-trap
+        )
+    )
+)
+
+(define (IOSurfaceRootUserClientMessageFilter)
+    (apply-message-filter
+        (deny (with telemetry) (with message "IOSurfaceRootUserClient")
+            iokit-async-external-method
+            iokit-external-method
+        )
+        (allow iokit-async-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+            (iokit-method-number
+                17
+            )
+#endif
+        )
+        (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+            (iokit-method-number
+                0
+                1
+                2
+                3
+                9
+                10
+                11
+                12
+                13
+                14
+                15
+                20
+                23
+                27
+                31
+                32
+                34
+                35
+                36
+                38
+                44
+            )
+#endif
+        )
+        (deny (with telemetry)
+            iokit-external-trap
+        )
+    )
+)
+
+(define (AppleAVDUserClientMessageFilter)
+    (if (equal? (param "ENABLE_SANDBOX_MESSAGE_FILTER") "YES")
+        (apply-message-filter
+            (allow (with telemetry) (with message "AppleAVDUserClient")
+                iokit-async-external-method
+                iokit-external-method
+                iokit-external-trap
+            )
+        )
+    )
+)
+
+(define (IOSurfaceAcceleratorClientMessageFilter)
+    (if (equal? (param "ENABLE_SANDBOX_MESSAGE_FILTER") "YES")
+        (apply-message-filter
+            (allow (with telemetry) (with message "IOSurfaceAcceleratorClient")
+                iokit-async-external-method
+                iokit-external-method
+                iokit-external-trap
+            )
+        )
+    )
+)
+
+(define (IOMobileFramebufferUserClientMessageFilter)
+    (if (equal? (param "ENABLE_SANDBOX_MESSAGE_FILTER") "YES")
+        (apply-message-filter
+            (allow (with telemetry) (with message "IOMobileFramebufferUserClient")
+                iokit-async-external-method
+                iokit-external-method
+                iokit-external-trap
+            )
+        )
+    )
+)
+
 ;;; (system-graphics) - Allow access to graphics hardware.
 (define (system-graphics)
     ;; Preferences
@@ -143,15 +291,7 @@
                 (iokit-connection "IOAccelerator")
             )
             (with telemetry-backtrace)
-            (apply-message-filter
-                (allow
-                    iokit-async-external-method
-                    iokit-external-method
-                )
-                (deny (with telemetry)
-                    iokit-external-trap
-                )
-            )
+            (IOAcceleratorMessageFilter)
         )
         ; else
         (allow iokit-open
@@ -191,15 +331,7 @@
                 (iokit-registry-entry-class "IOSurfaceRootUserClient")
             )
             (with telemetry-backtrace)
-            (apply-message-filter
-                (allow
-                    iokit-async-external-method
-                    iokit-external-method
-                )
-                (deny (with telemetry)
-                    iokit-external-trap
-                )
-            )
+            (IOSurfaceRootUserClientMessageFilter)
         )
         ; else
         (allow iokit-open
@@ -224,8 +356,15 @@
             )
             (with telemetry-backtrace)
             (apply-message-filter
-                (allow
+                (deny (with telemetry) (with message "AppleIntelMEUserClient")
                     iokit-external-method
+                )
+                (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                    (iokit-method-number
+                        120
+                    )
+#endif
                 )
                 (deny (with telemetry)
                     iokit-async-external-method
@@ -251,8 +390,15 @@
             )
             (with telemetry-backtrace)
             (apply-message-filter
-                (allow
+                (deny (with telemetry) (with message "AppleSNBFBUserClient")
                     iokit-external-method
+                )
+                (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                    (iokit-method-number
+                        120
+                    )
+#endif
                 )
                 (deny (with telemetry)
                     iokit-async-external-method
@@ -301,9 +447,19 @@
             )
             (with telemetry-backtrace)
             (apply-message-filter
-                (allow
+                (deny (with telemetry) (with message "AppleGraphicsControlClient")
                     iokit-async-external-method
                     iokit-external-method
+                )
+                (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                    (iokit-method-number
+                        0
+                        1
+                        3
+                        11
+                    )
+#endif
                 )
                 (deny (with telemetry)
                     iokit-external-trap
@@ -350,8 +506,17 @@
             )
             (with telemetry-backtrace)
             (apply-message-filter
-                (allow
+                (deny (with telemetry) (with message "AppleMGPUPowerControlClient")
                     iokit-external-method
+                )
+                (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                    (iokit-method-number
+                        0
+                        1
+                        3
+                    )
+#endif
                 )
                 (deny (with telemetry)
                     iokit-async-external-method
@@ -827,7 +992,9 @@
 
 #if ENABLE(CFPREFS_DIRECT_MODE)
 (allow file-read*
+    (literal "/Library/Preferences/.GlobalPreferences.plist")
     (home-subpath "/Library/Preferences/.GlobalPreferences.plist")
+    (home-subpath "/Library/Preferences/.GlobalPreferences_m.plist")
     (home-subpath "/Library/Preferences/com.apple.security.plist")
     (home-subpath "/Library/Preferences/com.apple.Accessibility.plist")
     (home-subpath "/Library/Preferences/com.apple.ATS.plist")
@@ -930,8 +1097,19 @@
         )
         (with telemetry-backtrace)
         (apply-message-filter
-            (allow
+            (deny (with telemetry) (with message "AppleUpstreamUserClient")
                 iokit-external-method
+            )
+            (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                (iokit-method-number
+                    0
+                    1
+                    3
+                    4
+                    5
+                )
+#endif
             )
             (deny (with telemetry)
                 iokit-async-external-method
@@ -956,8 +1134,15 @@
         )
         (with telemetry-backtrace)
         (apply-message-filter
-            (allow
+            (deny (with telemetry) (with message "RootDomainUserClient")
                 iokit-external-method
+            )
+            (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                (iokit-method-number
+                    3
+                )
+#endif
             )
             (deny (with telemetry)
                 iokit-async-external-method
@@ -983,8 +1168,19 @@
         )
         (with telemetry-backtrace)
         (apply-message-filter
-            (allow
+            (deny (with telemetry) (with message "AudioAUUC")
                 iokit-external-method
+            )
+            (allow iokit-external-method
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+                (iokit-method-number
+                    0
+                    1
+                    3
+                    4
+                    5
+                )
+#endif
             )
             (deny (with telemetry)
                 iokit-async-external-method
@@ -1059,10 +1255,39 @@
             (extension "com.apple.webkit.extension.iokit")
             (iokit-user-client-class
                 "AppleAVDUserClient"
+            )
+        )
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+        (AppleAVDUserClientMessageFilter)
+#endif
+    )
+    (allow iokit-open
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
+        (with telemetry-backtrace)
+#endif
+        (require-all
+            (extension "com.apple.webkit.extension.iokit")
+            (iokit-user-client-class
                 "IOMobileFramebufferUserClient"
+            )
+        )
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+        (IOMobileFramebufferUserClientMessageFilter)
+#endif
+    )
+    (allow iokit-open
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
+        (with telemetry-backtrace)
+#endif
+        (require-all
+            (extension "com.apple.webkit.extension.iokit")
+            (iokit-user-client-class
                 "IOSurfaceAcceleratorClient" ;; <rdar://problem/63696732>
             )
         )
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+        (IOSurfaceAcceleratorClientMessageFilter)
+#endif
     )
 )
 
@@ -1199,6 +1424,9 @@
     (allow file-write*
         (with report) (with telemetry-backtrace)
         (subpath "/private/var/db/mds/system")) ;; FIXME: This should be removed when <rdar://problem/9538414> is fixed.
+    (allow mach-lookup
+       (global-name "com.apple.system.opendirectoryd.libinfo")
+       (global-name "com.apple.system.opendirectoryd.membership"))
 )
 #else
 (allow file-read* file-write* (subpath "/private/var/db/mds/system")) ;; FIXME: This should be removed when <rdar://problem/9538414> is fixed.
@@ -1267,25 +1495,20 @@
     (allow mach-lookup
         (global-name "com.apple.system.notification_center")
         (apply-message-filter
-            (allow mach-message-send (with telemetry-backtrace))
+            (deny mach-message-send (with telemetry))
             (deny mach-message-send (with no-report) (message-number 1023))
-            (allow mach-message-send (with telemetry-backtrace) (message-number
+            (allow mach-message-send (message-number
                 1002
-                1003
-                1004
-                1005
+                1010
                 1011
                 1012
-                1013
-                1014
-                1015
                 1016
                 1017
                 1018
                 1021
+                1022
                 1025
                 1026
-                1027
             ))
             (allow mach-message-send (message-number
                 1028
@@ -1303,6 +1526,10 @@
 (deny mach-lookup
     (global-name "com.apple.system.logger")
     (with no-report))
+(with-filter (uid 0)
+    (allow mach-lookup
+        (global-name "com.apple.system.logger"))
+)
 
 (if (defined? 'vnode-type)
         (deny file-write-create (vnode-type SYMLINK)))
@@ -1516,6 +1743,7 @@
             "com.apple.tccd"
 
             ;;; FIXME(207716): The following should be removed when the GPU process is complete
+            "com.apple.accessibility.mediaaccessibilityd"
             "com.apple.audio.AudioComponentRegistrar" "com.apple.audio.audiohald" "com.apple.coremedia.endpoint.xpc" "com.apple.coremedia.endpointstream.xpc"
             "com.apple.coremedia.endpointplaybacksession.xpc" "com.apple.coremedia.endpointremotecontrolsession.xpc" "com.apple.coremedia.routediscoverer.xpc"
             "com.apple.coremedia.routingcontext.xpc" "com.apple.coremedia.volumecontroller.xpc" "com.apple.lskdd" "com.apple.mediaremoted.xpc" "com.apple.trustd.agent"
@@ -1529,7 +1757,6 @@
         (extension "com.apple.webkit.extension.mach")
         (xpc-service-name
             ;;; FIXME(207716): The following should be removed when the GPU process is complete
-            "com.apple.accessibility.mediaaccessibilityd"
             "com.apple.audio.SandboxHelper"
             "com.apple.coremedia.videodecoder"
             "com.apple.coremedia.videoencoder"
@@ -1542,50 +1769,64 @@
 (allow system-fsctl
     (fsctl-command (_IO "h" 47))) ;; See <rdar://74387453>
 
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
 (when (defined? 'file-ioctl)
-    (allow file-ioctl (with telemetry))
+    (deny file-ioctl (with telemetry))
+    (allow file-ioctl (literal "/dev/dtracehelper"))
 )
 
 (when (defined? 'socket-ioctl)
-    (allow socket-ioctl (with telemetry))
+    (deny socket-ioctl (with telemetry))
 )
 
 (when (defined? 'system-fcntl)
-    (allow system-fcntl (with telemetry))
+    (deny system-fcntl (with telemetry))
     (allow system-fcntl
+        (fcntl-command F_BARRIERFSYNC)
+        (fcntl-command F_GETCONFINED)
+        (fcntl-command F_GETFL) ;; LibJPEGReadPlugin::copyImageBlockSetStandard
+        (fcntl-command F_GETLK)
+        (fcntl-command F_GETSIGSINFO)
+        (fcntl-command F_NOCACHE)
+        (fcntl-command F_OFD_GETLK)
+        (fcntl-command F_OFD_SETLKWTIMEOUT)
+        (fcntl-command F_RDADVISE)
+        (fcntl-command F_SETCONFINED)
         (fcntl-command F_GETPATH) ;; used by dyld4 and CGFontURLCreate, getcwd (at least)
         (fcntl-command F_ADDFILESIGS_RETURN) ;; ImageLoaderMachO::loadCodeSignature
         (fcntl-command F_CHECK_LV) ;; ImageLoaderMachO::loadCodeSignature
         (fcntl-command F_SPECULATIVE_READ) ;; ImageLoaderMachO::mapSegments
         (fcntl-command F_SETFD) ;; libwebrtc.dylib (no backtrace)
         (fcntl-command F_GETFD) ;; libwebrtc.dylib (no backtrace)
-        (fcntl-command F_GETFL) ;; LibJPEGReadPlugin::copyImageBlockSetStandard
         (fcntl-command F_RDADVISE) ;; CoreNLP::ReadOnlyFile <- +[DDScannerService scanString:range:configuration:] <- WebCore::DictionaryLookup::rangeAtHitTestResult(WebCore::HitTestResult const&)
         (fcntl-command F_NOCACHE) ;; Security::UnixPlusPlus::FileDesc::fcnt <- MTRegisterPluginFormatReaderBundleDirectory <- invocation function for block in WebCore::registerFormatReaderIfNecessary()
-
         (fcntl-command F_SETFL) ;; CMCapture uses when camera is enabled
         (fcntl-command F_SETNOSIGPIPE)) ;; CMCapture uses when camera is enabled
 
+    (allow system-fcntl (with telemetry-backtrace)
+        (fcntl-command F_OFD_SETLK))
+
     (allow system-fcntl
-        (fcntl-command F_GETPROTECTIONCLASS))
+        (fcntl-command F_GETPROTECTIONCLASS)
+        (fcntl-command F_SETPROTECTIONCLASS))
 )
 
 (when (defined? 'process-codesigning*)
     ;; csops/csops_audittoken
-    (allow process-codesigning-status-set (with telemetry))
-    (allow process-codesigning-text-offset-get (with telemetry))
-    (allow process-codesigning-cdhash-get (with telemetry))
-    (allow process-codesigning-blob-get (with telemetry))
-    (allow process-codesigning-teamid-get (with telemetry))
+    (deny process-codesigning-text-offset-get (with telemetry))
+    (deny process-codesigning-cdhash-get (with telemetry))
+    (deny process-codesigning-blob-get (with telemetry))
+    (deny process-codesigning-teamid-get (with telemetry))
     (allow process-codesigning-identity-get (with telemetry)) ;; codeSigningIdentifierForCurrentProcess
     (allow process-codesigning-entitlements-blob-get) ;; WK reading entitlments via SecTaskCopyValueForEntitlement and _getSelfParsedEntitlements (accessibility)
     (allow process-codesigning-status-get) ;; _xpc_get_entitlements
+    (allow process-codesigning-status-set (target self))
     (deny process-info-codesignature (with no-report)) ;; SecTaskCopyValueForEntitlement - granting this grants all the process-codesign-* checks
 )
 
 (when (defined? 'socket-option-get)
     ;; getsockopt
-    (allow socket-option-get (with telemetry))
+    (deny socket-option-get (with telemetry))
     (allow socket-option-get
         (require-all
             (socket-option-level SOL_SOCKET)
@@ -1594,8 +1835,9 @@
 
 (when (defined? 'socket-option-set)
     ;; setsockopt
-    (allow socket-option-set (with telemetry))
+    (deny socket-option-set (with telemetry))
 )
+#endif
 
 (when (defined? 'syscall-unix)
     (deny syscall-unix (with send-signal SIGKILL))
@@ -1627,6 +1869,7 @@
         (syscall-number SYS_munmap)
         (syscall-number SYS_mprotect)
         (syscall-number SYS_madvise)
+        (syscall-number SYS_mincore)
         (syscall-number SYS_fcntl)
         (syscall-number SYS_select)
         (syscall-number SYS_fsync)
@@ -1756,7 +1999,9 @@
 #endif
         (syscall-number SYS_fstat64_extended) ;; <rdar://problem/61310019>
         (syscall-number SYS_gethostuuid)
+#if __MAC_OS_X_VERSION_MIN_REQUIRED < 120000
         (syscall-number SYS_setattrlist) ;; rdar://problem/74162777
+#endif
         (syscall-number SYS_open_dprotected_np) ;; <rdar://problem/74473824>
     )
 
@@ -1929,15 +2174,7 @@
                 "IOSurfaceRootUserClient"
             )
         )
-        (apply-message-filter
-            (allow
-                iokit-async-external-method
-                iokit-external-method
-            )
-            (deny (with telemetry)
-                iokit-external-trap
-            )
-        )
+        (IOSurfaceRootUserClientMessageFilter)
     )
     ; else
     (allow iokit-open
@@ -1959,9 +2196,25 @@
             (require-not (extension "com.apple.webkit.extension.iokit"))
             (iokit-user-client-class
                 "AppleAVDUserClient"
+            )
+        )
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+        (AppleAVDUserClientMessageFilter)
+#endif
+    )
+    (allow iokit-open (with report)
+#if __MAC_OS_X_VERSION_MIN_REQUIRED > 110000
+        (with telemetry-backtrace)
+#endif
+        (require-all
+            (require-not (extension "com.apple.webkit.extension.iokit"))
+            (iokit-user-client-class
                 "IOSurfaceAcceleratorClient"
             )
         )
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
+        (IOSurfaceAcceleratorClientMessageFilter)
+#endif
     )
 )
 
@@ -1974,15 +2227,7 @@
                 "IOAccelerator"
             )
         )
-        (apply-message-filter
-            (allow
-                iokit-async-external-method
-                iokit-external-method
-            )
-            (deny (with telemetry)
-                iokit-external-trap
-            )
-        )
+        (IOAcceleratorMessageFilter)
     )
     ; else
     (allow iokit-open
@@ -2042,5 +2287,13 @@
 #if __MAC_OS_X_VERSION_MIN_REQUIRED > 110000
 (when (defined? 'darwin-notification-post)
     (allow darwin-notification-post (with telemetry))
+)
+#endif
+
+#if __MAC_OS_X_VERSION_MIN_REQUIRED > 110000
+(deny file-read* (with no-report)
+    (home-literal
+        "/Library/Preferences/com.apple.CFNetwork.plist"
+    )
 )
 #endif

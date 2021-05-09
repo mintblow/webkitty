@@ -59,11 +59,8 @@
 #include <wtf/Logger.h>
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
+#include <wtf/RobinHoodHashSet.h>
 #include <wtf/WeakHashSet.h>
-
-#if HAVE(VISIBILITY_PROPAGATION_VIEW)
-#include "LayerHostingContext.h"
-#endif
 
 namespace API {
 class Navigation;
@@ -77,6 +74,7 @@ struct PluginInfo;
 struct PrewarmInformation;
 struct SecurityOriginData;
 enum class ThirdPartyCookieBlockingMode : uint8_t;
+using FramesPerSecond = unsigned;
 using PlatformDisplayID = uint32_t;
 }
 
@@ -120,7 +118,7 @@ using WebProcessWithAudibleMediaCounter = RefCounter<WebProcessWithAudibleMediaC
 using WebProcessWithAudibleMediaToken = WebProcessWithAudibleMediaCounter::Token;
 enum class CheckBackForwardList : bool { No, Yes };
 
-class WebProcessProxy : public AuxiliaryProcessProxy, public ResponsivenessTimer::Client, public ThreadSafeRefCounted<WebProcessProxy>, private ProcessThrottlerClient {
+class WebProcessProxy : public AuxiliaryProcessProxy, public ResponsivenessTimer::Client, private ProcessThrottlerClient {
 public:
     typedef HashMap<WebCore::FrameIdentifier, RefPtr<WebFrameProxy>> WebFrameProxyMap;
     typedef HashMap<WebPageProxyIdentifier, WebPageProxy*> WebPageProxyMap;
@@ -219,7 +217,7 @@ public:
     static bool fullKeyboardAccessEnabled();
 
 #if HAVE(UIKIT_WITH_MOUSE_SUPPORT) && PLATFORM(IOS)
-    static void notifyHasMouseDeviceChanged();
+    static void notifyHasMouseDeviceChanged(bool hasMouseDevice);
 #endif
 
     static void notifyHasStylusDeviceChanged(bool hasStylusDevice);
@@ -298,8 +296,9 @@ public:
 #endif
 
 #if HAVE(CVDISPLAYLINK)
-    void startDisplayLink(DisplayLinkObserverID, WebCore::PlatformDisplayID);
+    void startDisplayLink(DisplayLinkObserverID, WebCore::PlatformDisplayID, WebCore::FramesPerSecond);
     void stopDisplayLink(DisplayLinkObserverID, WebCore::PlatformDisplayID);
+    void setDisplayLinkPreferredFramesPerSecond(DisplayLinkObserverID, WebCore::PlatformDisplayID, WebCore::FramesPerSecond);
 #endif
 
     // Called when the web process has crashed or we know that it will terminate soon.
@@ -334,6 +333,8 @@ public:
     bool hasAudioCaptureExtension() const { return m_mediaCaptureSandboxExtensions & Audio; }
     void grantAudioCaptureExtension() { m_mediaCaptureSandboxExtensions |= Audio; }
     void revokeAudioCaptureExtension() { m_mediaCaptureSandboxExtensions &= ~Audio; }
+
+    void sendAudioComponentRegistrations();
 #endif
 
 #if ENABLE(REMOTE_INSPECTOR) && PLATFORM(COCOA)
@@ -374,12 +375,8 @@ public:
     void setHasIssuedAttachmentElementRelatedSandboxExtensions() { m_hasIssuedAttachmentElementRelatedSandboxExtensions = true; }
 #endif
 
-#if HAVE(VISIBILITY_PROPAGATION_VIEW)
-    void didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID);
-#endif
-
 #if ENABLE(GPU_PROCESS)
-    void gpuProcessCrashed();
+    void gpuProcessExited(GPUProcessTerminationReason);
 #endif
 
     bool hasSleepDisabler() const;
@@ -398,6 +395,7 @@ public:
 #endif
 
 #if ENABLE(IPC_TESTING_API)
+    bool ignoreInvalidMessageForTesting() const { return m_ignoreInvalidMessageForTesting; }
     void setIgnoreInvalidMessageForTesting();
 #endif
 
@@ -474,7 +472,7 @@ private:
     bool platformIsBeingDebugged() const;
     bool shouldAllowNonValidInjectedCode() const;
 
-    static const HashSet<String>& platformPathsWithAssumedReadAccess();
+    static const MemoryCompactLookupOnlyRobinHoodHashSet<String>& platformPathsWithAssumedReadAccess();
 
     ResponsivenessTimer& responsivenessTimer() { return m_responsivenessTimer; }
     void updateBackgroundResponsivenessTimer();

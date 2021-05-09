@@ -29,7 +29,7 @@
 
 #include "AudioHardwareListener.h"
 #include "GenericTaskQueue.h"
-#include "NowPlayingInfo.h"
+#include "NowPlayingManager.h"
 #include "PlatformMediaSessionManager.h"
 #include "RemoteCommandListener.h"
 
@@ -39,7 +39,7 @@ struct NowPlayingInfo;
 
 class MediaSessionManagerCocoa
     : public PlatformMediaSessionManager
-    , private RemoteCommandListenerClient
+    , private NowPlayingManager::Client
     , private AudioHardwareListener::Client {
     WTF_MAKE_FAST_ALLOCATED;
 public:
@@ -52,7 +52,7 @@ public:
     String lastUpdatedNowPlayingTitle() const final { return m_lastUpdatedNowPlayingTitle; }
     double lastUpdatedNowPlayingDuration() const final { return m_lastUpdatedNowPlayingDuration; }
     double lastUpdatedNowPlayingElapsedTime() const final { return m_lastUpdatedNowPlayingElapsedTime; }
-    MediaSessionIdentifier lastUpdatedNowPlayingInfoUniqueIdentifier() const final { return m_lastUpdatedNowPlayingInfoUniqueIdentifier; }
+    MediaUniqueIdentifier lastUpdatedNowPlayingInfoUniqueIdentifier() const final { return m_lastUpdatedNowPlayingInfoUniqueIdentifier; }
     bool registeredAsNowPlayingApplication() const final { return m_registeredAsNowPlayingApplication; }
     bool haveEverRegisteredAsNowPlayingApplication() const final { return m_haveEverRegisteredAsNowPlayingApplication; }
 
@@ -86,12 +86,14 @@ protected:
     void addSupportedCommand(PlatformMediaSession::RemoteControlCommandType) final;
     void removeSupportedCommand(PlatformMediaSession::RemoteControlCommandType) final;
 
+    void resetHaveEverRegisteredAsNowPlayingApplicationForTesting() final { m_haveEverRegisteredAsNowPlayingApplication = false; };
+
 private:
 #if !RELEASE_LOG_DISABLED
     const char* logClassName() const override { return "MediaSessionManagerCocoa"; }
 #endif
 
-    // RemoteCommandListenerClient
+    // NowPlayingManager::Client
     void didReceiveRemoteControlCommand(PlatformMediaSession::RemoteControlCommandType type, const PlatformMediaSession::RemoteCommandArgument& argument) final { processDidReceiveRemoteControlCommand(type, argument); }
 
     // AudioHardwareListenerClient
@@ -99,7 +101,6 @@ private:
     void audioHardwareDidBecomeInactive() final { }
     void audioOutputDeviceChanged() final;
 
-    Optional<NowPlayingInfo> m_nowPlayingInfo;
     bool m_nowPlayingActive { false };
     bool m_registeredAsNowPlayingApplication { false };
     bool m_haveEverRegisteredAsNowPlayingApplication { false };
@@ -108,11 +109,11 @@ private:
     String m_lastUpdatedNowPlayingTitle;
     double m_lastUpdatedNowPlayingDuration { NAN };
     double m_lastUpdatedNowPlayingElapsedTime { NAN };
-    MediaSessionIdentifier m_lastUpdatedNowPlayingInfoUniqueIdentifier;
+    MediaUniqueIdentifier m_lastUpdatedNowPlayingInfoUniqueIdentifier;
 
     GenericTaskQueue<Timer> m_taskQueue;
 
-    std::unique_ptr<RemoteCommandListener> m_remoteCommandListener;
+    const std::unique_ptr<NowPlayingManager> m_nowPlayingManager;
     RefPtr<AudioHardwareListener> m_audioHardwareListener;
 };
 

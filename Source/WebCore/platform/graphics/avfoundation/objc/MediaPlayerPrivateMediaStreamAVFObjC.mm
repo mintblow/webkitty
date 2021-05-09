@@ -268,12 +268,29 @@ void MediaPlayerPrivateMediaStreamAVFObjC::enqueueVideoSample(MediaSample& sampl
     m_sampleBufferDisplayLayer->enqueueSample(sample);
 }
 
-void MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample(MediaSample& sample,  bool hasChangedOrientation)
+void MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample(MediaSample& sample, bool hasChangedOrientation)
 {
     if (!isMainThread()) {
-        callOnMainThread([weakThis = makeWeakPtr(this), sample = makeRef(sample), hasChangedOrientation]() mutable {
-            if (weakThis)
-                weakThis->processNewVideoSample(sample.get(), hasChangedOrientation);
+        {
+            auto locker = holdLock(m_currentVideoSampleLock);
+            m_currentVideoSample = &sample;
+        }
+        callOnMainThread([weakThis = makeWeakPtr(this), hasChangedOrientation]() mutable {
+            if (!weakThis)
+                return;
+
+            if (hasChangedOrientation)
+                weakThis->m_videoTransform = { };
+
+            RefPtr<MediaSample> sample;
+            {
+                auto locker = holdLock(weakThis->m_currentVideoSampleLock);
+                sample = WTFMove(weakThis->m_currentVideoSample);
+            }
+            if (!sample)
+                return;
+
+            weakThis->processNewVideoSample(*sample, hasChangedOrientation);
         });
         return;
     }
@@ -353,21 +370,28 @@ void MediaPlayerPrivateMediaStreamAVFObjC::ensureLayers()
         m_sampleBufferDisplayLayer->setRenderPolicy(SampleBufferDisplayLayer::RenderPolicy::Immediately);
 
     auto size = snappedIntRect(m_player->playerContentBoxRect()).size();
-    m_sampleBufferDisplayLayer->initialize(hideRootLayer(), size, [this, weakThis = makeWeakPtr(this), size](auto didSucceed) {
-        if (!didSucceed) {
-            ERROR_LOG(LOGIDENTIFIER, "Initializing the SampleBufferDisplayLayer failed.");
-            m_sampleBufferDisplayLayer = nullptr;
-            return;
-        }
-        updateRenderingMode();
-        m_shouldUpdateDisplayLayer = true;
-
-        m_videoLayerManager->setVideoLayer(m_sampleBufferDisplayLayer->rootLayer(), size);
-
-        [m_boundsChangeListener begin:m_sampleBufferDisplayLayer->rootLayer()];
-
-        m_canEnqueueDisplayLayer = true;
+    m_sampleBufferDisplayLayer->initialize(hideRootLayer(), size, [weakThis = makeWeakPtr(this), size](auto didSucceed) {
+        if (weakThis)
+            weakThis->layersAreInitialized(size, didSucceed);
     });
+}
+
+void MediaPlayerPrivateMediaStreamAVFObjC::layersAreInitialized(IntSize size, bool didSucceed)
+{
+    if (!didSucceed) {
+        ERROR_LOG(LOGIDENTIFIER, "Initializing the SampleBufferDisplayLayer failed.");
+        m_sampleBufferDisplayLayer = nullptr;
+        return;
+    }
+
+    updateRenderingMode();
+    m_shouldUpdateDisplayLayer = true;
+
+    m_videoLayerManager->setVideoLayer(m_sampleBufferDisplayLayer->rootLayer(), size);
+
+    [m_boundsChangeListener begin:m_sampleBufferDisplayLayer->rootLayer()];
+
+    m_canEnqueueDisplayLayer = true;
 }
 
 void MediaPlayerPrivateMediaStreamAVFObjC::destroyLayers()
@@ -1031,7 +1055,9 @@ void MediaPlayerPrivateMediaStreamAVFObjC::CurrentFramePainter::reset()
 
 void MediaPlayerPrivateMediaStreamAVFObjC::rootLayerBoundsDidChange()
 {
-    m_shouldUpdateDisplayLayer = true;
+    auto locker = holdLock(m_sampleBufferDisplayLayerLock);
+    if (m_sampleBufferDisplayLayer)
+        m_sampleBufferDisplayLayer->updateBoundsAndPosition(m_sampleBufferDisplayLayer->rootLayer().bounds, m_videoRotation);
 }
 
 WTFLogChannel& MediaPlayerPrivateMediaStreamAVFObjC::logChannel() const

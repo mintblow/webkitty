@@ -762,7 +762,7 @@ bool ScrollAnimatorMac::scroll(ScrollbarOrientation orientation, ScrollGranulari
 
     bool shouldAnimate = scrollAnimationEnabledForSystem() && m_scrollableArea.scrollAnimatorEnabled() && granularity != ScrollByPixel
         && !behavior.contains(ScrollBehavior::NeverAnimate);
-    FloatPoint newPosition = positionFromStep(orientation, step, multiplier);
+    FloatPoint newPosition = this->currentPosition() + deltaFromStep(orientation, step, multiplier);
     newPosition = newPosition.constrainedBetween(scrollableArea().minimumScrollPosition(), scrollableArea().maximumScrollPosition());
 
     LOG_WITH_STREAM(Scrolling, stream << "ScrollAnimatorMac::scroll from " << currentPosition() << " to " << newPosition);
@@ -1278,7 +1278,7 @@ bool ScrollAnimatorMac::isPinnedForScrollDelta(const FloatSize& delta) const
 }
 
 #if ENABLE(CSS_SCROLL_SNAP)
-static bool gestureShouldBeginSnap(const PlatformWheelEvent& wheelEvent, ScrollEventAxis axis, const ScrollSnapOffsetsInfo<LayoutUnit>* offsetInfo)
+static bool gestureShouldBeginSnap(const PlatformWheelEvent& wheelEvent, ScrollEventAxis axis, const LayoutScrollSnapOffsetsInfo* offsetInfo)
 {
     if (!offsetInfo)
         return false;

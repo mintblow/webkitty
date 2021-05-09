@@ -200,7 +200,7 @@ static Ref<NetworkProcessProxy> networkProcessForSession(PAL::SessionID sessionI
     return NetworkProcessProxy::create();
 #else
     UNUSED_PARAM(sessionID);
-    return NetworkProcessProxy::defaultNetworkProcess();
+    return NetworkProcessProxy::ensureDefaultNetworkProcess();
 #endif
 }
 
@@ -208,7 +208,7 @@ NetworkProcessProxy& WebsiteDataStore::networkProcess()
 {
     if (!m_networkProcess) {
         m_networkProcess = networkProcessForSession(m_sessionID);
-        m_networkProcess->addSession(*this);
+        m_networkProcess->addSession(*this, NetworkProcessProxy::SendParametersToNetworkProcess::Yes);
     }
 
     return *m_networkProcess;
@@ -1317,6 +1317,12 @@ void WebsiteDataStore::statisticsDatabaseHasAllTables(CompletionHandler<void(boo
     networkProcess().statisticsDatabaseHasAllTables(m_sessionID, WTFMove(completionHandler));
 }
 
+void WebsiteDataStore::statisticsDatabaseColumnsForTable(const String& tableName, CompletionHandler<void(Vector<String>&&)>&& completionHandler)
+{
+    ASSERT(RunLoop::isMain());
+    networkProcess().statisticsDatabaseColumnsForTable(m_sessionID, tableName, WTFMove(completionHandler));
+}
+
 void WebsiteDataStore::setLastSeen(const URL& url, Seconds seconds, CompletionHandler<void()>&& completionHandler)
 {
     if (url.protocolIsAbout() || url.isEmpty()) {
@@ -1714,33 +1720,33 @@ void WebsiteDataStore::removeMediaKeys(const String& mediaKeysStorageDirectory, 
 
 void WebsiteDataStore::getNetworkProcessConnection(WebProcessProxy& webProcessProxy, CompletionHandler<void(const NetworkProcessConnectionInfo&)>&& reply)
 {
-    networkProcess().getNetworkProcessConnection(webProcessProxy, [this, weakThis = makeWeakPtr(*this), webProcessProxy = makeWeakPtr(webProcessProxy), reply = WTFMove(reply)] (auto& connectionInfo) mutable {
-        if (UNLIKELY(!IPC::Connection::identifierIsValid(connectionInfo.identifier()) && webProcessProxy && weakThis)) {
-            terminateNetworkProcess();
-            RELEASE_LOG_IF(isPersistent(), Process, "getNetworkProcessConnection: Failed first attempt, retrying");
-            networkProcess().getNetworkProcessConnection(*webProcessProxy, WTFMove(reply));
+    networkProcess().getNetworkProcessConnection(webProcessProxy, [weakThis = makeWeakPtr(*this), webProcessProxy = makeWeakPtr(webProcessProxy), reply = WTFMove(reply)] (auto& connectionInfo) mutable {
+        if (UNLIKELY(!IPC::Connection::identifierIsValid(connectionInfo.identifier()))) {
+            // Retry on the next RunLoop iteration because we may be inside the WebsiteDataStore destructor.
+            RunLoop::main().dispatch([weakThis = WTFMove(weakThis), webProcessProxy = WTFMove(webProcessProxy), reply = WTFMove(reply)] () mutable {
+                if (RefPtr<WebsiteDataStore> strongThis = weakThis.get(); strongThis && webProcessProxy) {
+                    strongThis->terminateNetworkProcess();
+                    RELEASE_LOG_IF(strongThis->isPersistent(), Process, "getNetworkProcessConnection: Failed first attempt, retrying");
+                    strongThis->networkProcess().getNetworkProcessConnection(*webProcessProxy, WTFMove(reply));
+                } else
+                    reply({ });
+            });
             return;
         }
         reply(connectionInfo);
     });
 }
 
-void WebsiteDataStore::networkProcessCrashed(NetworkProcessProxy&)
+void WebsiteDataStore::networkProcessDidTerminate(NetworkProcessProxy& networkProcess)
 {
-    if (m_networkProcess)
-        m_networkProcess->didTerminate();
+    ASSERT(!m_networkProcess || m_networkProcess == &networkProcess);
     m_networkProcess = nullptr;
 }
 
 void WebsiteDataStore::terminateNetworkProcess()
 {
-    for (auto* processPool : WebProcessPool::allProcessPools())
-        processPool->terminateServiceWorkers();
-
-    if (!m_networkProcess)
-        return;
-    m_networkProcess->terminate();
-    m_networkProcess = nullptr;
+    if (auto networkProcess = std::exchange(m_networkProcess, nullptr))
+        networkProcess->terminate();
 }
 
 void WebsiteDataStore::sendNetworkProcessPrepareToSuspendForTesting(CompletionHandler<void()>&& completionHandler)
@@ -1905,6 +1911,15 @@ void WebsiteDataStore::setCacheModelSynchronouslyForTesting(CacheModel cacheMode
         processPool->setCacheModelSynchronouslyForTesting(cacheModel);
 }
 
+Vector<WebsiteDataStoreParameters> WebsiteDataStore::parametersFromEachWebsiteDataStore()
+{
+    Vector<WebsiteDataStoreParameters> parameters;
+    parameters.reserveInitialCapacity(allDataStores().size());
+    for (auto* dataStore : allDataStores().values())
+        parameters.uncheckedAppend(dataStore->parameters());
+    return parameters;
+}
+
 WebsiteDataStoreParameters WebsiteDataStore::parameters()
 {
     WebsiteDataStoreParameters parameters;
@@ -1983,11 +1998,9 @@ WebsiteDataStoreParameters WebsiteDataStore::parameters()
 
     parameters.networkSessionParameters = WTFMove(networkSessionParameters);
 
-#if ENABLE(INDEXED_DATABASE)
     parameters.indexedDatabaseDirectory = resolvedIndexedDatabaseDirectory();
     if (!parameters.indexedDatabaseDirectory.isEmpty())
         SandboxExtension::createHandleForReadWriteDirectory(parameters.indexedDatabaseDirectory, parameters.indexedDatabaseDirectoryExtensionHandle);
-#endif
 
 #if ENABLE(SERVICE_WORKER)
     parameters.serviceWorkerRegistrationDirectory = resolvedServiceWorkerRegistrationDirectory();
@@ -2065,12 +2078,6 @@ void WebsiteDataStore::resetQuota(CompletionHandler<void()>&& completionHandler)
 {
     auto callbackAggregator = CallbackAggregator::create(WTFMove(completionHandler));
     networkProcess().resetQuota(m_sessionID, [callbackAggregator] { });
-}
-
-void WebsiteDataStore::setQuotaLoggingEnabled(bool enabled, CompletionHandler<void()>&& completionHandler)
-{
-    auto callbackAggregator = CallbackAggregator::create(WTFMove(completionHandler));
-    networkProcess().setQuotaLoggingEnabled(m_sessionID, enabled, [callbackAggregator] { });
 }
 
 #if !PLATFORM(COCOA)

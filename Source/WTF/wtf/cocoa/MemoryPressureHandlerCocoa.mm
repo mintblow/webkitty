@@ -37,6 +37,8 @@
 
 extern "C" void cache_simulate_memory_warning_event(uint64_t);
 
+#define LOG_CHANNEL_PREFIX Log
+
 namespace WTF {
 
 void MemoryPressureHandler::platformReleaseMemory(Critical critical)
@@ -69,16 +71,11 @@ void MemoryPressureHandler::install()
         return;
 
     dispatch_async(m_dispatchQueue.get(), ^{
-#if PLATFORM(IOS_FAMILY)
         auto memoryStatusFlags = DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL | DISPATCH_MEMORYPRESSURE_PROC_LIMIT_WARN | DISPATCH_MEMORYPRESSURE_PROC_LIMIT_CRITICAL;
-#else // PLATFORM(MAC)
-        auto memoryStatusFlags = DISPATCH_MEMORYPRESSURE_CRITICAL;
-#endif
         memoryPressureEventSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0, memoryStatusFlags, m_dispatchQueue.get());
 
         dispatch_source_set_event_handler(memoryPressureEventSource, ^{
             auto status = dispatch_source_get_data(memoryPressureEventSource);
-#if PLATFORM(IOS_FAMILY)
             switch (status) {
             // VM pressure events.
             case DISPATCH_MEMORYPRESSURE_NORMAL:
@@ -100,11 +97,8 @@ void MemoryPressureHandler::install()
                 respondToMemoryPressure(Critical::Yes);
                 break;
             }
-#else // PLATFORM(MAC)
-            respondToMemoryPressure(Critical::Yes);
-#endif
             if (m_shouldLogMemoryMemoryPressureEvents)
-                WTFLogAlways("Received memory pressure event %lu vm pressure %d", status, isUnderMemoryPressure());
+                RELEASE_LOG(MemoryPressure, "Received memory pressure event %lu vm pressure %d", status, isUnderMemoryPressure());
         });
         dispatch_resume(memoryPressureEventSource);
     });
@@ -124,7 +118,7 @@ void MemoryPressureHandler::install()
         logFootprintComparison(footprintBefore, footprintAfter);
 #endif
 
-        dispatch_async(m_dispatchQueue.get(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), m_dispatchQueue.get(), ^{
             endSimulatedMemoryPressure();
         });
     });
@@ -210,3 +204,5 @@ Optional<MemoryPressureHandler::ReliefLogger::MemoryUsage> MemoryPressureHandler
 }
 
 } // namespace WTF
+
+#undef LOG_CHANNEL_PREFIX

@@ -1,4 +1,4 @@
-// Copyright (C) 2019, 2020 Apple Inc. All rights reserved.
+// Copyright (C) 2019-2021 Apple Inc. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -101,16 +101,17 @@ function CommitTable(commits, repositoryIds = [], oneLine = false) {
                     let commitArgs = paramsToQuery({
                         repository_id: [cell.commit.repository_id],
                         branch: [cell.commit.branch],
-                        id: [cell.commit.identifier],
+                        ref: [cell.commit.label()],
                     });
-                    let investigateArgs = {id: [cell.commit.identifier]};
+                    let investigateArgs = {ref: [cell.commit.label()]};
                     if (!['master', 'main', 'trunk'].includes(cell.commit.branch))
                         investigateArgs.branch = [cell.commit.branch];
 
                     return `<td rowspan="${cell.rowspan}">
                         <a href="/commit?${commitArgs}">${cell.commit.label()}</a> <br>
-                        Branch: ${cell.commit.branch} <br>
-                        Author: ${escapeHTML(cell.commit.author)} <br>
+                        ${cell.commit.label().includes('@') ? '' : `Branch: ${cell.commit.branch} <br>`}
+                        ${cell.commit.author ? `Author: ${escapeHTML(cell.commit.author.name)}
+                            &#60<a href="mailto:${escapeHTML(cell.commit.author.emails[0])}">${escapeHTML(cell.commit.author.emails[0])}</a>&#62 <br>` : ''}
                         <a href="/commit/info?${commitArgs}">More Info</a><br>
                         <a href="/investigate?${paramsToQuery(investigateArgs)}">Test results for commit</a>
                         ${function() {
@@ -130,10 +131,12 @@ function CommitTable(commits, repositoryIds = [], oneLine = false) {
 class Commit {
     constructor(json) {
         this.identifier = json.identifier ? json.identifier : json.id;
-        this.revision = json.revision;
-        this.hash = json.hash;
+        this.revision = json.revision ? json.revision : null;
+        this.hash = json.hash ? json.hash : null;
 
-        this.author = json.author ? json.author.name : json.committer;
+        this.author = null;
+        if (json.author && json.author.name && json.author.emails && json.author.emails[0])
+            this.author = json.author
 
         this.repository_id = json.repository_id;
         this.branch = json.branch;
@@ -147,10 +150,22 @@ class Commit {
         return this.uuid - commit.uuid;
     }
     label() {
-        // Per the birthday paradox, 10% chance of collision with 7.7 million commits with 12 character commits
-        return this.identifier.substring(0,12);
+        const preference = CommitBank._representationCache ? CommitBank._representationCache[this.repository_id].representation : null;
+
+        if (preference === 'identifier' && this.identifier)
+            return this.identifier;
+        if (preference === 'hash' && this.hash) {
+            // Per the birthday paradox, 10% chance of collision with 7.7 million commits with 12 character commits
+            return this.hash.substring(0,12)
+        }
+        if (preference === 'revision' && this.revision)
+            return `r${this.revision}`;
+
+        return this.revision ? `r${this.revision}` : this.hash.substring(0,12);
     }
 };
+
+const COOKIE_NAME = 'commitRepresentation';
 
 class _CommitBank {
     constructor() {
@@ -163,7 +178,45 @@ class _CommitBank {
         this._beginUuid = null;
         this._endUuid = null;
         this.callbacks = [];
+        this._representationCache = null;
+    }
+    commitRepresentations(callback) {
+        if (this._representationCache != null) {
+            callback(this._representationCache)
+            return;
+        }
+        const cookies = decodeURIComponent(document.cookie).split(';')
+        for (let index = 0; index < cookies.length; ++index) {
+            if (cookies[index].indexOf(`${COOKIE_NAME}=`))
+                continue;
 
+            this._representationCache = JSON.parse(cookies[index].substring(COOKIE_NAME.length + 1));
+            callback(this._representationCache);
+            return;
+        }
+
+        fetch('api/commits/representations').then(response => {
+            response.json().then(json => {
+                this._representationCache = {};
+                Object.keys(json).forEach(repository => {
+                    if (!json[repository].length)
+                        return;
+                    this._representationCache[repository] = {
+                        'representation': json[repository][0],
+                        'candidates': json[repository],
+                    }
+                });
+                document.cookie = `${COOKIE_NAME}=${JSON.stringify(this._representationCache)}`;
+                callback(this._representationCache);
+            });
+        }).catch(error => {
+            // If the load fails, log the error and continue
+            console.error(JSON.stringify(error, null, 4));
+        });
+    }
+    setCommitRepresentation(repository, representation) {
+        this._representationCache[repository].representation = representation;
+        document.cookie = `${COOKIE_NAME}=${JSON.stringify(this._representationCache)}`;
     }
     latest(params) {
         this._branches = new Set(params.branch);
@@ -295,7 +348,7 @@ class _CommitBank {
         const query = paramsToQuery({
             branch: [commit.branch],
             repository_id: [commit.repository_id],
-            id: [commit.identifier],
+            ref: [commit.hash ? commit.hash : commit.revision],
         });
         return fetch('api/commits/siblings?' + query).then(response => {
             let self = this;

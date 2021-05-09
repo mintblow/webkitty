@@ -26,6 +26,7 @@
 #import "config.h"
 #import "TestRunnerWKWebView.h"
 
+#import "TestController.h"
 #import "WebKitTestRunnerDraggingInfo.h"
 #import <WebKit/WKUIDelegatePrivate.h>
 #import <WebKit/WKWebViewPrivateForTesting.h>
@@ -136,6 +137,26 @@ IGNORE_WARNINGS_END
     [super dealloc];
 }
 
+- (void)_didShowContextMenu
+{
+    if (self.showingContextMenu)
+        return;
+
+    self.showingContextMenu = YES;
+    if (self.didShowContextMenuCallback)
+        self.didShowContextMenuCallback();
+}
+
+- (void)_didDismissContextMenu
+{
+    if (!self.showingContextMenu)
+        return;
+
+    self.showingContextMenu = NO;
+    if (self.didDismissContextMenuCallback)
+        self.didDismissContextMenuCallback();
+}
+
 - (void)_didShowMenu
 {
     if (self.showingMenu)
@@ -174,6 +195,8 @@ IGNORE_WARNINGS_END
 
 - (void)resetInteractionCallbacks
 {
+    self.didShowContextMenuCallback = nil;
+    self.didDismissContextMenuCallback = nil;
     self.didShowMenuCallback = nil;
     self.didHideMenuCallback = nil;
     self.didShowContactPickerCallback = nil;
@@ -181,8 +204,6 @@ IGNORE_WARNINGS_END
 #if PLATFORM(IOS_FAMILY)
     self.didStartFormControlInteractionCallback = nil;
     self.didEndFormControlInteractionCallback = nil;
-    self.didShowContextMenuCallback = nil;
-    self.didDismissContextMenuCallback = nil;
     self.willBeginZoomingCallback = nil;
     self.didEndZoomingCallback = nil;
     self.didShowKeyboardCallback = nil;
@@ -236,26 +257,6 @@ IGNORE_WARNINGS_END
             [(UIContextMenuInteraction *)interaction dismissMenu];
     }
 #endif
-}
-
-- (void)_didShowContextMenu
-{
-    if (self.showingContextMenu)
-        return;
-
-    self.showingContextMenu = YES;
-    if (self.didShowContextMenuCallback)
-        self.didShowContextMenuCallback();
-}
-
-- (void)_didDismissContextMenu
-{
-    if (!self.showingContextMenu)
-        return;
-
-    self.showingContextMenu = NO;
-    if (self.didDismissContextMenuCallback)
-        self.didDismissContextMenuCallback();
 }
 
 - (BOOL)becomeFirstResponder
@@ -394,6 +395,11 @@ IGNORE_WARNINGS_END
     self.showingPopover = NO;
     if (self.didDismissPopoverCallback)
         self.didDismissPopoverCallback();
+}
+
+- (void)_didNotHandleTapAsMeaningfulClickAtPoint:(CGPoint)point
+{
+    WTR::TestController::singleton().didNotHandleTapAsMeaningfulClick();
 }
 
 - (void)scrollViewWillBeginZooming:(UIScrollView *)scrollView withView:(UIView *)view
@@ -589,6 +595,11 @@ static bool isQuickboardViewController(UIViewController *viewController)
     self.showingContactPicker = NO;
     if (self.didHideContactPickerCallback)
         self.didHideContactPickerCallback();
+}
+
+- (void)_appBoundNavigationDataForDomain:(NSString *)domain completionHandler:(void (^)(NSString * context))completionHandler
+{
+    [super _appBoundNavigationDataForDomain:domain completionHandler:completionHandler];
 }
 
 @end

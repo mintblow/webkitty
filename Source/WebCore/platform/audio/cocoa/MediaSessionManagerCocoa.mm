@@ -38,6 +38,7 @@
 #import "NowPlayingInfo.h"
 #import "PlatformMediaSession.h"
 #import "PlatformStrategies.h"
+#import "SharedBuffer.h"
 #import "VP9UtilitiesCocoa.h"
 #import <wtf/BlockObjCExceptions.h>
 #import <wtf/Function.h>
@@ -56,6 +57,7 @@ std::unique_ptr<PlatformMediaSessionManager> PlatformMediaSessionManager::create
 #endif // !PLATFORM(MAC)
 
 MediaSessionManagerCocoa::MediaSessionManagerCocoa()
+    : m_nowPlayingManager(platformStrategies()->mediaStrategy().createNowPlayingManager())
 {
 #if ENABLE(VP9)
     if (shouldEnableVP9Decoder())
@@ -161,11 +163,7 @@ void MediaSessionManagerCocoa::prepareToSendUserMediaPermissionRequest()
 void MediaSessionManagerCocoa::scheduleSessionStatusUpdate()
 {
     m_taskQueue.enqueueTask([this] () mutable {
-        if (m_remoteCommandListener) {
-            m_remoteCommandListener->setSupportsSeeking(computeSupportsSeeking());
-            m_remoteCommandListener->updateSupportedCommands();
-        }
-
+        m_nowPlayingManager->setSupportsSeeking(computeSupportsSeeking());
         updateNowPlayingInfo();
 
         forEachSession([] (auto& session) {
@@ -190,8 +188,7 @@ void MediaSessionManagerCocoa::sessionDidEndRemoteScrubbing(PlatformMediaSession
 
 void MediaSessionManagerCocoa::addSession(PlatformMediaSession& session)
 {
-    if (!m_remoteCommandListener)
-        m_remoteCommandListener = RemoteCommandListener::create(*this);
+    m_nowPlayingManager->addClient(*this);
 
     if (!m_audioHardwareListener)
         m_audioHardwareListener = AudioHardwareListener::create(*this);
@@ -204,7 +201,7 @@ void MediaSessionManagerCocoa::removeSession(PlatformMediaSession& session)
     PlatformMediaSessionManager::removeSession(session);
 
     if (hasNoSession()) {
-        m_remoteCommandListener = nullptr;
+        m_nowPlayingManager->removeClient(*this);
         m_audioHardwareListener = nullptr;
     }
 
@@ -215,8 +212,7 @@ void MediaSessionManagerCocoa::setCurrentSession(PlatformMediaSession& session)
 {
     PlatformMediaSessionManager::setCurrentSession(session);
 
-    if (m_remoteCommandListener)
-        m_remoteCommandListener->updateSupportedCommands();
+    m_nowPlayingManager->updateSupportedCommands();
 }
 
 void MediaSessionManagerCocoa::sessionWillEndPlayback(PlatformMediaSession& session, DelayCallingUpdateNowPlaying delayCallingUpdateNowPlaying)
@@ -252,18 +248,19 @@ void MediaSessionManagerCocoa::sessionCanProduceAudioChanged()
 
 void MediaSessionManagerCocoa::addSupportedCommand(PlatformMediaSession::RemoteControlCommandType command)
 {
-    if (m_remoteCommandListener)
-        m_remoteCommandListener->addSupportedCommand(command);
+    m_nowPlayingManager->addSupportedCommand(command);
 }
 
 void MediaSessionManagerCocoa::removeSupportedCommand(PlatformMediaSession::RemoteControlCommandType command)
 {
-    if (m_remoteCommandListener)
-        m_remoteCommandListener->removeSupportedCommand(command);
+    m_nowPlayingManager->removeSupportedCommand(command);
 }
 
 void MediaSessionManagerCocoa::clearNowPlayingInfo()
 {
+    if (!isMediaRemoteFrameworkAvailable())
+        return;
+
     if (canLoad_MediaRemote_MRMediaRemoteSetNowPlayingVisibility())
         MRMediaRemoteSetNowPlayingVisibility(MRMediaRemoteGetLocalOrigin(), MRNowPlayingClientVisibilityNeverVisible);
 
@@ -281,6 +278,9 @@ void MediaSessionManagerCocoa::clearNowPlayingInfo()
 
 void MediaSessionManagerCocoa::setNowPlayingInfo(bool setAsNowPlayingApplication, const NowPlayingInfo& nowPlayingInfo)
 {
+    if (!isMediaRemoteFrameworkAvailable())
+        return;
+
     if (setAsNowPlayingApplication)
         MRMediaRemoteSetCanBeNowPlayingApplication(true);
 
@@ -299,13 +299,21 @@ void MediaSessionManagerCocoa::setNowPlayingInfo(bool setAsNowPlayingApplication
     auto cfRate = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &rate));
     CFDictionarySetValue(info.get(), kMRMediaRemoteNowPlayingInfoPlaybackRate, cfRate.get());
 
-    auto lastUpdatedNowPlayingInfoUniqueIdentifier = nowPlayingInfo.uniqueIdentifier.toUInt64();
+    // FIXME: This is a workaround Control Center not updating the artwork when refreshed.
+    // We force the identifier to be reloaded to the new artwork if available.
+    auto lastUpdatedNowPlayingInfoUniqueIdentifier = nowPlayingInfo.artwork ? nowPlayingInfo.artwork->src.hash() : nowPlayingInfo.uniqueIdentifier.toUInt64();
     auto cfIdentifier = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &lastUpdatedNowPlayingInfoUniqueIdentifier));
     CFDictionarySetValue(info.get(), kMRMediaRemoteNowPlayingInfoUniqueIdentifier, cfIdentifier.get());
 
     if (std::isfinite(nowPlayingInfo.currentTime) && nowPlayingInfo.currentTime != MediaPlayer::invalidTime() && nowPlayingInfo.supportsSeeking) {
         auto cfCurrentTime = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &nowPlayingInfo.currentTime));
         CFDictionarySetValue(info.get(), kMRMediaRemoteNowPlayingInfoElapsedTime, cfCurrentTime.get());
+    }
+    if (nowPlayingInfo.artwork) {
+        auto nsArtwork = nowPlayingInfo.artwork->imageData->createNSData();
+        CFDictionarySetValue(info.get(), kMRMediaRemoteNowPlayingInfoArtworkData, nsArtwork.get());
+        CFDictionarySetValue(info.get(), kMRMediaRemoteNowPlayingInfoArtworkMIMEType, nowPlayingInfo.artwork->mimeType.createCFString().get());
+        CFDictionarySetValue(info.get(), kMRMediaRemoteNowPlayingInfoArtworkIdentifier, String::number(nowPlayingInfo.artwork->src.hash()).createCFString().get());
     }
 
     if (canLoad_MediaRemote_MRMediaRemoteSetParentApplication() && !nowPlayingInfo.sourceApplicationIdentifier.isEmpty())
@@ -320,7 +328,7 @@ void MediaSessionManagerCocoa::setNowPlayingInfo(bool setAsNowPlayingApplication
             WTFLogAlways("MRMediaRemoteSetNowPlayingApplicationPlaybackStateForOrigin(playing) failed with error %d", error);
 #endif
     });
-    MRMediaRemoteSetNowPlayingInfo(info.get());
+    MRMediaRemoteSetNowPlayingInfoWithMergePolicy(info.get(), MRMediaRemoteMergePolicyReplace);
 
     if (canLoad_MediaRemote_MRMediaRemoteSetNowPlayingVisibility()) {
         MRNowPlayingClientVisibility visibility = nowPlayingInfo.allowsNowPlayingControlsVisibility ? MRNowPlayingClientVisibilityAlwaysVisible : MRNowPlayingClientVisibilityNeverVisible;
@@ -331,7 +339,7 @@ void MediaSessionManagerCocoa::setNowPlayingInfo(bool setAsNowPlayingApplication
 PlatformMediaSession* MediaSessionManagerCocoa::nowPlayingEligibleSession()
 {
     // FIXME: Fix this layering violation.
-    if (auto element = HTMLMediaElement::bestMediaElementForShowingPlaybackControlsManager(MediaElementSession::PlaybackControlsPurpose::NowPlaying))
+    if (auto element = HTMLMediaElement::bestMediaElementForRemoteControls(MediaElementSession::PlaybackControlsPurpose::NowPlaying))
         return &element->mediaSession();
 
     return nullptr;
@@ -352,7 +360,7 @@ void MediaSessionManagerCocoa::updateNowPlayingInfo()
 
         if (m_registeredAsNowPlayingApplication) {
             ALWAYS_LOG(LOGIDENTIFIER, "clearing now playing info");
-            platformStrategies()->mediaStrategy().clearNowPlayingInfo();
+            m_nowPlayingManager->clearNowPlayingInfo();
         }
 
         m_registeredAsNowPlayingApplication = false;
@@ -361,18 +369,14 @@ void MediaSessionManagerCocoa::updateNowPlayingInfo()
         m_lastUpdatedNowPlayingDuration = NAN;
         m_lastUpdatedNowPlayingElapsedTime = NAN;
         m_lastUpdatedNowPlayingInfoUniqueIdentifier = { };
-        m_nowPlayingInfo = { };
 
         return;
     }
 
     m_haveEverRegisteredAsNowPlayingApplication = true;
 
-    if (m_nowPlayingInfo != nowPlayingInfo) {
-        m_nowPlayingInfo = nowPlayingInfo;
-        platformStrategies()->mediaStrategy().setNowPlayingInfo(!m_registeredAsNowPlayingApplication, *nowPlayingInfo);
-        ALWAYS_LOG(LOGIDENTIFIER, "title = \"", nowPlayingInfo->title, "\", isPlaying = ", nowPlayingInfo->isPlaying, ", duration = ", nowPlayingInfo->duration, ", now = ", nowPlayingInfo->currentTime, ", id = ", nowPlayingInfo->uniqueIdentifier.toUInt64(), ", registered = ", m_registeredAsNowPlayingApplication);
-    }
+    if (m_nowPlayingManager->setNowPlayingInfo(*nowPlayingInfo))
+        ALWAYS_LOG(LOGIDENTIFIER, "title = \"", nowPlayingInfo->title, "\", isPlaying = ", nowPlayingInfo->isPlaying, ", duration = ", nowPlayingInfo->duration, ", now = ", nowPlayingInfo->currentTime, ", id = ", nowPlayingInfo->uniqueIdentifier.toUInt64(), ", registered = ", m_registeredAsNowPlayingApplication, ", src = \"", nowPlayingInfo->artwork ? nowPlayingInfo->artwork->src : String(), "\"");
 
     if (!m_registeredAsNowPlayingApplication) {
         m_registeredAsNowPlayingApplication = true;

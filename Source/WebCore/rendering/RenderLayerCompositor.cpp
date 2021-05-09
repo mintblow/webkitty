@@ -676,6 +676,11 @@ void RenderLayerCompositor::flushLayersSoon(GraphicsLayerUpdater&)
     scheduleRenderingUpdate();
 }
 
+DisplayRefreshMonitorFactory* RenderLayerCompositor::displayRefreshMonitorFactory()
+{
+    return page().chrome().client().displayRefreshMonitorFactory();
+}
+
 void RenderLayerCompositor::layerTiledBackingUsageChanged(const GraphicsLayer* graphicsLayer, bool usingTiledBacking)
 {
     if (usingTiledBacking) {
@@ -1682,19 +1687,18 @@ void RenderLayerCompositor::layerStyleChanged(StyleDifference diff, RenderLayer&
         }
     }
 
-    if (diff == StyleDifference::RecompositeLayer && layer.isComposited()) {
-        if (oldStyle && oldStyle->pointerEvents() != newStyle.pointerEvents())
-            layer.setNeedsCompositingConfigurationUpdate();
-        else if (is<RenderWidget>(layer.renderer())) {
-            // This is necessary to get iframe layers hooked up in response to scheduleInvalidateStyleAndLayerComposition().
-            layer.setNeedsCompositingConfigurationUpdate();
+    if (diff >= StyleDifference::RecompositeLayer) {
+        if (layer.isComposited()) {
+            if (is<RenderWidget>(layer.renderer()) || (oldStyle && oldStyle->pointerEvents() != newStyle.pointerEvents())) {
+                // For RenderWidgets this is necessary to get iframe layers hooked up in response to scheduleInvalidateStyleAndLayerComposition().
+                layer.setNeedsCompositingConfigurationUpdate();
+            }
         }
-    }
-
-    if (diff >= StyleDifference::RecompositeLayer && oldStyle && recompositeChangeRequiresGeometryUpdate(*oldStyle, newStyle)) {
-        // FIXME: transform changes really need to trigger layout. See RenderElement::adjustStyleDifference().
-        layer.setNeedsPostLayoutCompositingUpdate();
-        layer.setNeedsCompositingGeometryUpdate();
+        if (oldStyle && recompositeChangeRequiresGeometryUpdate(*oldStyle, newStyle)) {
+            // FIXME: transform changes really need to trigger layout. See RenderElement::adjustStyleDifference().
+            layer.setNeedsPostLayoutCompositingUpdate();
+            layer.setNeedsCompositingGeometryUpdate();
+        }
     }
 }
 
@@ -2226,7 +2230,7 @@ FloatPoint RenderLayerCompositor::positionForClipLayer() const
     auto& frameView = m_renderView.frameView();
 
     return FloatPoint(
-        frameView.shouldPlaceBlockDirectionScrollbarOnLeft() ? frameView.horizontalScrollbarIntrusion() : 0,
+        frameView.shouldPlaceVerticalScrollbarOnLeft() ? frameView.horizontalScrollbarIntrusion() : 0,
         FrameView::yPositionForInsetClipLayer(frameView.scrollPosition(), frameView.topContentInset()));
 }
 
@@ -2266,18 +2270,37 @@ void RenderLayerCompositor::rootLayerConfigurationChanged()
     }
 }
 
-String RenderLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
+void RenderLayerCompositor::updateCompositingForLayerTreeAsTextDump()
 {
-    LOG_WITH_STREAM(Compositing, stream << "RenderLayerCompositor " << this << " layerTreeAsText");
+    auto& frameView = m_renderView.frameView();
+    frameView.updateLayoutAndStyleIfNeededRecursive();
+    
+    updateEventRegions();
+
+    for (auto* child = frameView.frame().tree().firstRenderedChild(); child; child = child->tree().traverseNextRendered()) {
+        if (auto* renderer = child->contentRenderer())
+            renderer->compositor().updateEventRegions();
+    }
+
     updateCompositingLayers(CompositingUpdateType::AfterLayout);
 
     if (!m_rootContentsLayer)
-        return String();
+        return;
 
     flushPendingLayerChanges(true);
     // We need to trigger an update because the flushPendingLayerChanges() will have pushed changes to platform layers,
     // which may cause painting to happen in the current runloop.
     page().triggerRenderingUpdateForTesting();
+}
+
+String RenderLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
+{
+    LOG_WITH_STREAM(Compositing, stream << "RenderLayerCompositor " << this << " layerTreeAsText");
+
+    updateCompositingForLayerTreeAsTextDump();
+
+    if (!m_rootContentsLayer)
+        return String();
 
     LayerTreeAsTextBehavior layerTreeBehavior = LayerTreeAsTextBehaviorNormal;
     if (flags & LayerTreeFlagsIncludeDebugInfo)
@@ -2320,6 +2343,22 @@ String RenderLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
         return m_renderView.frameView().trackedRepaintRectsAsText() + layerTreeText;
 
     return layerTreeText;
+}
+
+Optional<String> RenderLayerCompositor::platformLayerTreeAsText(Element& element, OptionSet<PlatformLayerTreeAsTextFlags> flags)
+{
+    LOG_WITH_STREAM(Compositing, stream << "RenderLayerCompositor " << this << " platformLayerTreeAsText");
+
+    updateCompositingForLayerTreeAsTextDump();
+    if (!element.renderer() || !element.renderer()->hasLayer())
+        return WTF::nullopt;
+
+    auto& layerModelObject = downcast<RenderLayerModelObject>(*element.renderer());
+    if (!layerModelObject.layer()->isComposited())
+        return WTF::nullopt;
+
+    auto* backing = layerModelObject.layer()->backing();
+    return backing->graphicsLayer()->platformLayerTreeAsText(flags);
 }
 
 static RenderView* frameContentsRenderView(RenderWidget& renderer)
@@ -3887,6 +3926,8 @@ void RenderLayerCompositor::updateLayerForOverhangAreasBackgroundColor()
     Color backgroundColor;
     if (page().settings().useThemeColorForScrollAreaBackgroundColor())
         backgroundColor = page().themeColor();
+    if (page().settings().useSampledPageTopColorForScrollAreaBackgroundColor() && !backgroundColor.isValid())
+        backgroundColor = page().sampledPageTopColor();
     if (!backgroundColor.isValid())
         backgroundColor = m_rootExtendedBackgroundColor;
 
@@ -3969,7 +4010,7 @@ void RenderLayerCompositor::rootBackgroundColorOrTransparencyChanged()
     m_rootExtendedBackgroundColor = extendedBackgroundColor;
     
     if (extendedBackgroundColorChanged) {
-        page().chrome().client().pageExtendedBackgroundColorDidChange(m_rootExtendedBackgroundColor);
+        page().chrome().client().pageExtendedBackgroundColorDidChange();
         
 #if ENABLE(RUBBER_BANDING)
         updateLayerForOverhangAreasBackgroundColor();
@@ -4909,8 +4950,7 @@ void RenderLayerCompositor::updateSynchronousScrollingNodes()
         if (!layer)
             continue;
 
-        auto scrollingScope = relevantScrollingScope(renderer, *layer);
-        if (scrollingScope != rootScrollingScope) {
+        if (auto scrollingScope = relevantScrollingScope(renderer, *layer); scrollingScope && scrollingScope != rootScrollingScope) {
             auto enclosingScrollingNodeID = asyncScrollableContainerNodeID(renderer);
             ASSERT(enclosingScrollingNodeID);
             
@@ -4980,14 +5020,6 @@ ScrollingCoordinator* RenderLayerCompositor::scrollingCoordinator() const
 GraphicsLayerFactory* RenderLayerCompositor::graphicsLayerFactory() const
 {
     return page().chrome().client().graphicsLayerFactory();
-}
-
-RefPtr<DisplayRefreshMonitor> RenderLayerCompositor::createDisplayRefreshMonitor(PlatformDisplayID displayID) const
-{
-    if (auto monitor = page().chrome().client().createDisplayRefreshMonitor(displayID))
-        return monitor;
-
-    return DisplayRefreshMonitor::createDefaultDisplayRefreshMonitor(displayID);
 }
 
 #if ENABLE(CSS_SCROLL_SNAP)

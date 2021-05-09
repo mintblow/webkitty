@@ -94,7 +94,6 @@
 #include <WebCore/LayoutPoint.h>
 #include <WebCore/LayoutSize.h>
 #include <WebCore/MediaControlsContextMenuItem.h>
-#include <WebCore/MediaPlaybackTargetContext.h>
 #include <WebCore/MediaProducer.h>
 #include <WebCore/PageIdentifier.h>
 #include <WebCore/PlatformEvent.h>
@@ -109,9 +108,11 @@
 #include <WebCore/TextChecking.h>
 #include <WebCore/TextGranularity.h>
 #include <WebCore/TextManipulationController.h>
+#include <WebCore/TranslationContextMenuInfo.h>
 #include <WebCore/UserInterfaceLayoutDirection.h>
 #include <WebCore/ViewportArguments.h>
 #include <memory>
+#include <pal/HysteresisActivity.h>
 #include <wtf/CompletionHandler.h>
 #include <wtf/FileSystem.h>
 #include <wtf/HashMap.h>
@@ -128,6 +129,10 @@
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
+#if ENABLE(WIRELESS_PLAYBACK_TARGET)
+#include <WebCore/MediaPlaybackTargetContext.h>
+#endif
+
 #if PLATFORM(IOS_FAMILY)
 #include "GestureTypes.h"
 #include "WebAutocorrectionContext.h"
@@ -137,10 +142,6 @@
 #if PLATFORM(MACCATALYST)
 #include "EndowmentStateTracker.h"
 #endif
-
-OBJC_CLASS NSTextAlternatives;
-OBJC_CLASS NSView;
-OBJC_CLASS _WKRemoteObjectRegistry;
 
 #if ENABLE(DRAG_SUPPORT)
 #include <WebCore/DragActions.h>
@@ -153,6 +154,7 @@ OBJC_CLASS _WKRemoteObjectRegistry;
 #if PLATFORM(COCOA)
 #include "DynamicViewportSizeUpdate.h"
 #include "RemoteLayerTreeNode.h"
+#include <wtf/WeakObjCPtr.h>
 #endif
 
 #if HAVE(TOUCH_BAR)
@@ -183,6 +185,10 @@ interface ID3D11Device1;
 
 #if ENABLE(MEDIA_USAGE)
 #include <WebCore/MediaSessionIdentifier.h>
+#endif
+
+#if ENABLE(WEBXR) && PLATFORM(COCOA)
+#include "PlatformXRSystem.h"
 #endif
 
 #if USE(APPLE_INTERNAL_SDK)
@@ -218,10 +224,19 @@ class Decoder;
 class FormDataReference;
 class SharedBufferCopy;
 }
+
+#if PLATFORM(COCOA)
 OBJC_CLASS NSFileWrapper;
+OBJC_CLASS NSMenu;
+OBJC_CLASS NSTextAlternatives;
+OBJC_CLASS NSView;
 OBJC_CLASS WKQLThumbnailLoadOperation;
+OBJC_CLASS WKWebView;
+OBJC_CLASS _WKRemoteObjectRegistry;
+#endif
 
 namespace WebCore {
+
 class AuthenticationChallenge;
 class CertificateInfo;
 class Cursor;
@@ -246,6 +261,7 @@ enum class EventMakesGamepadsVisible : bool;
 enum class LockBackForwardList : bool;
 enum class HasInsecureContent : bool;
 enum class HighlightRequestOriginatedInApp : bool;
+enum class HighlightVisibility : bool;
 enum class MouseEventPolicy : uint8_t;
 enum class NotificationDirection : uint8_t;
 enum class RouteSharingPolicy : uint8_t;
@@ -293,6 +309,7 @@ enum class DataOwnerType : uint8_t;
 
 template<typename> class RectEdges;
 using FloatBoxExtent = RectEdges<float>;
+
 }
 
 #if PLATFORM(GTK)
@@ -312,7 +329,7 @@ typedef HWND PlatformViewWidget;
 #endif
 
 namespace WebKit {
-struct AppBoundNavigationTestingData;
+
 class AudioSessionRoutingArbitratorProxy;
 class DrawingAreaProxy;
 class GamepadData;
@@ -322,10 +339,12 @@ class NativeWebKeyboardEvent;
 class NativeWebMouseEvent;
 class NativeWebWheelEvent;
 class PageClient;
+class MediaSessionCoordinatorProxyPrivate;
 class ProvisionalPageProxy;
 class RemoteLayerTreeHost;
 class RemoteLayerTreeScrollingPerformanceData;
 class RemoteLayerTreeTransaction;
+class RemoteMediaSessionCoordinatorProxy;
 class RemoteScrollingCoordinatorProxy;
 class SecKeyProxyStore;
 class SpeechRecognitionPermissionManager;
@@ -358,7 +377,7 @@ class WebWheelEvent;
 class WebWheelEventCoalescer;
 class WebsiteDataStore;
 
-struct WebBackForwardListCounts;
+struct AppBoundNavigationTestingData;
 struct ColorSpaceData;
 struct DataDetectionResult;
 struct DocumentEditingContext;
@@ -379,13 +398,14 @@ struct PlatformPopupMenuData;
 struct PrintInfo;
 struct PDFContextMenu;
 struct ResourceLoadInfo;
+struct URLSchemeTaskParameters;
+struct UserMessage;
 struct WebAutocorrectionData;
+struct WebBackForwardListCounts;
 struct WebHitTestResultData;
 struct WebNavigationDataStore;
 struct WebPopupItem;
 struct WebSpeechSynthesisVoice;
-struct URLSchemeTaskParameters;
-struct UserMessage;
 
 enum class NegotiatedLegacyTLS : bool;
 enum class ProcessSwapRequestedByClient : bool;
@@ -413,7 +433,7 @@ class WebDateTimePicker;
 
 using SpellDocumentTag = int64_t;
 
-class WebPageProxy : public API::ObjectImpl<API::Object::Type::Page>
+class WebPageProxy final : public API::ObjectImpl<API::Object::Type::Page>
 #if ENABLE(INPUT_TYPE_COLOR)
     , public WebColorPicker::Client
 #endif
@@ -485,7 +505,7 @@ public:
     void didEnterFullscreen();
     void didExitFullscreen();
 
-    WebInspectorProxy* inspector() const;
+    WebInspectorUIProxy* inspector() const;
     GeolocationPermissionRequestManagerProxy& geolocationPermissionRequestManager() { return m_geolocationPermissionRequestManager; }
 
     void resourceLoadDidSendRequest(ResourceLoadInfo&&, WebCore::ResourceRequest&&);
@@ -577,6 +597,8 @@ public:
     void setDrawingArea(std::unique_ptr<DrawingAreaProxy>&&);
 
     WeakPtr<SecKeyProxyStore> secKeyProxyStore(const WebCore::AuthenticationChallenge&);
+
+    void makeViewBlankIfUnpaintedSinceLastLoadCommit();
         
     void close();
     bool tryClose();
@@ -634,7 +656,7 @@ public:
     float topContentInset() const { return m_topContentInset; }
     void setTopContentInset(float);
 
-    // Corresponds to the web content's `<meta name="theme-color" content="...">`.
+    // Corresponds to the web content's `<meta name="theme-color">` or application manifest's `"theme_color"`.
     WebCore::Color themeColor() const { return m_themeColor; }
 
     WebCore::Color underlayColor() const { return m_underlayColor; }
@@ -644,6 +666,8 @@ public:
     // from the UIProcess, or by didCommitLayerTree(). When PLATFORM(MAC) adopts UI side compositing, we should get rid of
     // the message entirely.
     WebCore::Color pageExtendedBackgroundColor() const { return m_pageExtendedBackgroundColor; }
+
+    WebCore::Color sampledPageTopColor() const { return m_sampledPageTopColor; }
 
     WebCore::Color scrollAreaBackgroundColor() const;
 
@@ -712,7 +736,7 @@ public:
     bool isEditable() const { return m_isEditable; }
 
     void activateMediaStreamCaptureInPage();
-    bool isMediaStreamCaptureMuted() const { return m_mutedState & WebCore::MediaProducer::MediaStreamCaptureIsMuted; }
+    bool isMediaStreamCaptureMuted() const { return m_mutedState.containsAny(WebCore::MediaProducer::MediaStreamCaptureIsMuted); }
     void setMediaStreamCaptureMuted(bool);
 
     void requestFontAttributesAtSelectionStart(CompletionHandler<void(const WebCore::FontAttributes&)>&&);
@@ -805,6 +829,7 @@ public:
     void applicationWillEnterForegroundForMedia();
     void commitPotentialTapFailed();
     void didNotHandleTapAsClick(const WebCore::IntPoint&);
+    void didNotHandleTapAsMeaningfulClickAtPoint(const WebCore::IntPoint&);
     void didCompleteSyntheticClick();
     void disableDoubleTapGesturesDuringTapIfNecessary(uint64_t requestID);
     void handleSmartMagnificationInformationForPotentialTap(uint64_t requestID, const WebCore::FloatRect& renderRect, bool fitEntireRect, double viewportMinimumScale, double viewportMaximumScale, bool nodeIsRootLevel);
@@ -818,8 +843,8 @@ public:
     double minimumEffectiveDeviceWidth() const { return m_viewportConfigurationMinimumEffectiveDeviceWidth; }
     void setMinimumEffectiveDeviceWidthWithoutViewportConfigurationUpdate(double minimumEffectiveDeviceWidth) { m_viewportConfigurationMinimumEffectiveDeviceWidth = minimumEffectiveDeviceWidth; }
     void setIsScrollingOrZooming(bool);
-    void requestRectsForGranularityWithSelectionOffset(WebCore::TextGranularity, uint32_t offset, CompletionHandler<void(const Vector<WebCore::SelectionRect>&)>&&);
-    void requestRectsAtSelectionOffsetWithText(int32_t offset, const String&, CompletionHandler<void(const Vector<WebCore::SelectionRect>&)>&&);
+    void requestRectsForGranularityWithSelectionOffset(WebCore::TextGranularity, uint32_t offset, CompletionHandler<void(const Vector<WebCore::SelectionGeometry>&)>&&);
+    void requestRectsAtSelectionOffsetWithText(int32_t offset, const String&, CompletionHandler<void(const Vector<WebCore::SelectionGeometry>&)>&&);
     void autofillLoginCredentials(const String& username, const String& password);
     void storeSelectionForAccessibility(bool);
     void startAutoscrollAtPosition(const WebCore::FloatPoint& positionInWindow);
@@ -1211,13 +1236,16 @@ public:
 #endif
 
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
-    void didCreateContextForVisibilityPropagation(LayerHostingContextID);
+    void didCreateContextInWebProcessForVisibilityPropagation(LayerHostingContextID);
+    LayerHostingContextID contextIDForVisibilityPropagationInWebProcess() const { return m_contextIDForVisibilityPropagationInWebProcess; }
+#if ENABLE(GPU_PROCESS)
     void didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID);
-    LayerHostingContextID contextIDForVisibilityPropagation() const { return m_contextIDForVisibilityPropagation; }
+    LayerHostingContextID contextIDForVisibilityPropagationInGPUProcess() const { return m_contextIDForVisibilityPropagationInGPUProcess; }
+#endif
 #endif
 
 #if ENABLE(GPU_PROCESS)
-    void gpuProcessCrashed();
+    void gpuProcessExited(GPUProcessTerminationReason);
 #endif
 
     virtual void enterAcceleratedCompositingMode(const LayerTreeContext&);
@@ -1339,7 +1367,7 @@ public:
 
     void setMediaVolume(float);
     void setMuted(WebCore::MediaProducer::MutedStateFlags, CompletionHandler<void()>&& = [] { });
-    bool isAudioMuted() const { return m_mutedState & WebCore::MediaProducer::AudioIsMuted; };
+    bool isAudioMuted() const { return m_mutedState.contains(WebCore::MediaProducer::MutedState::AudioIsMuted); };
     void setMayStartMediaWhenInWindow(bool);
     bool mayStartMediaWhenInWindow() const { return m_mayStartMediaWhenInWindow; }
     void setMediaCaptureEnabled(bool);
@@ -1357,7 +1385,7 @@ public:
 #endif
 
     // WebPopupMenuProxy::Client
-    NativeWebMouseEvent* currentlyProcessedMouseDownEvent() override;
+    NativeWebMouseEvent* currentlyProcessedMouseDownEvent() final;
 
     void setSuppressVisibilityUpdates(bool flag);
     bool suppressVisibilityUpdates() { return m_suppressVisibilityUpdates; }
@@ -1403,7 +1431,7 @@ public:
 
     void didReceiveAuthenticationChallengeProxy(Ref<AuthenticationChallengeProxy>&&, NegotiatedLegacyTLS);
     void negotiatedLegacyTLS();
-    void didNegotiateModernTLS(const WebCore::AuthenticationChallenge&);
+    void didNegotiateModernTLS(const URL&);
 
     SpellDocumentTag spellDocumentTag();
 
@@ -1426,7 +1454,7 @@ public:
     void recordAutomaticNavigationSnapshot();
     void suppressNextAutomaticNavigationSnapshot() { m_shouldSuppressNextAutomaticNavigationSnapshot = true; }
     void recordNavigationSnapshot(WebBackForwardListItem&);
-    void requestFocusedElementInformation(CompletionHandler<void(const FocusedElementInformation&)>&&);
+    void requestFocusedElementInformation(CompletionHandler<void(const Optional<FocusedElementInformation>&)>&&);
 
 #if PLATFORM(COCOA) || PLATFORM(GTK)
     RefPtr<ViewSnapshot> takeViewSnapshot(Optional<WebCore::IntRect>&&);
@@ -1450,17 +1478,17 @@ public:
 
     bool isShowingNavigationGestureSnapshot() const { return m_isShowingNavigationGestureSnapshot; }
 
-    bool isPlayingAudio() const { return !!(m_mediaState & WebCore::MediaProducer::IsPlayingAudio); }
+    bool isPlayingAudio() const { return !!(m_mediaState & WebCore::MediaProducer::MediaState::IsPlayingAudio); }
     void isPlayingMediaDidChange(WebCore::MediaProducer::MediaStateFlags, uint64_t);
     void updateReportedMediaCaptureState();
 
     enum class CanDelayNotification { No, Yes };
     void updatePlayingMediaDidChange(WebCore::MediaProducer::MediaStateFlags, CanDelayNotification = CanDelayNotification::No);
-    bool isCapturingAudio() const { return m_mediaState & WebCore::MediaProducer::AudioCaptureMask; }
-    bool isCapturingVideo() const { return m_mediaState & WebCore::MediaProducer::VideoCaptureMask; }
-    bool hasActiveAudioStream() const { return m_mediaState & WebCore::MediaProducer::HasActiveAudioCaptureDevice; }
-    bool hasActiveVideoStream() const { return m_mediaState & WebCore::MediaProducer::HasActiveVideoCaptureDevice; }
-    WebCore::MediaProducer::MediaStateFlags reportedMediaState() const { return m_reportedMediaCaptureState | (m_mediaState & ~WebCore::MediaProducer::MediaCaptureMask); }
+    bool isCapturingAudio() const { return m_mediaState.containsAny(WebCore::MediaProducer::AudioCaptureMask); }
+    bool isCapturingVideo() const { return m_mediaState.containsAny(WebCore::MediaProducer::VideoCaptureMask); }
+    bool hasActiveAudioStream() const { return m_mediaState.containsAny(WebCore::MediaProducer::MediaState::HasActiveAudioCaptureDevice); }
+    bool hasActiveVideoStream() const { return m_mediaState.containsAny(WebCore::MediaProducer::MediaState::HasActiveVideoCaptureDevice); }
+    WebCore::MediaProducer::MediaStateFlags reportedMediaState() const { return m_reportedMediaCaptureState | (m_mediaState - WebCore::MediaProducer::MediaCaptureMask); }
     WebCore::MediaProducer::MutedStateFlags mutedStateFlags() const { return m_mutedState; }
 
     void handleAutoplayEvent(WebCore::AutoplayEvent, OptionSet<WebCore::AutoplayEventFlags>);
@@ -1511,6 +1539,14 @@ public:
     void logDiagnosticMessageWithValue(const String& message, const String& description, double value, unsigned significantFigures, WebCore::ShouldSample);
     void logDiagnosticMessageWithEnhancedPrivacy(const String& message, const String& description, WebCore::ShouldSample);
     void logDiagnosticMessageWithValueDictionary(const String& message, const String& description, const WebCore::DiagnosticLoggingClient::ValueDictionary&, WebCore::ShouldSample);
+    void logDiagnosticMessageWithDomain(const String& message, WebCore::DiagnosticLoggingDomain);
+
+    void logDiagnosticMessageFromWebProcess(const String& message, const String& description, WebCore::ShouldSample);
+    void logDiagnosticMessageWithResultFromWebProcess(const String& message, const String& description, uint32_t result, WebCore::ShouldSample);
+    void logDiagnosticMessageWithValueFromWebProcess(const String& message, const String& description, double value, unsigned significantFigures, WebCore::ShouldSample);
+    void logDiagnosticMessageWithEnhancedPrivacyFromWebProcess(const String& message, const String& description, WebCore::ShouldSample);
+    void logDiagnosticMessageWithValueDictionaryFromWebProcess(const String& message, const String& description, const WebCore::DiagnosticLoggingClient::ValueDictionary&, WebCore::ShouldSample);
+    void logDiagnosticMessageWithDomainFromWebProcess(const String& message, WebCore::DiagnosticLoggingDomain);
 
     // Performance logging.
     void logScrollingEvent(uint32_t eventType, MonotonicTime, uint64_t);
@@ -1539,7 +1575,7 @@ public:
     void showPlaybackTargetPicker(WebCore::PlaybackTargetClientContextIdentifier, const WebCore::FloatRect&, bool hasVideo);
     void playbackTargetPickerClientStateDidChange(WebCore::PlaybackTargetClientContextIdentifier, WebCore::MediaProducer::MediaStateFlags);
     void setMockMediaPlaybackTargetPickerEnabled(bool);
-    void setMockMediaPlaybackTargetPickerState(const String&, WebCore::MediaPlaybackTargetContext::State);
+    void setMockMediaPlaybackTargetPickerState(const String&, WebCore::MediaPlaybackTargetContext::MockState);
     void mockMediaPlaybackTargetPickerDismissPopup();
 
     // WebMediaSessionManagerClient
@@ -1600,7 +1636,7 @@ public:
     void createSandboxExtensionsIfNeeded(const Vector<String>& files, SandboxExtension::Handle& fileReadHandle, SandboxExtension::HandleArray& fileUploadHandles);
 #endif
     void editorStateChanged(const EditorState&);
-    void updateEditorState(const EditorState&);
+    bool updateEditorState(const EditorState& newEditorState);
     void scheduleFullEditorStateUpdate();
     void dispatchDidUpdateEditorState();
 
@@ -1625,11 +1661,12 @@ public:
 #if ENABLE(IMAGE_EXTRACTION)
     void requestImageExtraction(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::ImageExtractionResult&&)>&&);
     void updateWithImageExtractionResult(WebCore::ImageExtractionResult&&, const WebCore::ElementContext&, const WebCore::FloatPoint& location, CompletionHandler<void(bool textExistsAtLocation)>&&);
+    void computeCanRevealImage(const URL& imageURL, ShareableBitmap& imageBitmap, CompletionHandler<void(bool)>&&);
 #endif
 
-#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
     void showMediaControlsContextMenu(WebCore::FloatRect&&, Vector<WebCore::MediaControlsContextMenuItem>&&, CompletionHandler<void(WebCore::MediaControlsContextMenuItem::ID)>&&);
-#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
 
     static WebPageProxy* nonEphemeralWebPageProxy();
 
@@ -1643,8 +1680,8 @@ public:
 #if HAVE(QUICKLOOK_THUMBNAILING)
     void updateAttachmentIcon(const String&, const RefPtr<ShareableBitmap>&);
     void requestThumbnailWithPath(const String&, const String&);
-    void requestThumbnailWithFileWrapper(NSFileWrapper*, const String&);
-    void requestThumbnailWithOperation(WKQLThumbnailLoadOperation*);
+    void requestThumbnailWithFileWrapper(NSFileWrapper *, const String&);
+    void requestThumbnailWithOperation(WKQLThumbnailLoadOperation *);
 #endif
     enum class ShouldUpdateAttachmentAttributes : bool { No, Yes };
     ShouldUpdateAttachmentAttributes willUpdateAttachmentAttributes(const API::Attachment&);
@@ -1706,7 +1743,7 @@ public:
     void simulateResourceLoadStatisticsSessionRestart(CompletionHandler<void()>&&);
     void setPrivateClickMeasurementTokenPublicKeyURLForTesting(const URL&, CompletionHandler<void()>&&);
     void setPrivateClickMeasurementTokenSignatureURLForTesting(const URL&, CompletionHandler<void()>&&);
-    void setPrivateClickMeasurementAttributionReportURLForTesting(const URL&, CompletionHandler<void()>&&);
+    void setPrivateClickMeasurementAttributionReportURLsForTesting(const URL& sourceURL, const URL& destinationURL, CompletionHandler<void()>&&);
     void markPrivateClickMeasurementsAsExpiredForTesting(CompletionHandler<void()>&&);
     void setPCMFraudPreventionValuesForTesting(const String& unlinkableToken, const String& secretToken, const String& signature, const String& keyID, CompletionHandler<void()>&&);
 
@@ -1735,8 +1772,8 @@ public:
 
     // IPC::MessageReceiver
     // Implemented in generated WebPageProxyMessageReceiver.cpp
-    void didReceiveMessage(IPC::Connection&, IPC::Decoder&) override;
-    bool didReceiveSyncMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&) override;
+    void didReceiveMessage(IPC::Connection&, IPC::Decoder&) final;
+    bool didReceiveSyncMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&) final;
 
     void requestStorageSpace(WebCore::FrameIdentifier, const String& originIdentifier, const String& databaseName, const String& displayName, uint64_t currentQuota, uint64_t currentOriginUsage, uint64_t currentDatabaseUsage, uint64_t expectedUsage, WTF::CompletionHandler<void(uint64_t)>&&);
 
@@ -1805,6 +1842,10 @@ public:
     void grantAccessToCurrentPasteboardData(const String& pasteboardName);
 #endif
 
+#if PLATFORM(MAC)
+    NSMenu *platformActiveContextMenu() const;
+#endif
+
 #if ENABLE(CONTEXT_MENUS)
     void platformDidSelectItemFromActiveContextMenu(const WebContextMenuItemData&);
 #endif
@@ -1850,7 +1891,8 @@ public:
 #if ENABLE(APP_HIGHLIGHTS)
     void createAppHighlightInSelectedRange(WebCore::CreateNewGroupForHighlight, WebCore::HighlightRequestOriginatedInApp);
     void storeAppHighlight(const WebCore::AppHighlight&);
-    void restoreAppHighlights(const Vector<Ref<WebKit::SharedMemory>>& highlights);
+    void restoreAppHighlightsAndScrollToIndex(const Vector<Ref<WebKit::SharedMemory>>& highlights, const Optional<unsigned> index);
+    void setAppHighlightsVisibility(const WebCore::HighlightVisibility);
 #endif
 
 #if ENABLE(MEDIA_STREAM)
@@ -1868,8 +1910,13 @@ public:
     void resetImageExtractionPreview();
 #endif
 
-#if HAVE(TRANSLATION_UI_SERVICES)
+#if HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
     bool canHandleContextMenuTranslation() const;
+    void handleContextMenuTranslation(const WebCore::TranslationContextMenuInfo&);
+#endif
+
+#if ENABLE(MEDIA_SESSION_COORDINATOR)
+    void createMediaSessionCoordinator(Ref<MediaSessionCoordinatorProxyPrivate>&&, CompletionHandler<void(bool)>&&);
 #endif
 
 #if PLATFORM(COCOA)
@@ -1877,7 +1924,14 @@ public:
     void lastNavigationWasAppBound(CompletionHandler<void(bool)>&&);
     void appBoundNavigationData(CompletionHandler<void(const AppBoundNavigationTestingData&)>&&);
     void clearAppBoundNavigationData(CompletionHandler<void()>&&);
+
+    NSDictionary *contentsOfUserInterfaceItem(NSString *userInterfaceItem);
+
+    RetainPtr<WKWebView> cocoaView();
+    void setCocoaView(WKWebView *);
 #endif
+
+    bool isRunningModalJavaScriptDialog() const { return m_isRunningModalJavaScriptDialog; }
 
 private:
     WebPageProxy(PageClient&, WebProcessProxy&, Ref<API::PageConfiguration>&&);
@@ -1907,15 +1961,15 @@ private:
     void setUserAgent(String&&);
 
     // IPC::MessageSender
-    bool sendMessage(UniqueRef<IPC::Encoder>&&, OptionSet<IPC::SendOption>, Optional<std::pair<CompletionHandler<void(IPC::Decoder*)>, uint64_t>>&&) override;
-    IPC::Connection* messageSenderConnection() const override;
-    uint64_t messageSenderDestinationID() const override;
+    bool sendMessage(UniqueRef<IPC::Encoder>&&, OptionSet<IPC::SendOption>, Optional<std::pair<CompletionHandler<void(IPC::Decoder*)>, uint64_t>>&&) final;
+    IPC::Connection* messageSenderConnection() const final;
+    uint64_t messageSenderDestinationID() const final;
 
     // WebPopupMenuProxy::Client
-    void valueChangedForPopupMenu(WebPopupMenuProxy*, int32_t newSelectedIndex) override;
-    void setTextFromItemForPopupMenu(WebPopupMenuProxy*, int32_t index) override;
+    void valueChangedForPopupMenu(WebPopupMenuProxy*, int32_t newSelectedIndex) final;
+    void setTextFromItemForPopupMenu(WebPopupMenuProxy*, int32_t index) final;
 #if PLATFORM(GTK)
-    void failedToShowPopupMenu() override;
+    void failedToShowPopupMenu() final;
 #endif
 
 #if ENABLE(POINTER_LOCK)
@@ -2050,6 +2104,7 @@ private:
     void didChangePageCount(unsigned);
     void themeColorChanged(const WebCore::Color&);
     void pageExtendedBackgroundColorDidChange(const WebCore::Color&);
+    void sampledPageTopColorChanged(const WebCore::Color&);
 #if ENABLE(NETSCAPE_PLUGIN_API)
     void didFailToInitializePlugin(const String& mimeType, const String& frameURLString, const String& pageURLString);
     void didBlockInsecurePluginVersion(const String& mimeType, const String& pluginURLString, const String& frameURLString, const String& pageURLString, bool replacementObscured);
@@ -2081,8 +2136,8 @@ private:
 
 #if ENABLE(INPUT_TYPE_COLOR)
     void showColorPicker(const WebCore::Color& initialColor, const WebCore::IntRect&, Vector<WebCore::Color>&&);
-    void didChooseColor(const WebCore::Color&) override;
-    void didEndColorPicker() override;
+    void didChooseColor(const WebCore::Color&) final;
+    void didEndColorPicker() final;
 #endif
 
 #if ENABLE(DATALIST_ELEMENT)
@@ -2171,7 +2226,6 @@ private:
 #endif
 
     void stopMakingViewBlankDueToLackOfRenderingUpdate();
-    void makeViewBlankIfUnpaintedSinceLastLoadCommit();
 
     // Spelling and grammar.
     void checkSpellingOfString(const String& text, CompletionHandler<void(int32_t misspellingLocation, int32_t misspellingLength)>&&);
@@ -2191,8 +2245,8 @@ private:
     void discardQueuedMouseEvents();
 
     void didReceiveEvent(uint32_t opaqueType, bool handled);
-#if PLATFORM(MAC)
     void didUpdateRenderingAfterCommittingLoad();
+#if PLATFORM(MAC)
     void fontAtSelectionCallback(const FontInfo&, double, bool, CallbackID);
 #endif
 #if PLATFORM(IOS_FAMILY)
@@ -2252,7 +2306,6 @@ private:
     void updateInputContextAfterBlurringAndRefocusingElement();
     void focusedElementDidChangeInputMode(WebCore::InputMode);
     void didReleaseAllTouchPoints();
-    void didUpdateEditorState();
 
     void showInspectorHighlight(const WebCore::InspectorOverlay::Highlight&);
     void hideInspectorHighlight();
@@ -2276,6 +2329,11 @@ private:
     void sendWheelEvent(const WebWheelEvent&);
 
     WebWheelEventCoalescer& wheelEventCoalescer();
+
+#if HAVE(CVDISPLAYLINK)
+    void wheelEventHysteresisUpdated(PAL::HysteresisState);
+#endif
+    void updateWheelEventActivityAfterProcessSwap();
 
 #if ENABLE(TOUCH_EVENTS)
     void updateTouchEventTracking(const WebTouchEvent&);
@@ -2388,13 +2446,13 @@ private:
 #endif
 
 #if ENABLE(SPEECH_SYNTHESIS)
-    void didStartSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) override;
-    void didFinishSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) override;
-    void didPauseSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) override;
-    void didResumeSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) override;
-    void speakingErrorOccurred(WebCore::PlatformSpeechSynthesisUtterance&) override;
-    void boundaryEventOccurred(WebCore::PlatformSpeechSynthesisUtterance&, WebCore::SpeechBoundary, unsigned charIndex) override;
-    void voicesDidChange() override;
+    void didStartSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) final;
+    void didFinishSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) final;
+    void didPauseSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) final;
+    void didResumeSpeaking(WebCore::PlatformSpeechSynthesisUtterance&) final;
+    void speakingErrorOccurred(WebCore::PlatformSpeechSynthesisUtterance&) final;
+    void boundaryEventOccurred(WebCore::PlatformSpeechSynthesisUtterance&, WebCore::SpeechBoundary, unsigned charIndex) final;
+    void voicesDidChange() final;
 
     struct SpeechSynthesisData;
     SpeechSynthesisData& speechSynthesisData();
@@ -2416,6 +2474,10 @@ private:
     static SandboxExtension::HandleArray createNetworkExtensionsSandboxExtensions(WebProcessProxy&);
 
     static SandboxExtension::Handle fontdMachExtensionHandle();
+
+    void didUpdateEditorState(const EditorState& oldEditorState, const EditorState& newEditorState);
+
+    void runModalJavaScriptDialog(RefPtr<WebFrameProxy>&&, FrameInfoData&&, const String& message, CompletionHandler<void(WebPageProxy&, WebFrameProxy*, FrameInfoData&&, const String&, CompletionHandler<void()>&&)>&&);
 
     const Identifier m_identifier;
     WebCore::PageIdentifier m_webPageID;
@@ -2469,7 +2531,11 @@ private:
     String m_customTextEncodingName;
     String m_overrideContentSecurityPolicy;
 
-    RefPtr<WebInspectorProxy> m_inspector;
+    RefPtr<WebInspectorUIProxy> m_inspector;
+
+#if PLATFORM(COCOA)
+    WeakObjCPtr<WKWebView> m_cocoaView;
+#endif
 
 #if ENABLE(FULLSCREEN_API)
     std::unique_ptr<WebFullScreenManagerProxy> m_fullScreenManager;
@@ -2486,9 +2552,6 @@ private:
     std::unique_ptr<MediaUsageManager> m_mediaUsageManager;
 #endif
 
-#if PLATFORM(COCOA)
-    bool m_hasUpdatedRenderingAfterDidCommitLoad { true };
-#endif
 #if PLATFORM(IOS_FAMILY)
     Optional<WebCore::InputMode> m_pendingInputModeChange;
     TransactionID m_firstLayerTreeTransactionIdAfterDidCommitLoad;
@@ -2589,6 +2652,7 @@ private:
     WebCore::Color m_themeColor;
     WebCore::Color m_underlayColor;
     WebCore::Color m_pageExtendedBackgroundColor;
+    WebCore::Color m_sampledPageTopColor;
 
     bool m_useFixedLayout { false };
     WebCore::IntSize m_fixedLayoutSize;
@@ -2619,6 +2683,8 @@ private:
     bool m_isInPrintingMode { false };
     bool m_isPerformingDOMPrintOperation { false };
 
+    bool m_hasUpdatedRenderingAfterDidCommitLoad { true };
+
     WebCore::ResourceRequest m_decidePolicyForResponseRequest;
     bool m_shouldSuppressAppLinksInNextNavigationPolicyDecision { false };
 
@@ -2628,6 +2694,11 @@ private:
 #endif
 
     std::unique_ptr<WebWheelEventCoalescer> m_wheelEventCoalescer;
+
+    Optional<WebCore::PlatformDisplayID> m_displayID;
+#if HAVE(CVDISPLAYLINK)
+    PAL::HysteresisActivity m_wheelEventActivityHysteresis;
+#endif
 
     Deque<NativeWebMouseEvent> m_mouseEventQueue;
     Deque<NativeWebKeyboardEvent> m_keyEventQueue;
@@ -2762,7 +2833,7 @@ private:
     WebCore::LayoutPoint m_maxStableLayoutViewportOrigin;
 
     float m_mediaVolume { 1 };
-    WebCore::MediaProducer::MutedStateFlags m_mutedState { WebCore::MediaProducer::NoneMuted };
+    WebCore::MediaProducer::MutedStateFlags m_mutedState;
     bool m_mayStartMediaWhenInWindow { true };
     bool m_mediaPlaybackIsSuspended { false };
     bool m_mediaCaptureEnabled { true };
@@ -2797,10 +2868,10 @@ private:
     bool m_activityStateChangeWantsSynchronousReply { false };
     Vector<CompletionHandler<void()>> m_nextActivityStateChangeCallbacks;
 
-    WebCore::MediaProducer::MediaStateFlags m_mediaState { WebCore::MediaProducer::IsNotPlaying };
+    WebCore::MediaProducer::MediaStateFlags m_mediaState;
 
     // To make sure capture indicators are visible long enough, m_reportedMediaCaptureState is the same as m_mediaState except that we might delay a bit transition from capturing to not-capturing.
-    WebCore::MediaProducer::MediaStateFlags m_reportedMediaCaptureState { WebCore::MediaProducer::IsNotPlaying };
+    WebCore::MediaProducer::MediaStateFlags m_reportedMediaCaptureState;
     RunLoop::Timer<WebPageProxy> m_updateReportedMediaCaptureStateTimer;
     static constexpr Seconds DefaultMediaCaptureReportingDelay { 3_s };
     Seconds m_mediaCaptureReportingDelay { DefaultMediaCaptureReportingDelay };
@@ -2876,7 +2947,10 @@ private:
     TextManipulationItemCallback m_textManipulationItemCallback;
 
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
-    LayerHostingContextID m_contextIDForVisibilityPropagation { 0 };
+    LayerHostingContextID m_contextIDForVisibilityPropagationInWebProcess { 0 };
+#if ENABLE(GPU_PROCESS)
+    LayerHostingContextID m_contextIDForVisibilityPropagationInGPUProcess { 0 };
+#endif
 #endif
 
     HashMap<WebViewDidMoveToWindowObserver*, WeakPtr<WebViewDidMoveToWindowObserver>> m_webViewDidMoveToWindowObservers;
@@ -2896,6 +2970,10 @@ private:
 #endif
 
     std::unique_ptr<SpeechRecognitionPermissionManager> m_speechRecognitionPermissionManager;
+
+#if ENABLE(MEDIA_SESSION_COORDINATOR)
+    RefPtr<RemoteMediaSessionCoordinatorProxy> m_mediaSessionCoordinatorProxy;
+#endif
 
 #if USE(DIRECT2D)
     COMPtr<ID3D11Device1> m_device;
@@ -2936,12 +3014,31 @@ private:
     size_t m_suspendMediaPlaybackCounter { 0 };
 
     bool m_lastNavigationWasAppBound { false };
+    bool m_isRunningModalJavaScriptDialog { false };
 
     Optional<WebCore::PrivateClickMeasurement> m_privateClickMeasurement;
+
+#if ENABLE(WEBXR) && PLATFORM(COCOA)
+    std::unique_ptr<PlatformXRSystem> m_xrSystem;
+#endif
 
 #if USE(APPLE_INTERNAL_SDK)
 #import <WebKitAdditions/WebPageProxyAdditionsAfter.h>
 #endif
 };
+
+#ifdef __OBJC__
+
+inline RetainPtr<WKWebView> WebPageProxy::cocoaView()
+{
+    return m_cocoaView.get();
+}
+
+inline void WebPageProxy::setCocoaView(WKWebView *view)
+{
+    m_cocoaView = view;
+}
+
+#endif
 
 } // namespace WebKit

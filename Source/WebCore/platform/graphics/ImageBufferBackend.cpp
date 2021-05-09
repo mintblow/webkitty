@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Apple Inc.  All rights reserved.
+ * Copyright (C) 2020-2021 Apple Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,28 +31,25 @@
 
 namespace WebCore {
 
-ImageBufferBackend::ImageBufferBackend(const Parameters& parameters)
-    : m_parameters(parameters)
+IntSize ImageBufferBackend::calculateBackendSize(const Parameters& parameters)
 {
-}
-
-IntSize ImageBufferBackend::calculateBackendSize(const FloatSize& size, float resolutionScale)
-{
-    FloatSize scaledSize = { ceilf(resolutionScale * size.width()), ceilf(resolutionScale * size.height()) };
+    FloatSize scaledSize = { ceilf(parameters.resolutionScale * parameters.logicalSize.width()), ceilf(parameters.resolutionScale * parameters.logicalSize.height()) };
     if (scaledSize.isEmpty() || !scaledSize.isExpressibleAsIntSize())
         return { };
 
-    IntSize backendSize = IntSize(scaledSize);
+    return IntSize(scaledSize);
+}
 
-    Checked<unsigned, RecordOverflow> bytesPerRow = 4 * Checked<unsigned, RecordOverflow>(backendSize.width());
-    if (bytesPerRow.hasOverflowed())
-        return { };
-
+size_t ImageBufferBackend::calculateMemoryCost(const IntSize& backendSize, unsigned bytesPerRow)
+{
+    ASSERT(!backendSize.isEmpty());
     CheckedSize numBytes = Checked<unsigned, RecordOverflow>(backendSize.height()) * bytesPerRow;
-    if (numBytes.hasOverflowed())
-        return { };
+    return numBytes.unsafeGet();
+}
 
-    return backendSize;
+ImageBufferBackend::ImageBufferBackend(const Parameters& parameters)
+    : m_parameters(parameters)
+{
 }
 
 RefPtr<NativeImage> ImageBufferBackend::sinkIntoNativeImage()
@@ -76,18 +73,18 @@ void ImageBufferBackend::convertToLuminanceMask()
     if (!imageData)
         return;
 
-    auto* srcPixelArray = imageData->data();
-    unsigned pixelArrayLength = srcPixelArray->length();
+    auto& srcPixelArray = imageData->data();
+    unsigned pixelArrayLength = srcPixelArray.length();
     for (unsigned pixelOffset = 0; pixelOffset < pixelArrayLength; pixelOffset += 4) {
-        uint8_t a = srcPixelArray->item(pixelOffset + 3);
+        uint8_t a = srcPixelArray.item(pixelOffset + 3);
         if (!a)
             continue;
-        uint8_t r = srcPixelArray->item(pixelOffset);
-        uint8_t g = srcPixelArray->item(pixelOffset + 1);
-        uint8_t b = srcPixelArray->item(pixelOffset + 2);
+        uint8_t r = srcPixelArray.item(pixelOffset);
+        uint8_t g = srcPixelArray.item(pixelOffset + 1);
+        uint8_t b = srcPixelArray.item(pixelOffset + 2);
 
         double luma = (r * 0.2125 + g * 0.7154 + b * 0.0721) * ((double)a / 255.0);
-        srcPixelArray->set(pixelOffset + 3, luma);
+        srcPixelArray.set(pixelOffset + 3, luma);
     }
 
     putImageData(AlphaPremultiplication::Unpremultiplied, *imageData, logicalRect(), IntPoint::zero(), AlphaPremultiplication::Premultiplied);
@@ -244,10 +241,10 @@ RefPtr<ImageData> ImageBufferBackend::getImageData(AlphaPremultiplication output
         destRect.setY(-srcRectScaled.y());
 
     if (destRect.size() != srcRectScaled.size())
-        imageData->data()->zeroFill();
+        imageData->data().zeroFill();
 
     unsigned destBytesPerRow = 4 * srcRectScaled.width();
-    uint8_t* destRows = imageData->data()->data() + destRect.y() * destBytesPerRow + destRect.x() * 4;
+    uint8_t* destRows = imageData->data().data() + destRect.y() * destBytesPerRow + destRect.x() * 4;
 
     unsigned srcBytesPerRow = bytesPerRow();
     uint8_t* srcRows = reinterpret_cast<uint8_t*>(data) + srcRectClipped.y() * srcBytesPerRow + srcRectClipped.x() * 4;
@@ -281,7 +278,7 @@ void ImageBufferBackend::putImageData(AlphaPremultiplication inputFormat, const 
     uint8_t* destRows = reinterpret_cast<uint8_t*>(data) + destRect.y() * destBytesPerRow + destRect.x() * 4;
 
     unsigned srcBytesPerRow = 4 * imageData.size().width();
-    uint8_t* srcRows = imageData.data()->data() + srcRectClipped.y() * srcBytesPerRow + srcRectClipped.x() * 4;
+    uint8_t* srcRows = imageData.data().data() + srcRectClipped.y() * srcBytesPerRow + srcRectClipped.x() * 4;
 
     copyImagePixels(
         inputFormat, PixelFormat::RGBA8, srcBytesPerRow, srcRows,

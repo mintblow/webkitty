@@ -57,6 +57,7 @@
 #include "Settings.h"
 #include "Text.h"
 #include "WebAnimationTypes.h"
+#include <wtf/RobinHoodHashSet.h>
 
 namespace WebCore {
 namespace Style {
@@ -255,7 +256,7 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
             if (m_document.inQuirksMode()) {
                 if (m_element->hasTagName(tdTag)) {
                     style.setEffectiveDisplay(DisplayType::TableCell);
-                    style.setFloating(Float::No);
+                    style.setFloating(Float::None);
                 } else if (is<HTMLTableElement>(*m_element))
                     style.setEffectiveDisplay(style.isDisplayInlineType() ? DisplayType::InlineTable : DisplayType::Table);
             }
@@ -286,7 +287,7 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
             // Ruby text does not support float or position. This might change with evolution of the specification.
             if (m_element->hasTagName(rtTag)) {
                 style.setPosition(PositionType::Static);
-                style.setFloating(Float::No);
+                style.setFloating(Float::None);
             }
 
             // User agents are expected to have a rule in their user agent stylesheet that matches th elements that have a parent
@@ -333,7 +334,7 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
         // https://www.w3.org/TR/css-display/#transformations
         // "A parent with a grid or flex display value blockifies the box’s display type."
         if (m_parentBoxStyle.isDisplayFlexibleOrGridBox()) {
-            style.setFloating(Float::No);
+            style.setFloating(Float::None);
             style.setEffectiveDisplay(equivalentBlockDisplay(style, m_document));
         }
     }
@@ -349,7 +350,7 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
     // object wedged in between them. Auto z-index also becomes 0 for objects that specify transforms/masks/reflections.
     if (style.hasAutoUsedZIndex()) {
         if ((m_element && m_document.documentElement() == m_element)
-            || style.opacity() < 1.0f
+            || style.hasOpacity()
             || style.hasTransformRelatedProperty()
             || style.hasMask()
             || style.clipPath()
@@ -436,6 +437,10 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
         style.setUsedZIndex(0);
 #endif
 
+    // contain: layout creates a stacking context.
+    if (style.hasAutoUsedZIndex() && style.containsLayout())
+        style.setUsedZIndex(0);
+
     // Cull out any useless layers and also repeat patterns into additional layers.
     style.adjustBackgroundLayers();
     style.adjustMaskLayers();
@@ -497,7 +502,7 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
 static bool hasEffectiveDisplayNoneForDisplayContents(const Element& element)
 {
     // https://drafts.csswg.org/css-display-3/#unbox-html
-    static NeverDestroyed<HashSet<AtomString>> tagNames = [] {
+    static NeverDestroyed<MemoryCompactLookupOnlyRobinHoodHashSet<AtomString>> tagNames = [] {
         static const HTMLQualifiedName* const tagList[] = {
             &brTag.get(),
             &wbrTag.get(),
@@ -517,7 +522,8 @@ static bool hasEffectiveDisplayNoneForDisplayContents(const Element& element)
             &textareaTag.get(),
             &selectTag.get(),
         };
-        HashSet<AtomString> set;
+        MemoryCompactLookupOnlyRobinHoodHashSet<AtomString> set;
+        set.reserveInitialCapacity(sizeof(tagList));
         for (auto& name : tagList)
             set.add(name->localName());
         return set;

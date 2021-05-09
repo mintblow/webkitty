@@ -30,7 +30,6 @@
 #if ENABLE(CONTEXT_MENUS)
 
 #include "WebCoreArgumentCoders.h"
-#include <WebCore/ContextMenuContext.h>
 #include <WebCore/GraphicsContext.h>
 
 namespace WebKit {
@@ -46,15 +45,14 @@ ContextMenuContextData::ContextMenuContextData()
 
 ContextMenuContextData::ContextMenuContextData(const WebCore::IntPoint& menuLocation, const Vector<WebKit::WebContextMenuItemData>& menuItems, const ContextMenuContext& context)
 #if ENABLE(SERVICE_CONTROLS)
-    : m_type(context.controlledImage() ? Type::ServicesMenu : Type::ContextMenu)
+    : m_type(context.controlledImage() ? Type::ServicesMenu : context.type())
 #else
-    : m_type(Type::ContextMenu)
+    : m_type(context.type())
 #endif
     , m_menuLocation(menuLocation)
     , m_menuItems(menuItems)
     , m_webHitTestResultData(context.hitTestResult(), true)
     , m_selectedText(context.selectedText())
-    , m_selectionBounds(context.selectionBounds())
 #if ENABLE(SERVICE_CONTROLS)
     , m_selectionIsEditable(false)
 #endif
@@ -80,7 +78,6 @@ void ContextMenuContextData::encode(IPC::Encoder& encoder) const
     encoder << m_menuItems;
     encoder << m_webHitTestResultData;
     encoder << m_selectedText;
-    encoder << m_selectionBounds;
 
 #if ENABLE(SERVICE_CONTROLS)
     ShareableBitmap::Handle handle;
@@ -108,9 +105,6 @@ bool ContextMenuContextData::decode(IPC::Decoder& decoder, ContextMenuContextDat
         return false;
 
     if (!decoder.decode(result.m_selectedText))
-        return false;
-
-    if (!decoder.decode(result.m_selectionBounds))
         return false;
 
 #if ENABLE(SERVICE_CONTROLS)

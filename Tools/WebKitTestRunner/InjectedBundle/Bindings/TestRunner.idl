@@ -113,6 +113,7 @@ interface TestRunner {
     undefined repaintSweepHorizontally();
     undefined display();
     undefined displayAndTrackRepaints();
+    undefined displayOnLoadFinish();
 
     // Failed load condition testing
     undefined forceImmediateCompletion();
@@ -131,7 +132,6 @@ interface TestRunner {
     // Local storage API
     undefined clearAllDatabases();
     undefined setDatabaseQuota(unsigned long long quota);
-    undefined setQuotaLoggingEnabled(boolean enabled);
     DOMString pathToLocalResource(DOMString url);
     undefined syncLocalStorage();
 
@@ -256,6 +256,9 @@ interface TestRunner {
     object failNextNewCodeBlock();
     object numberOfDFGCompiles(object function);
     object neverInlineFunction(object function);
+
+    // UI delegate hooks.
+    undefined installDidNotHandleTapAsMeaningfulClickCallback(object callback);
 
     // Swipe gestures
     undefined installDidBeginSwipeCallback(object callback);
@@ -385,6 +388,7 @@ interface TestRunner {
     boolean hasAppBoundSession();
     undefined clearAppBoundSession();
     undefined setAppBoundDomains(object originsArray, object callback);
+    undefined appBoundRequestContextDataForDomain(DOMString domain, object callback);
 
     undefined injectUserScript(DOMString string);
     readonly attribute unsigned long userScriptInjectedCount;
@@ -406,7 +410,7 @@ interface TestRunner {
     undefined simulateResourceLoadStatisticsSessionRestart();
     undefined setPrivateClickMeasurementTokenPublicKeyURLForTesting(DOMString url);
     undefined setPrivateClickMeasurementTokenSignatureURLForTesting(DOMString url);
-    undefined setPrivateClickMeasurementAttributionReportURLForTesting(DOMString url);
+    undefined setPrivateClickMeasurementAttributionReportURLsForTesting(DOMString sourceURLString, DOMString destinationURLString);
     undefined markPrivateClickMeasurementsAsExpiredForTesting();
     undefined setPrivateClickMeasurementFraudPreventionValuesForTesting(DOMString unlinkableToken, DOMString secretToken, DOMString signature, DOMString keyID);
 

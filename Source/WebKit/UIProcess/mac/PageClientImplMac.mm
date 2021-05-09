@@ -49,7 +49,7 @@
 #import "WKStringCF.h"
 #import "WKViewInternal.h"
 #import "WKWebViewInternal.h"
-#import "WKWebViewPrivateForTestingMac.h"
+#import "WKWebViewPrivateForTesting.h"
 #import "WebColorPickerMac.h"
 #import "WebContextMenuProxyMac.h"
 #import "WebDataListSuggestionsDropdownMac.h"
@@ -488,6 +488,11 @@ void PageClientImpl::requestImageExtraction(const URL& imageURL, const Shareable
     m_impl->requestImageExtraction(imageURL, imageData, WTFMove(completion));
 }
 
+void PageClientImpl::computeCanRevealImage(const URL& imageURL, ShareableBitmap& imageBitmap, CompletionHandler<void(bool)>&& completion)
+{
+    m_impl->computeCanRevealImage(imageURL, imageBitmap, WTFMove(completion));
+}
+
 #endif
 
 RefPtr<WebPopupMenuProxy> PageClientImpl::createPopupMenuProxy(WebPageProxy& page)
@@ -496,11 +501,23 @@ RefPtr<WebPopupMenuProxy> PageClientImpl::createPopupMenuProxy(WebPageProxy& pag
 }
 
 #if ENABLE(CONTEXT_MENUS)
+
 Ref<WebContextMenuProxy> PageClientImpl::createContextMenuProxy(WebPageProxy& page, ContextMenuContextData&& context, const UserData& userData)
 {
     return WebContextMenuProxyMac::create(m_view, page, WTFMove(context), userData);
 }
-#endif
+
+void PageClientImpl::didShowContextMenu()
+{
+    [m_webView _didShowContextMenu];
+}
+
+void PageClientImpl::didDismissContextMenu()
+{
+    [m_webView _didDismissContextMenu];
+}
+
+#endif // ENABLE(CONTEXT_MENUS)
 
 #if ENABLE(INPUT_TYPE_COLOR)
 RefPtr<WebColorPicker> PageClientImpl::createColorPicker(WebPageProxy* page, const WebCore::Color& initialColor, const WebCore::IntRect& rect, Vector<WebCore::Color>&& suggestions)
@@ -985,6 +1002,12 @@ void PageClientImpl::requestDOMPasteAccess(const WebCore::IntRect& elementRect, 
     m_impl->requestDOMPasteAccess(elementRect, originIdentifier, WTFMove(completion));
 }
 
+
+void PageClientImpl::makeViewBlank(bool makeBlank)
+{
+    m_impl->acceleratedCompositingRootLayer().opacity = makeBlank ? 0 : 1;
+}
+
 #if HAVE(APP_ACCENT_COLORS)
 WebCore::Color PageClientImpl::accentColor()
 {
@@ -999,9 +1022,9 @@ bool PageClientImpl::canHandleContextMenuTranslation() const
     return m_impl->canHandleContextMenuTranslation();
 }
 
-void PageClientImpl::handleContextMenuTranslation(const String& text, const IntRect& boundsInView, const WebCore::IntPoint& menuLocation)
+void PageClientImpl::handleContextMenuTranslation(const TranslationContextMenuInfo& info)
 {
-    m_impl->handleContextMenuTranslation(text, boundsInView, menuLocation);
+    m_impl->handleContextMenuTranslation(info);
 }
 
 #endif // HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)

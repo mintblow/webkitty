@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2020-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -69,7 +69,7 @@ TEST(DisplayListTests, ReplayWithMissingResource)
     }
 
     {
-        auto imageBuffer = ImageBuffer::create({ 100, 100 }, RenderingMode::Unaccelerated);
+        auto imageBuffer = ImageBuffer::create({ 100, 100 }, RenderingMode::Unaccelerated, 1, DestinationColorSpace::SRGB, PixelFormat::BGRA8);
         ImageBufferHashMap imageBufferMap;
         imageBufferMap.set(imageBufferIdentifier, imageBuffer.releaseNonNull());
 
@@ -81,31 +81,33 @@ TEST(DisplayListTests, ReplayWithMissingResource)
     }
 }
 
+static ItemBufferIdentifier globalBufferIdentifier = ItemBufferIdentifier::generate();
+
+class ReadingClient : public ItemBufferReadingClient {
+private:
+    Optional<ItemHandle> WARN_UNUSED_RETURN decodeItem(const uint8_t*, size_t, ItemType type, uint8_t*) final
+    {
+        EXPECT_EQ(type, ItemType::FillPath);
+        return WTF::nullopt;
+    }
+};
+
+class WritingClient : public ItemBufferWritingClient {
+private:
+    ItemBufferHandle createItemBuffer(size_t capacity) final
+    {
+        EXPECT_LT(capacity, globalItemBufferCapacity);
+        return { globalBufferIdentifier, globalItemBuffer, globalItemBufferCapacity };
+    }
+
+    RefPtr<SharedBuffer> encodeItemOutOfLine(const DisplayListItem&) const final
+    {
+        return SharedBuffer::create();
+    }
+};
+
 TEST(DisplayListTests, OutOfLineItemDecodingFailure)
 {
-    static ItemBufferIdentifier globalBufferIdentifier = ItemBufferIdentifier::generate();
-
-    class ReadingClient : public ItemBufferReadingClient {
-    private:
-        Optional<ItemHandle> WARN_UNUSED_RETURN decodeItem(const uint8_t*, size_t, ItemType type, uint8_t*) final
-        {
-            EXPECT_EQ(type, ItemType::FillPath);
-            return WTF::nullopt;
-        }
-    };
-
-    class WritingClient : public ItemBufferWritingClient {
-    private:
-        ItemBufferHandle createItemBuffer(size_t capacity) final
-        {
-            EXPECT_LT(capacity, globalItemBufferCapacity);
-            return { globalBufferIdentifier, globalItemBuffer, globalItemBufferCapacity };
-        }
-
-        RefPtr<SharedBuffer> encodeItem(ItemHandle) const final { return SharedBuffer::create(); }
-        void didAppendData(const ItemBufferHandle&, size_t, DidChangeItemBuffer) final { }
-    };
-
     FloatRect contextBounds { 0, 0, contextWidth, contextHeight };
 
     auto colorSpace = adoptCF(CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
@@ -114,7 +116,7 @@ TEST(DisplayListTests, OutOfLineItemDecodingFailure)
 
     DisplayList originalList;
     WritingClient writer;
-    originalList.setItemBufferClient(&writer);
+    originalList.setItemBufferWritingClient(&writer);
 
     Path path;
     path.moveTo({ 10., 10. });
@@ -125,14 +127,14 @@ TEST(DisplayListTests, OutOfLineItemDecodingFailure)
 
     DisplayList shallowCopy {{ ItemBufferHandle { globalBufferIdentifier, globalItemBuffer, originalList.sizeInBytes() } }};
     ReadingClient reader;
-    shallowCopy.setItemBufferClient(&reader);
+    shallowCopy.setItemBufferReadingClient(&reader);
 
     Replayer replayer { context, shallowCopy };
     auto result = replayer.replay();
     EXPECT_GT(result.numberOfBytesRead, 0U);
     EXPECT_EQ(result.nextDestinationImageBuffer, WTF::nullopt);
     EXPECT_EQ(result.missingCachedResourceIdentifier, WTF::nullopt);
-    EXPECT_EQ(result.reasonForStopping, StopReplayReason::InvalidItem);
+    EXPECT_EQ(result.reasonForStopping, StopReplayReason::InvalidItemOrExtent);
 }
 
 TEST(DisplayListTests, InlineItemValidationFailure)
@@ -144,6 +146,8 @@ TEST(DisplayListTests, InlineItemValidationFailure)
     GraphicsContext context { cgContext.get() };
 
     DisplayList list;
+    ReadingClient reader;
+    list.setItemBufferReadingClient(&reader);
     list.append<FlushContext>(FlushIdentifier { });
 
     Replayer replayer { context, list };
@@ -151,7 +155,7 @@ TEST(DisplayListTests, InlineItemValidationFailure)
     EXPECT_EQ(result.numberOfBytesRead, 0U);
     EXPECT_EQ(result.nextDestinationImageBuffer, WTF::nullopt);
     EXPECT_EQ(result.missingCachedResourceIdentifier, WTF::nullopt);
-    EXPECT_EQ(result.reasonForStopping, StopReplayReason::InvalidItem);
+    EXPECT_EQ(result.reasonForStopping, StopReplayReason::InvalidItemOrExtent);
 }
 
 } // namespace TestWebKitAPI

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,8 +44,11 @@ bool certificatesMatch(SecTrustRef trust1, SecTrustRef trust2)
         return false;
 
     for (CFIndex i = 0; i < count1; i++) {
+        // FIXME: Adopt replacement where available.
+        ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         auto cert1 = SecTrustGetCertificateAtIndex(trust1, i);
         auto cert2 = SecTrustGetCertificateAtIndex(trust2, i);
+        ALLOW_DEPRECATED_DECLARATIONS_END
         RELEASE_ASSERT(cert1);
         RELEASE_ASSERT(cert2);
         if (!CFEqual(cert1, cert2))
@@ -59,8 +62,11 @@ RetainPtr<CFArrayRef> CertificateInfo::certificateChainFromSecTrust(SecTrustRef 
 {
     auto count = SecTrustGetCertificateCount(trust);
     auto certificateChain = adoptCF(CFArrayCreateMutable(0, count, &kCFTypeArrayCallBacks));
+    // FIXME: Adopt replacement where available.
+    ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     for (CFIndex i = 0; i < count; i++)
         CFArrayAppendValue(certificateChain.get(), SecTrustGetCertificateAtIndex(trust, i));
+    ALLOW_DEPRECATED_DECLARATIONS_END
     return certificateChain;
 }
 #endif
@@ -95,7 +101,10 @@ bool CertificateInfo::containsNonRootSHA1SignedCertificate() const
     if (m_trust) {
         // Allow only the root certificate (the last in the chain) to be SHA1.
         for (CFIndex i = 0, size = SecTrustGetCertificateCount(trust()) - 1; i < size; ++i) {
+            // FIXME: Adopt replacement where available.
+            ALLOW_DEPRECATED_DECLARATIONS_BEGIN
             auto certificate = SecTrustGetCertificateAtIndex(trust(), i);
+            ALLOW_DEPRECATED_DECLARATIONS_END
             if (SecCertificateGetSignatureHashAlgorithm(certificate) == kSecSignatureHashAlgorithmSHA1)
                 return true;
         }
@@ -196,17 +205,15 @@ static Optional<RetainPtr<CFDataRef>> decodeCFData(Decoder& decoder)
 {
     Optional<uint64_t> size;
     decoder >> size;
-    if (!size)
-        return WTF::nullopt;
 
     if (UNLIKELY(!isInBounds<size_t>(*size)))
         return WTF::nullopt;
-    
-    Vector<uint8_t> vector(static_cast<size_t>(*size));
-    if (!decoder.decodeFixedLengthData(vector.data(), vector.size()))
+
+    auto pointer = decoder.bufferPointerForDirectRead(static_cast<size_t>(*size));
+    if (!pointer)
         return WTF::nullopt;
 
-    return adoptCF(CFDataCreate(nullptr, vector.data(), vector.size()));
+    return adoptCF(CFDataCreate(nullptr, pointer, *size));
 }
 
 #if HAVE(SEC_TRUST_SERIALIZATION)

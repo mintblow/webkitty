@@ -1,4 +1,3 @@
-//@ skip if $architecture != "arm64" and $architecture != "x86-64"
 //@ runDefault("--earlyReturnFromInfiniteLoopsLimit=10", "--returnEarlyFromInfiniteLoopsForFuzzing=1", "--watchdog=1000", "--watchdog-exception-ok")
 
 let o = {
@@ -8,14 +7,22 @@ let o = {
 };
 
 
+let i = 0;
 let iter = {
   [Symbol.iterator]() {
     return {
       next() {
-        return o;
+        ++i
+        if (i < 1e6)
+            return o;
+        return {
+            done: true
+        };
       }
     }
   }
 };
 
-[...iter];
+try {
+    [...iter];
+} catch {}

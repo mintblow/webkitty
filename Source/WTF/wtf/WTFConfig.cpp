@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2020-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -71,7 +71,19 @@ void setPermissionsOfConfigPage()
         flags |= VM_FLAGS_PERMANENT;
 #endif
 
-        auto result = mach_vm_map(mach_task_self(), &addr, ConfigSizeToProtect, pageSize() - 1, flags, MEMORY_OBJECT_NULL, 0, false, VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
+        auto attemptVMMapping = [&] {
+            return mach_vm_map(mach_task_self(), &addr, ConfigSizeToProtect, pageSize() - 1, flags, MEMORY_OBJECT_NULL, 0, false, VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
+        };
+
+        auto result = attemptVMMapping();
+
+#if HAVE(VM_FLAGS_PERMANENT)
+        if (result != KERN_SUCCESS) {
+            flags &= ~VM_FLAGS_PERMANENT;
+            result = attemptVMMapping();
+        }
+#endif
+
         RELEASE_ASSERT(result == KERN_SUCCESS);
     });
 #endif // OS(DARWIN)

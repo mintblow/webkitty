@@ -130,7 +130,7 @@ public:
     }
 #endif
 
-private:
+protected:
     String m_persistentId;
     DeviceType m_type { DeviceType::Unknown };
     String m_label;
@@ -139,6 +139,26 @@ private:
     bool m_default { false };
     bool m_isMockDevice { false };
 };
+
+inline bool haveDevicesChanged(const Vector<CaptureDevice>& oldDevices, const Vector<CaptureDevice>& newDevices)
+{
+    if (oldDevices.size() != newDevices.size())
+        return true;
+
+    for (auto& newDevice : newDevices) {
+        if (newDevice.type() != CaptureDevice::DeviceType::Camera && newDevice.type() != CaptureDevice::DeviceType::Microphone)
+            continue;
+
+        auto index = oldDevices.findMatching([&newDevice](auto& oldDevice) {
+            return newDevice.persistentId() == oldDevice.persistentId() && newDevice.enabled() != oldDevice.enabled();
+        });
+
+        if (index == notFound)
+            return true;
+    }
+
+    return false;
+}
 
 } // namespace WebCore
 

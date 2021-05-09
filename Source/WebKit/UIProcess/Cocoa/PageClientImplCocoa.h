@@ -55,12 +55,12 @@ public:
     void themeColorDidChange() final;
     void pageExtendedBackgroundColorWillChange() final;
     void pageExtendedBackgroundColorDidChange() final;
+    void sampledPageTopColorWillChange() final;
+    void sampledPageTopColorDidChange() final;
     void isPlayingAudioWillChange() final;
     void isPlayingAudioDidChange() final;
 
     bool scrollingUpdatesDisabledForTesting() final;
-
-    void setHasBlankOverlay(bool) final;
 
 #if ENABLE(ATTACHMENT_ELEMENT)
     void didInsertAttachment(API::Attachment&, const String& source) final;
@@ -79,6 +79,8 @@ public:
     void storeAppHighlight(const WebCore::AppHighlight&) final;
 #endif
 
+    void microphoneCaptureWillChange() final;
+    void cameraCaptureWillChange() final;
     void microphoneCaptureChanged() final;
     void cameraCaptureChanged() final;
 

@@ -346,6 +346,7 @@ TEST(URLSchemeHandler, Redirection)
 
 enum class Command {
     Redirect,
+    APIRedirect,
     Response,
     Data,
     Finish,
@@ -381,6 +382,9 @@ enum class Command {
             switch (command) {
             case Command::Redirect:
                 [(id<WKURLSchemeTaskPrivate>)task _didPerformRedirection:adoptNS([[NSURLResponse alloc] init]).get() newRequest:adoptNS([[NSURLRequest alloc] init]).get()];
+                break;
+            case Command::APIRedirect:
+                [(id<WKURLSchemeTaskPrivate>)task _willPerformRedirection:adoptNS([[NSURLResponse alloc] init]).get() newRequest:adoptNS([[NSURLRequest alloc] init]).get() completionHandler:^(NSURLRequest*) { }];
                 break;
             case Command::Response:
                 [task didReceiveResponse:adoptNS([[NSURLResponse alloc] init]).get()];
@@ -437,6 +441,11 @@ TEST(URLSchemeHandler, Exceptions)
     checkCallSequence({Command::Response, Command::Finish, Command::Response}, ShouldRaiseException::Yes);
     checkCallSequence({Command::Response, Command::Finish, Command::Finish}, ShouldRaiseException::Yes);
     checkCallSequence({Command::Response, Command::Finish, Command::Error}, ShouldRaiseException::Yes);
+    checkCallSequence({Command::APIRedirect, Command::Redirect}, ShouldRaiseException::Yes);
+    checkCallSequence({Command::APIRedirect, Command::Response}, ShouldRaiseException::Yes);
+    checkCallSequence({Command::APIRedirect, Command::Data}, ShouldRaiseException::Yes);
+    checkCallSequence({Command::APIRedirect, Command::Finish}, ShouldRaiseException::Yes);
+    checkCallSequence({Command::APIRedirect, Command::Error}, ShouldRaiseException::No);
 }
 
 struct SchemeResourceInfo {
@@ -558,7 +567,7 @@ TEST(URLSchemeHandler, SyncXHR)
         TestWebKitAPI::Util::run(&startedXHR);
         receivedMessage = false;
 
-        webView = nil;
+        [webView _close];
     }
     
     TestWebKitAPI::Util::run(&receivedStop);
@@ -1244,14 +1253,14 @@ TEST(URLSchemeHandler, LoadsSubresources)
     switch (++_requestCount) {
     case 1:
         check(task, "frame://host1/main", true, "", "", "", 0);
-        respond(task, "<iframe src='//host2:123/iframe'></iframe>");
+        respond(task, "<iframe src='//host2:1234/iframe'></iframe>");
         return;
     case 2:
-        check(task, "frame://host2:123/iframe", false, "", "frame", "host1", 0);
+        check(task, "frame://host2:1234/iframe", false, "", "frame", "host1", 0);
         respond(task, "<script>fetch('subresource')</script>");
         return;
     case 3:
-        check(task, "frame://host2:123/subresource", false, "frame://host2:123/iframe", "frame", "host2", 123);
+        check(task, "frame://host2:1234/subresource", false, "frame://host2:1234/iframe", "frame", "host2", 1234);
         respond(task, "done!");
         return;
     }
@@ -1388,4 +1397,129 @@ TEST(URLSchemeHandler, Origin)
     [webView setUIDelegate:delegate.get()];
     [webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"registered:///"]]];
     EXPECT_WK_STREQ([delegate waitForAlert], "registered://host:123, null");
+}
+
+
+static bool receivedScriptMessage = false;
+static RetainPtr<WKScriptMessage> lastScriptMessage;
+@interface URLSchemeHandlerMessageHandler : NSObject <WKScriptMessageHandler>
+@end
+
+@implementation URLSchemeHandlerMessageHandler
+
+- (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message
+{
+    lastScriptMessage = message;
+    receivedScriptMessage = true;
+}
+@end
+
+TEST(URLSchemeHandler, isSecureContext)
+{
+    auto configuration = adoptNS([[WKWebViewConfiguration alloc] init]);
+    auto schemeHandler = adoptNS([TestURLSchemeHandler new]);
+    [schemeHandler setStartURLSchemeTaskHandler:^(WKWebView *, id<WKURLSchemeTask> task) {
+        NSString *responseString = @"<script>window.webkit.messageHandlers.testHandler.postMessage(window.isSecureContext ? 'secure': 'not secure');</script>";
+        [task didReceiveResponse:adoptNS([[NSURLResponse alloc] initWithURL:task.request.URL MIMEType:@"text/html" expectedContentLength:responseString.length textEncodingName:nil]).get()];
+        [task didReceiveData:[responseString dataUsingEncoding:NSUTF8StringEncoding]];
+        [task didFinish];
+    }];
+
+    [configuration setURLSchemeHandler:schemeHandler.get() forURLScheme:@"testing"];
+
+    auto messageHandler = adoptNS([[URLSchemeHandlerMessageHandler alloc] init]);
+    [[configuration userContentController] addScriptMessageHandler:messageHandler.get() name:@"testHandler"];
+
+    auto webView = adoptNS([[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:configuration.get()]);
+
+    receivedScriptMessage = false;
+    [webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"testing://localhost/test.html"]]];
+    TestWebKitAPI::Util::run(&receivedScriptMessage);
+    EXPECT_WK_STREQ(@"secure", [lastScriptMessage body]);
+
+    receivedScriptMessage = false;
+    [webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"testing://main/test.html"]]];
+    TestWebKitAPI::Util::run(&receivedScriptMessage);
+    EXPECT_WK_STREQ(@"secure", [lastScriptMessage body]);
+}
+
+TEST(URLSchemeHandler, APIRedirect)
+{
+    auto configuration = adoptNS([[WKWebViewConfiguration alloc] init]);
+    auto schemeHandler = adoptNS([TestURLSchemeHandler new]);
+    [schemeHandler setStartURLSchemeTaskHandler:^(WKWebView *, id<WKURLSchemeTask> task) {
+        auto redirectResponse = adoptNS([[NSURLResponse alloc] initWithURL:task.request.URL MIMEType:nil expectedContentLength:0 textEncodingName:nil]);
+        auto redirectRequest = adoptNS([[NSURLRequest alloc] initWithURL:[NSURL URLWithString:@"redirectone://bar.com/anothertest.html"]]);
+
+        [(id<WKURLSchemeTaskPrivate>)task _willPerformRedirection:redirectResponse.get() newRequest:redirectRequest.get() completionHandler:^(NSURLRequest *proposedRequest) {
+            NSString *html = @"<script>window.webkit.messageHandlers.testHandler.postMessage('Document URL: ' + document.URL);</script>";
+            auto finalResponse = adoptNS([[NSURLResponse alloc] initWithURL:proposedRequest.URL MIMEType:@"text/html" expectedContentLength:html.length textEncodingName:nil]);
+
+            [task didReceiveResponse:finalResponse.get()];
+            [task didReceiveData:[html dataUsingEncoding:NSUTF8StringEncoding]];
+            [task didFinish];
+        }];
+    }];
+
+    [configuration setURLSchemeHandler:schemeHandler.get() forURLScheme:@"redirectone"];
+
+    auto messageHandler = adoptNS([[URLSchemeHandlerMessageHandler alloc] init]);
+    [[configuration userContentController] addScriptMessageHandler:messageHandler.get() name:@"testHandler"];
+
+    auto webView = adoptNS([[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:configuration.get()]);
+
+    receivedScriptMessage = false;
+    [webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"redirectone://foo.com/test.html"]]];
+    TestWebKitAPI::Util::run(&receivedScriptMessage);
+    EXPECT_WK_STREQ(@"Document URL: redirectone://bar.com/anothertest.html", [lastScriptMessage body]);
+}
+
+TEST(URLSchemeHandler, Ranges)
+{
+    RetainPtr<NSData> videoData = [NSData dataWithContentsOfURL:[[NSBundle mainBundle] URLForResource:@"test" withExtension:@"mp4" subdirectory:@"TestWebKitAPI.resources"]];
+
+    auto handler = adoptNS([[TestURLSchemeHandler alloc] init]);
+    auto configuration = adoptNS([[WKWebViewConfiguration alloc] init]);
+    [configuration setURLSchemeHandler:handler.get() forURLScheme:@"ranges"];
+    configuration.get().mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
+    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:CGRectMake(0, 0, 800, 600) configuration:configuration.get()]);
+    __block bool foundRangeRequest = false;
+    [handler setStartURLSchemeTaskHandler:^(WKWebView *, id<WKURLSchemeTask> task) {
+        if ([task.request.URL.path isEqualToString:@"/main.html"]) {
+            NSString *html = @"<video autoplay onplaying=\"alert('playing')\"><source src='/video.m4v' type='video/mp4'></video>";
+            [task didReceiveResponse:[[[NSURLResponse alloc] initWithURL:task.request.URL MIMEType:@"text/html" expectedContentLength:html.length textEncodingName:nil] autorelease]];
+            [task didReceiveData:[html dataUsingEncoding:NSUTF8StringEncoding]];
+            [task didFinish];
+            return;
+        }
+
+        NSString *requestRange = [task.request.allHTTPHeaderFields objectForKey:@"Range"];
+        EXPECT_TRUE(requestRange);
+
+        String requestRangeString(requestRange);
+        String rangeBytes = "bytes="_s;
+        auto begin = requestRangeString.find(rangeBytes, 0);
+        ASSERT(begin != notFound);
+        auto dash = requestRangeString.find('-', begin);
+        ASSERT(dash != notFound);
+        auto end = requestRangeString.length();
+
+        auto rangeBeginString = requestRangeString.substring(begin + rangeBytes.length(), dash - begin - rangeBytes.length());
+        auto rangeEndString = requestRangeString.substring(dash + 1, end - dash - 1);
+        auto rangeBegin = rangeBeginString.toUInt64Strict();
+        auto rangeEnd = rangeEndString == "*" ? [videoData length] : rangeEndString.toUInt64Strict();
+
+        auto response = adoptNS([[NSHTTPURLResponse alloc] initWithURL:[NSURL URLWithString:@"https://webkit.org/"] statusCode:206 HTTPVersion:@"HTTP/1.1" headerFields:@{
+            @"Content-Range" : [NSString stringWithFormat:@"bytes %llu-%llu/%lu", rangeBegin, rangeEnd, (unsigned long)[videoData length]],
+            @"Content-Length" : [NSString stringWithFormat:@"%llu", rangeEnd - rangeBegin + 1]
+        }]);
+
+        [task didReceiveResponse:response.get()];
+        [task didReceiveData:[videoData subdataWithRange:NSMakeRange(rangeBegin, rangeEnd - rangeBegin)]];
+        [task didFinish];
+        foundRangeRequest = true;
+    }];
+    [webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"ranges:///main.html"]]];
+    EXPECT_WK_STREQ([webView _test_waitForAlert], "playing");
+    EXPECT_TRUE(foundRangeRequest);
 }

@@ -2,11 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>app_highlights</key>
-    <dict>
-        <key>Enabled</key>
-        <true/>
-    </dict>
     <key>async_frame_and_overflow_scrolling</key>
     <dict>
         <key>Enabled</key>
@@ -15,7 +10,12 @@
     <key>gpu_process_canvas_rendering</key>
     <dict>
         <key>Enabled</key>
-        <false/>
+        <true/>
+        <key>Attributes</key>
+        <dict>
+            <key>CodeComplete</key>
+            <true/>
+        </dict>
     </dict>
     <key>gpu_process_dom_rendering</key>
     <dict>
@@ -25,7 +25,12 @@
     <key>gpu_process_media</key>
     <dict>
         <key>Enabled</key>
-        <false/>
+        <true/>
+        <key>Attributes</key>
+        <dict>
+            <key>CodeComplete</key>
+            <true/>
+        </dict>
     </dict>
     <key>gpu_process_webgl</key>
     <dict>
@@ -36,6 +41,11 @@
     <dict>
         <key>Enabled</key>
         <false/>
+        <key>Attributes</key>
+        <dict>
+            <key>CodeComplete</key>
+            <true/>
+        </dict>
     </dict>
     <key>InAppBrowserPrivacy</key>
     <dict>
@@ -47,20 +57,15 @@
         <key>Enabled</key>
         <true/>
     </dict>
-	<key>sw_vp9_decoder_on_battery</key>
+    <key>sw_vp9_decoder_on_battery</key>
     <dict>
         <key>Enabled</key>
         <false/>
     </dict>
-	<key>vp9_decoder</key>
+    <key>vp9_decoder</key>
     <dict>
         <key>Enabled</key>
         <true/>
-    </dict>
-    <key>WebGL2</key>
-    <dict>
-        <key>Enabled</key>
-        <false/>
     </dict>
     <key>WebGPU</key>
     <dict>

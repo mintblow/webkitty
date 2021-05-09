@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2017 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,7 +28,7 @@
 
 #include "IteratorOperations.h"
 #include "JSCInlines.h"
-#include "JSSet.h"
+#include "JSSetInlines.h"
 #include "SetPrototype.h"
 
 namespace JSC {
@@ -70,23 +70,33 @@ JSC_DEFINE_HOST_FUNCTION(constructSet, (JSGlobalObject* globalObject, CallFrame*
     if (iterable.isUndefinedOrNull()) 
         RELEASE_AND_RETURN(scope, JSValue::encode(JSSet::create(globalObject, vm, setStructure)));
 
+    bool canPerformFastAdd = JSSet::isAddFastAndNonObservable(setStructure);
     if (auto* iterableSet = jsDynamicCast<JSSet*>(vm, iterable)) {
-        if (iterableSet->canCloneFastAndNonObservable(setStructure)) 
+        if (canPerformFastAdd && iterableSet->isIteratorProtocolFastAndNonObservable()) 
             RELEASE_AND_RETURN(scope, JSValue::encode(iterableSet->clone(globalObject, vm, setStructure)));
     }
 
     JSSet* set = JSSet::create(globalObject, vm, setStructure);
     RETURN_IF_EXCEPTION(scope, encodedJSValue());
 
-    JSValue adderFunction = set->JSObject::get(globalObject, vm.propertyNames->add);
-    RETURN_IF_EXCEPTION(scope, encodedJSValue());
+    JSValue adderFunction;
+    CallData adderFunctionCallData;
+    if (!canPerformFastAdd) {
+        adderFunction = set->JSObject::get(globalObject, vm.propertyNames->add);
+        RETURN_IF_EXCEPTION(scope, { });
 
-    auto adderFunctionCallData = getCallData(vm, adderFunction);
-    if (UNLIKELY(adderFunctionCallData.type == CallData::Type::None))
-        return JSValue::encode(throwTypeError(globalObject, scope));
+        adderFunctionCallData = getCallData(vm, adderFunction);
+        if (UNLIKELY(adderFunctionCallData.type == CallData::Type::None))
+            return throwVMTypeError(globalObject, scope, "'add' property of a Set should be callable."_s);
+    }
 
     scope.release();
     forEachInIterable(globalObject, iterable, [&](VM&, JSGlobalObject* globalObject, JSValue nextValue) {
+        if (canPerformFastAdd) {
+            set->add(setStructure->globalObject(), nextValue);
+            return;
+        }
+
         MarkedArgumentBuffer arguments;
         arguments.append(nextValue);
         ASSERT(!arguments.hasOverflowed());

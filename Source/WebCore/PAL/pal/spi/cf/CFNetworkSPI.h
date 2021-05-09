@@ -50,6 +50,14 @@
 #import <CFNetwork/CFNSURLConnection.h>
 #endif
 
+#if HAVE(NSURLPROTOCOL_WITH_SKIPAPPSSO)
+#if defined(__OBJC__)
+@interface NSURLProtocol (NSURLConnectionAppSSOPrivate)
++ (Class)_protocolClassForRequest:(NSURLRequest *)request skipAppSSO:(BOOL)skipAppSSO;
+@end
+#endif
+#endif
+
 #else // !USE(APPLE_INTERNAL_SDK)
 
 #if HAVE(PRECONNECT_PING) && defined(__OBJC__)
@@ -166,6 +174,12 @@ CF_ENUM(CFHTTPCookieStorageAcceptPolicy)
 + (Class)_protocolClassForRequest:(NSURLRequest *)request;
 @end
 
+#if HAVE(NSURLPROTOCOL_WITH_SKIPAPPSSO)
+@interface NSURLProtocol (NSURLConnectionAppSSOPrivate)
++ (Class)_protocolClassForRequest:(NSURLRequest *)request skipAppSSO:(BOOL)skipAppSSO;
+@end
+#endif
+
 @interface NSURLRequest ()
 + (NSArray *)allowsSpecificHTTPSCertificateForHost:(NSString *)host;
 + (void)setAllowsSpecificHTTPSCertificate:(NSArray *)allow forHost:(NSString *)host;
@@ -246,6 +260,9 @@ typedef NS_ENUM(NSInteger, NSURLSessionCompanionProxyPreference) {
 @property (readwrite, assign) NSInteger _connectionCacheNumPriorityLevels;
 @property (readwrite, assign) NSInteger _connectionCacheNumFastLanes;
 @property (readwrite, assign) NSInteger _connectionCacheMinimumFastLanePriority;
+#endif
+#if HAVE(CFNETWORK_NSURLSESSION_ATTRIBUTED_BUNDLE_IDENTIFIER)
+@property (nullable, copy) NSString *_attributedBundleIdentifier;
 #endif
 @end
 
@@ -466,6 +483,10 @@ WTF_EXTERN_C_END
 @interface NSURLSessionTask ()
 - (void)_setExplicitCookieStorage:(CFHTTPCookieStorageRef)storage;
 @property (readonly) SSLProtocol _TLSNegotiatedProtocolVersion;
+@end
+
+@interface NSURLSessionWebSocketTask (SPI)
+- (void)_sendCloseCode:(NSURLSessionWebSocketCloseCode)closeCode reason:(NSData *)reason;
 @end
 
 #endif // defined(__OBJC__)

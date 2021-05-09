@@ -34,7 +34,7 @@
 #include <WebCore/ElementContext.h>
 #include <WebCore/IntPoint.h>
 #include <WebCore/ScrollTypes.h>
-#include <WebCore/SelectionRect.h>
+#include <WebCore/SelectionGeometry.h>
 #include <WebCore/TextIndicator.h>
 #include <wtf/URL.h>
 #include <wtf/text/WTFString.h>
@@ -54,6 +54,7 @@ struct InteractionInformationAtPosition {
     bool canBeValid { true };
     Optional<bool> nodeAtPositionHasDoubleClickHandler;
     bool isSelectable { false };
+    bool isSelected { false };
     bool prefersDraggingOverTextSelection { false };
     bool isNearMarkedText { false };
     bool touchCalloutEnabled { true };
@@ -70,6 +71,7 @@ struct InteractionInformationAtPosition {
     bool preventTextInteraction { false };
 #endif
     bool shouldNotUseIBeamInEditableContent { false };
+    bool isImageOverlayText { false };
     WebCore::FloatPoint adjustedPointForNodeRespondingToClickEvents;
     URL url;
     URL imageURL;
@@ -95,6 +97,7 @@ struct InteractionInformationAtPosition {
 #endif
 
     Optional<WebCore::ElementContext> elementContext;
+    Optional<WebCore::ElementContext> imageElementContext;
 
     // Copy compatible optional bits forward (for example, if we have a InteractionInformationAtPosition
     // with snapshots in it, and perform another request for the same point without requesting the snapshots,

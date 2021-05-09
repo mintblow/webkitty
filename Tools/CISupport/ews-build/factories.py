@@ -25,21 +25,26 @@ from buildbot.process import factory
 from buildbot.steps import trigger
 
 from steps import (ApplyPatch, ApplyWatchList, CheckOutSource, CheckOutSpecificRevision, CheckPatchRelevance,
-                   CheckPatchStatusOnEWSQueues, CheckStyle, CompileJSC, CompileWebKit, ConfigureBuild, CreateLocalGITCommit,
-                   DownloadBuiltProduct, ExtractBuiltProduct, FetchBranches, FindModifiedChangeLogs, InstallGtkDependencies,
-                   InstallWpeDependencies, KillOldProcesses, PrintConfiguration, PushCommitToWebKitRepo,
+                   CheckPatchStatusOnEWSQueues, CheckStyle, CleanGitRepo, CompileJSC, CompileWebKit, ConfigureBuild, CreateLocalGITCommit,
+                   DownloadBuiltProduct, ExtractBuiltProduct, FetchBranches, FindModifiedChangeLogs, FindModifiedLayoutTests,
+                   InstallGtkDependencies, InstallWpeDependencies, KillOldProcesses, PrintConfiguration, PushCommitToWebKitRepo,
                    RunAPITests, RunBindingsTests, RunBuildWebKitOrgUnitTests, RunBuildbotCheckConfigForBuildWebKit, RunBuildbotCheckConfigForEWS,
                    RunEWSUnitTests, RunResultsdbpyTests, RunJavaScriptCoreTests, RunWebKit1Tests, RunWebKitPerlTests, RunWebKitPyPython2Tests,
-                   RunWebKitPyPython3Tests, RunWebKitTests, SetBuildSummary, ShowIdentifier, TriggerCrashLogSubmission, UpdateWorkingDirectory,
+                   RunWebKitPyPython3Tests, RunWebKitTests, RunWebKitTestsInStressMode, RunWebKitTestsInStressGuardmallocMode,
+                   SetBuildSummary, ShowIdentifier, TriggerCrashLogSubmission, UpdateWorkingDirectory,
                    ValidatePatch, ValidateChangeLogAndReviewer, ValidateCommiterAndReviewer, WaitForCrashCollection)
 
 
 class Factory(factory.BuildFactory):
+    findModifiedLayoutTests = False
+
     def __init__(self, platform, configuration=None, architectures=None, buildOnly=True, triggers=None, triggered_by=None, remotes=None, additionalArguments=None, checkRelevance=False, **kwargs):
         factory.BuildFactory.__init__(self)
         self.addStep(ConfigureBuild(platform=platform, configuration=configuration, architectures=architectures, buildOnly=buildOnly, triggers=triggers, triggered_by=triggered_by, remotes=remotes, additionalArguments=additionalArguments))
         if checkRelevance:
             self.addStep(CheckPatchRelevance())
+        if self.findModifiedLayoutTests:
+            self.addStep(FindModifiedLayoutTests())
         self.addStep(ValidatePatch())
         self.addStep(PrintConfiguration())
         self.addStep(CheckOutSource())
@@ -136,6 +141,20 @@ class TestFactory(Factory):
             self.addStep(TriggerCrashLogSubmission())
         if self.LayoutTestClass:
             self.addStep(SetBuildSummary())
+
+
+class StressTestFactory(TestFactory):
+    findModifiedLayoutTests = True
+
+    def __init__(self, platform, configuration=None, architectures=None, triggered_by=None, additionalArguments=None, checkRelevance=False, **kwargs):
+        Factory.__init__(self, platform=platform, configuration=configuration, architectures=architectures, buildOnly=False, triggered_by=triggered_by, additionalArguments=additionalArguments, checkRelevance=checkRelevance)
+        self.getProduct()
+        self.addStep(WaitForCrashCollection())
+        self.addStep(KillOldProcesses())
+        self.addStep(RunWebKitTestsInStressMode())
+        self.addStep(RunWebKitTestsInStressGuardmallocMode())
+        self.addStep(TriggerCrashLogSubmission())
+        self.addStep(SetBuildSummary())
 
 
 class JSCBuildFactory(Factory):
@@ -262,7 +281,8 @@ class CommitQueueFactory(factory.BuildFactory):
         self.addStep(ValidatePatch(verifycqplus=True))
         self.addStep(ValidateCommiterAndReviewer())
         self.addStep(PrintConfiguration())
-        self.addStep(CheckOutSource())
+        self.addStep(CleanGitRepo())
+        self.addStep(CheckOutSource(repourl='https://git.webkit.org/git/WebKit-https'))
         self.addStep(FetchBranches())
         self.addStep(ShowIdentifier())
         self.addStep(UpdateWorkingDirectory())
@@ -276,7 +296,7 @@ class CommitQueueFactory(factory.BuildFactory):
         self.addStep(CheckPatchStatusOnEWSQueues())
         self.addStep(RunWebKitTests())
         self.addStep(ValidatePatch(addURLs=False, verifycqplus=True))
-        self.addStep(CheckOutSource())
+        self.addStep(CheckOutSource(repourl='https://git.webkit.org/git/WebKit-https'))
         self.addStep(ShowIdentifier())
         self.addStep(UpdateWorkingDirectory())
         self.addStep(ApplyPatch())

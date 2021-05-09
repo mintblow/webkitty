@@ -64,6 +64,8 @@ public:
     static void dumpWebProcessUnresponsiveness(const char* errorMessage);
     void outputText(const String&);
 
+    void didNotHandleTapAsMeaningfulClick();
+
     void didBeginSwipe();
     void willEndSwipe();
     void didEndSwipe();
@@ -95,6 +97,7 @@ public:
     void didRemoveAllSessionCredentials();
 
     void didSetAppBoundDomains();
+    void didReceiveAppBoundRequestContextDataForDomain(String&&);
 
     void dumpResourceLoadStatistics();
 

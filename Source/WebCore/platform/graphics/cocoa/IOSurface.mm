@@ -26,6 +26,7 @@
 #import "config.h"
 #import "IOSurface.h"
 
+#import "CoreVideoSoftLink.h"
 #import "GraphicsContextCG.h"
 #import "GraphicsContextGL.h"
 #import "HostWindow.h"
@@ -39,8 +40,6 @@
 #import <wtf/MachSendRight.h>
 #import <wtf/MathExtras.h>
 #import <wtf/text/TextStream.h>
-
-#import <WebCore/CoreVideoSoftLink.h>
 
 namespace WebCore {
 
@@ -205,6 +204,7 @@ IOSurface::IOSurface(IntSize size, IntSize contextSize, CGColorSpaceRef colorSpa
     ASSERT(!success);
     ASSERT(contextSize.width() <= size.width());
     ASSERT(contextSize.height() <= size.height());
+    ASSERT(!size.isEmpty());
 
     NSDictionary *options;
 

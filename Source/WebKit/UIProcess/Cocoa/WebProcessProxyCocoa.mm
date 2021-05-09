@@ -31,6 +31,7 @@
 #import "Logging.h"
 #import "ObjCObjectGraph.h"
 #import "SandboxUtilities.h"
+#import "SharedBufferDataReference.h"
 #import "WKBrowsingContextControllerInternal.h"
 #import "WKBrowsingContextHandleInternal.h"
 #import "WKTypeRefWrapper.h"
@@ -58,13 +59,15 @@ SOFT_LINK(TCC, TCCAccessCheckAuditToken, Boolean, (CFStringRef service, audit_to
 SOFT_LINK_CONSTANT(TCC, kTCCServiceAccessibility, CFStringRef)
 #endif
 
+#import <pal/cf/AudioToolboxSoftLink.h>
+
 namespace WebKit {
 
 static const Seconds unexpectedActivityDuration = 10_s;
 
-const HashSet<String>& WebProcessProxy::platformPathsWithAssumedReadAccess()
+const MemoryCompactLookupOnlyRobinHoodHashSet<String>& WebProcessProxy::platformPathsWithAssumedReadAccess()
 {
-    static NeverDestroyed<HashSet<String>> platformPathsWithAssumedReadAccess(std::initializer_list<String> {
+    static NeverDestroyed<MemoryCompactLookupOnlyRobinHoodHashSet<String>> platformPathsWithAssumedReadAccess(std::initializer_list<String> {
         [NSBundle bundleWithIdentifier:@"com.apple.WebCore"].resourcePath.stringByStandardizingPath,
         [NSBundle bundleWithIdentifier:@"com.apple.WebKit"].resourcePath.stringByStandardizingPath
     });
@@ -175,7 +178,7 @@ void WebProcessProxy::cacheMediaMIMETypes(const Vector<String>& types)
 
     mediaTypeCache() = types;
     for (auto& process : processPool().processes()) {
-        if (process != this)
+        if (process != *this)
             cacheMediaMIMETypesInternal(types);
     }
 }
@@ -198,13 +201,13 @@ Vector<String> WebProcessProxy::mediaMIMETypes() const
 void WebProcessProxy::requestHighPerformanceGPU()
 {
     LOG(WebGL, "WebProcessProxy::requestHighPerformanceGPU()");
-    HighPerformanceGPUManager::singleton().addProcessRequiringHighPerformance(this);
+    HighPerformanceGPUManager::singleton().addProcessRequiringHighPerformance(*this);
 }
 
 void WebProcessProxy::releaseHighPerformanceGPU()
 {
     LOG(WebGL, "WebProcessProxy::releaseHighPerformanceGPU()");
-    HighPerformanceGPUManager::singleton().removeProcessRequiringHighPerformance(this);
+    HighPerformanceGPUManager::singleton().removeProcessRequiringHighPerformance(*this);
 }
 #endif
 
@@ -280,5 +283,24 @@ void WebProcessProxy::isAXAuthenticated(audit_token_t auditToken, CompletionHand
     completionHandler(authenticated);
 }
 #endif
+
+void WebProcessProxy::sendAudioComponentRegistrations()
+{
+    using namespace PAL;
+
+    if (!isAudioToolboxCoreFrameworkAvailable() || !canLoad_AudioToolboxCore_AudioComponentFetchServerRegistrations())
+        return;
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), [protectedThis = makeRef(*this)] () mutable {
+        CFDataRef registrations { nullptr };
+        if (noErr != AudioComponentFetchServerRegistrations(&registrations) || !registrations)
+            return;
+
+        RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), registrations = adoptCF(registrations)] () mutable {
+            auto registrationData = SharedBuffer::create(registrations.get());
+            protectedThis->send(Messages::WebProcess::ConsumeAudioComponentRegistrations({ registrationData }), 0);
+        });
+    });
+}
 
 }

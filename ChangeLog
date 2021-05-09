@@ -1,3 +1,534 @@
+2021-05-07  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK][WPE] Bump libsoup3 version to 2.99.5
+        https://bugs.webkit.org/show_bug.cgi?id=225506
+
+        Reviewed by Philippe Normand.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-05-06  Yoshiaki Jitsukawa  <yoshiaki.jitsukawa@sony.com>
+
+        [OpenSSL] Implement CryptoAlgorithmRSA*
+        https://bugs.webkit.org/show_bug.cgi?id=225294
+
+        Reviewed by Don Olmstead.
+
+        Implement RSA for OpenSSL.
+
+        Implement CryptoAlgorithmRSA_OAEP, CryptoAlgorithmRSA_PSS,
+        CryptoAlgorithmRSAES_PKCS1_v1_5, CryptoAlgorithmRSASA_PKCS1_v1_5,
+        and CryptoKeyRSA for OpenSSL.
+
+        Note that if such OpenSSL version that does not support RSA_OAEP or
+        RSA_PSS, the WebCrypto API for those algorithm will return a
+        NotSupportedError.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+        * Source/cmake/OptionsWinCairo.cmake:
+
+2021-05-05  Michael Catanzaro  <mcatanzaro@gnome.org>
+
+        USE_64KB_PAGE_BLOCK build option is broken
+        https://bugs.webkit.org/show_bug.cgi?id=225393
+
+        Reviewed by Adrian Perez de Castro.
+
+        Call SET_AND_EXPOSE_TO_BUILD().
+
+        * Source/cmake/WebKitFeatures.cmake:
+
+2021-05-05  Michael Catanzaro  <mcatanzaro@gnome.org>
+
+        Fix typo in comment in WebKitFeatures.cmake
+        https://bugs.webkit.org/show_bug.cgi?id=225392
+
+        Unreviewed.
+
+        * Source/cmake/WebKitFeatures.cmake:
+
+2021-04-27  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Don't use FORWARDING_HEADERS_DIR for GTK WebKit headers
+        https://bugs.webkit.org/show_bug.cgi?id=225006
+
+        Reviewed by Michael Catanzaro.
+
+        Create CMake variables WebKit2Gtk_FRAMEWORK_HEADERS_DIR and WebKit2Gtk_DERIVED_SOURCES_DIR
+        to represent where the WebKit2 GTK headers and derived sources will reside. The names and
+        locations set then follow along with the conventions used for the other frameworks.
+
+        * Source/cmake/OptionsGTK.cmake:
+
+2021-04-26  Alex Christensen  <achristensen@webkit.org>
+
+        Update Mac-specific CMake files
+        https://bugs.webkit.org/show_bug.cgi?id=225064
+
+        Rubber-stamped by Tim Horton.
+
+        * Source/cmake/OptionsMac.cmake:
+        * Source/cmake/WebKitCommon.cmake:
+
+2021-04-26  Don Olmstead  <don.olmstead@sony.com>
+
+        [PlayStation] Fix build break after r276368
+        https://bugs.webkit.org/show_bug.cgi?id=225056
+
+        Reviewed by Ross Kirsling.
+
+        Ensure that the OpenGL::GLES target is created.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+
+2021-04-22  Martin Robinson  <mrobinson@webkit.org>
+
+        [GTK] Turn on editable <input type=date> and <input type=time> fields
+        https://bugs.webkit.org/show_bug.cgi?id=224921
+
+        Reviewed by Carlos Garcia Campos.
+
+        Turn on editable date and time inputs for GTK
+
+        * Source/cmake/OptionsGTK.cmake: Add new source file to the list.
+
+2021-04-22  Imanol Fernandez  <ifernandez@igalia.com>
+
+        Implement WebXR Input Sources
+        https://bugs.webkit.org/show_bug.cgi?id=223257
+
+        Reviewed by Youenn Fablet.
+
+        Enable WPE Gamepad when WebXR is enabled.
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-22  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [SOUP] Add support for preconnect
+        https://bugs.webkit.org/show_bug.cgi?id=177934
+
+        Reviewed by Sergio Villar Senin.
+
+        Enable server preconnect support when building with libsoup3.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-22  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK][WPE] Bump libsoup3 version to 2.99.4
+        https://bugs.webkit.org/show_bug.cgi?id=224925
+
+        Reviewed by Philippe Normand.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-21  Martin Robinson  <mrobinson@igalia.com>
+
+        Enable CSS Scroll Snap by default
+        https://bugs.webkit.org/show_bug.cgi?id=224867
+
+        Reviewed by Don Olmstead.
+
+        * Source/cmake/OptionsFTW.cmake: Remove redundant line enabling scroll snap.
+        * Source/cmake/OptionsGTK.cmake: Ditto.
+        * Source/cmake/OptionsMac.cmake: Ditto.
+        * Source/cmake/OptionsWPE.cmake: Ditto.
+        * Source/cmake/OptionsWin.cmake: Explicitly disable scroll snap for AppleWin port
+        until it can be approved by maintainers.
+        * Source/cmake/WebKitFeatures.cmake: Enable scroll snap by default.
+
+2021-04-21  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Add OpenGLES2 targets
+        https://bugs.webkit.org/show_bug.cgi?id=224786
+
+        Reviewed by Adrian Perez de Castro.
+
+        Modernize the FindOpenGLES2.cmake module. Add an OpenGL::GLES target. Also add an
+        OpenGLES2_API_VERSION value so HAVE_OPENGL_ES_3 can be determined.
+
+        For WPE add a find_package for OpenGL ES so the target is present.
+
+        For GTK set HAVE_OPENGL_ES_3 if OpenGLES2_API_VERSION supports it.
+
+        * Source/cmake/FindOpenGLES2.cmake:
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-20  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Don't use FORWARDING_HEADERS_DIR for JSC GLib headers
+        https://bugs.webkit.org/show_bug.cgi?id=224821
+
+        Reviewed by Michael Catanzaro.
+
+        Create CMake variables JavaScriptCoreGLib_FRAMEWORK_HEADERS_DIR and
+        JavaScriptCoreGLib_DERIVED_SOURCES_DIR to represent where the JavaScriptCore GLib headers
+        and derived sources will reside. The names and locations set then follow along with the
+        conventions used for the other frameworks.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-20  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [WPE] Switch to libsoup3 by default
+        https://bugs.webkit.org/show_bug.cgi?id=224802
+
+        Reviewed by Žan Doberšek.
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-19  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Switch to libsoup3 by default
+        https://bugs.webkit.org/show_bug.cgi?id=224741
+
+        Reviewed by Sergio Villar Senin.
+
+        * Source/cmake/OptionsGTK.cmake:
+
+2021-04-19  Philippe Normand  <pnormand@igalia.com>
+
+        [WPE][GTK] Enable AVIF decoder as experimental feature and unskip tests
+        https://bugs.webkit.org/show_bug.cgi?id=224663
+
+        Reviewed by Xabier Rodriguez-Calvar.
+
+        Make the USE_AVIF option public and enable it as experimental feature.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-16  Philippe Normand  <pnormand@igalia.com>
+
+        [CMake] UBSan build fixes
+        https://bugs.webkit.org/show_bug.cgi?id=224536
+
+        Reviewed by Adrian Perez de Castro.
+
+        Synchronize UBSan compiler flags with the ones defined in ubsan.xcconfig.
+
+        * Source/cmake/WebKitCompilerFlags.cmake:
+
+2021-04-15  Don Olmstead  <don.olmstead@sony.com>
+
+        ANGLE is only being built when WebGL is enabled
+        https://bugs.webkit.org/show_bug.cgi?id=224555
+
+        Reviewed by Fujii Hironori.
+
+        ANGLE should be built if either USE_ANGLE_EGL or ENABLE_WEBGL is ON.
+
+        * Source/CMakeLists.txt:
+
+2021-04-15  Basuke Suzuki  <basuke.suzuki@sony.com>
+
+        Remove warnings caused by export g_config extern definition in WTFConfig.h
+        https://bugs.webkit.org/show_bug.cgi?id=224462
+
+        Reviewed by Don Olmstead.
+
+        While building PlayStation port, lots of warnings are displayed:
+
+        > WTF/Headers\wtf/WTFConfig.h:49:36: warning: redeclaration of 'WebConfig::g_config'
+        > should not add 'dllimport' attribute [-Wdll-attribute-on-redeclaration]
+        > extern "C" WTF_EXPORT_PRIVATE Slot g_config[];
+        >                                    ^
+        > bmalloc/Headers\bmalloc/GigacageConfig.h:38:17: note: previous declaration is here
+        > extern "C" Slot g_config[];
+
+        This is because the two definitions are not same.
+        Becasue we can't solve the situation completely, we just ignore these warnings at
+        this morment.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+
+2021-04-15  Philippe Normand  <pnormand@igalia.com>
+
+        [WebRTC][GStreamer] Build and use the openh264 based encoder if present on the system
+        https://bugs.webkit.org/show_bug.cgi?id=202538
+        <rdar://problem/76047172>
+
+        Reviewed by Xabier Rodriguez-Calvar.
+
+        * Source/CMakeLists.txt:
+        * Source/cmake/GStreamerChecks.cmake:
+
+2021-04-14  Don Olmstead  <don.olmstead@sony.com>
+
+        [PlayStation] Disable WebGL
+        https://bugs.webkit.org/show_bug.cgi?id=224562
+
+        Reviewed by Alex Christensen.
+
+        WebGL support on PlayStation platforms is deprecated.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+
+2021-04-13  Philippe Normand  <pnormand@igalia.com>
+
+        [GTK][WPE] Avif decoder build broken
+        https://bugs.webkit.org/show_bug.cgi?id=224232
+
+        Reviewed by Carlos Garcia Campos.
+
+        * Source/cmake/OptionsGTK.cmake: Require 0.9.0 due to avifIO usage in the decoder.
+
+2021-04-09  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK][WPE] Bump libsoup3 version to 2.99.3
+        https://bugs.webkit.org/show_bug.cgi?id=224362
+
+        Reviewed by Žan Doberšek.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-04-07  Michael Catanzaro  <mcatanzaro@gnome.org>
+
+        [GTK] webkit://gpu should print runtime libwpe and wpebackend-fdo versions
+        https://bugs.webkit.org/show_bug.cgi?id=224298
+
+        Reviewed by Adrian Perez de Castro.
+
+        * Source/cmake/OptionsGTK.cmake:
+
+2021-04-07  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Mark _LIBRARY not _LIBRARIES in find modules
+        https://bugs.webkit.org/show_bug.cgi?id=224283
+
+        Reviewed by Michael Catanzaro.
+
+        A few find modules are erroniously sending _LIBRARIES to mark_as_advanced rather than
+        _LIBRARY. The former is created from the _LIBRARY value so it isn't valid at that point.
+
+        * Source/cmake/FindCairo.cmake:
+        * Source/cmake/FindFontconfig.cmake:
+        * Source/cmake/FindSQLite3.cmake:
+
+2021-04-07  Kimmo Kinnunen  <kkinnunen@apple.com>
+
+        .gitignore contains 'build/' which causes all directories named 'build/' to be ignored
+        https://bugs.webkit.org/show_bug.cgi?id=224227
+
+        Reviewed by Ryosuke Niwa.
+
+        Remove 'build/' from .gitignore, it was causing errors by hiding files.
+        WebGL conformance test suite files have directiories with 'build/' in its path.
+
+        Most likely '/build/' is not a common build directory, since the scripts
+        seem to default to '/WebKitBuild/'.
+
+        * .gitignore:
+
+2021-04-06  Philippe Normand  <pnormand@igalia.com>
+
+        REGRESSION(r275275): Broke some build configs lacking openh264
+        https://bugs.webkit.org/show_bug.cgi?id=224244
+
+        Unreviewed, manual revert of r275275 and r275409.
+
+        * Source/CMakeLists.txt:
+        * Source/cmake/GStreamerChecks.cmake:
+
+2021-04-06  Mark Lam  <mark.lam@apple.com>
+
+        Speculative build fix for Windows port.
+        https://bugs.webkit.org/show_bug.cgi?id=224243
+        rdar://75883248
+
+        Reviewed by Saam Barati.
+
+        Source/cmake/tools/scripts/auto-version.pl was limiting our `minor` and `micro`
+        version to only 2 decimal digits only.  In practice, we can use up to 3 digits.
+
+        * Source/cmake/tools/scripts/auto-version.pl:
+        (packTwoValues):
+
+2021-04-05  Alex Christensen  <achristensen@webkit.org>
+
+        Resurrect Mac CMake build
+        https://bugs.webkit.org/show_bug.cgi?id=224084
+
+        Reviewed by Tim Horton.
+
+        * Source/cmake/OptionsMac.cmake:
+
+2021-04-05  Tyler Wilcock  <twilco.o@protonmail.com>
+
+        Document how to use logging in WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=224152
+
+        Reviewed by Simon Fraser.
+
+        Add documentation about how to use logging in WebKit.
+
+        * Introduction.md:
+
+2021-03-28  David Kilzer  <ddkilzer@apple.com>
+
+        Compile WebKit with UBSan
+        <https://webkit.org/b/176131>
+        <rdar://problem/34174018>
+
+        Reviewed by Alexey Proskuryakov.
+
+        * Makefile.shared:
+        - Add support for "UBSAN=YES" argument to make.
+
+2021-03-27  Philippe Normand  <pnormand@igalia.com>
+
+        REGRESSION(r275111) [GLIB] Fix build with new derived sources and forwarding headers scheme
+        https://bugs.webkit.org/show_bug.cgi?id=223834
+
+        Unreviewed build fix.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-03-26  Lauro Moura  <lmoura@igalia.com>
+
+        REGRESSION(r275111) [GLIB] Fix build with new derived sources and forwarding headers scheme
+        https://bugs.webkit.org/show_bug.cgi?id=223834
+
+        Unreviewed build fix.
+
+        Buildfix for now. Actual removal of older scheme will come in the
+        future.
+
+        * Source/cmake/OptionsWPE.cmake: Add some missing variables with the
+        per framework source and header dirs.
+
+2021-03-26  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Deprecate using DERIVED_SOURCES_DIR/FOWARDING_HEADERS_DIR directly
+        https://bugs.webkit.org/show_bug.cgi?id=223763
+
+        Reviewed by Michael Catanzaro.
+
+        Remove any usages of DERIVED_SOURCES_DIR and FOWARDING_HEADERS_DIR. There are still some
+        uses in GTK/WPE but those should be phased out.
+
+        Sets the directory structure to look like an Apple build in terms of where headers and
+        derived sources are held. Rather than having one root derived sources and one root
+        header directory those directories are now per project. This helps catch any errors with
+        header includes.
+
+        Deletes some old Mac CMake code that is no longer relevant around creating forwarding
+        headers.
+
+        For AppleWin the old structure is used because of its internal build which assumes the
+        old structure.
+
+        * Source/cmake/OptionsAppleWin.cmake:
+        * Source/cmake/OptionsFTW.cmake:
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsPlayStation.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+        * Source/cmake/OptionsWinCairo.cmake:
+        * Source/cmake/WebKitCommon.cmake:
+        * Source/cmake/WebKitFS.cmake:
+        * Source/cmake/WebKitMacros.cmake:
+
+2021-03-23  Adrian Perez de Castro  <aperez@igalia.com>
+
+        [CMake] Use an imported target for the LCMS2 library
+        https://bugs.webkit.org/show_bug.cgi?id=223442
+
+        Reviewed by Carlos Garcia Campos.
+
+        * Source/cmake/FindLCMS2.cmake: Replaced find module by a new one which
+        defines a LCMS2::LCMS2 imported target and in general uses more modern CMake
+        constructs.
+
+2021-03-23  Cameron McCormack  <heycam@apple.com>
+
+        Update .clang-format to reflect WebKit style better.
+        https://bugs.webkit.org/show_bug.cgi?id=223229
+
+        First, SpaceBeforeCpp11BracedList is set to true so that a space
+        is introduced after a variable name and before a braced initializer.
+
+        Second, AlwaysBreakTemplateDeclarations is changed from false (an
+        invalid value) to No, which should result in no line breaks being
+        introduced in template declarations.  Although there is a mix of
+        template declaration line breaking styles in the codebase, changing
+        this option to No will prevent clang-format from introducing one
+        where the patch author decides to write the declaration all on one
+        line.
+
+        Reviewed by Alex Christensen.
+
+        * .clang-format:
+
+2021-03-22  Adrian Perez de Castro  <aperez@igalia.com>
+
+        [CMake] Wrong variable used in FindFontconfig used to pick version from pkg-config
+        https://bugs.webkit.org/show_bug.cgi?id=223557
+
+        Reviewed by Michael Catanzaro.
+
+        * Source/cmake/FindFontconfig.cmake: Fix to use ${PC_FONTCONFIG_VERSION}.
+
+2021-03-18  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [WPE] Bump API version when building with libsoup3
+        https://bugs.webkit.org/show_bug.cgi?id=223437
+
+        Reviewed by Adrian Perez de Castro.
+
+        Use 1.1 as the API version when building with soup3.
+
+        * Source/PlatformWPE.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-03-17  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK][WPE] Enable CSS scroll snap support by default
+        https://bugs.webkit.org/show_bug.cgi?id=222641
+
+        Reviewed by Carlos Garcia Campos.
+
+        * Source/cmake/OptionsGTK.cmake: Enable CSS scroll snap by default.
+        * Source/cmake/OptionsWPE.cmake: Ditto.
+
+2021-03-16  Khem Raj  <raj.khem@gmail.com>
+
+        [CMake] Build fails on RISC-V with GCC 11
+        https://bugs.webkit.org/show_bug.cgi?id=222959
+
+        Reviewed by Carlos Alberto Lopez Perez.
+
+        Check for 1 byte atomic operations along with 64bit ones, some
+        architevtures (e.g. RISCV) operations on less than 4 bytes are not lock-free
+
+        * Source/cmake/WebKitCompilerFlags.cmake:
+
+2021-03-14  Lauro Moura  <lmoura@igalia.com>
+
+        [GLIB] Keep GPUProcess disabled when using experimental features
+        https://bugs.webkit.org/show_bug.cgi?id=223155
+
+        Reviewed by Philippe Normand.
+
+        At least two recent GPUProcess-related revisions caused issues in
+        GLIB, causing serious regressions in the bots. Disabling it for now
+        until we improve its support.
+
+        Revisions:
+
+        r274327 - 2D Canvas enabled by default in GPUProcess
+        r272842 - Media enabled by default in GPUProcess
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
 2021-03-12  Carlos Garcia Campos  <cgarcia@igalia.com>
 
         [GTK] Bump API version when building with libsoup3

@@ -144,6 +144,7 @@
 #import <os/state_private.h>
 #endif
 
+#import <pal/cf/AudioToolboxSoftLink.h>
 #import <pal/cocoa/AVFoundationSoftLink.h>
 #import <pal/cocoa/MediaToolboxSoftLink.h>
 
@@ -164,6 +165,11 @@ SOFT_LINK_CLASS(CoreServices, _LSDOpenService)
 #if PLATFORM(MAC)
 SOFT_LINK_FRAMEWORK_IN_UMBRELLA(ApplicationServices, HIServices)
 SOFT_LINK_FUNCTION_MAY_FAIL_FOR_SOURCE(WebKit, HIServices, _AXSetAuditTokenIsAuthenticatedCallback, void, (AXAuditTokenIsAuthenticatedCallback callback), (callback))
+#endif
+
+#if PLATFORM(IOS_FAMILY)
+SOFT_LINK_LIBRARY(libAccessibility)
+SOFT_LINK_OPTIONAL(libAccessibility, _AXSUpdateWebAccessibilitySettings, void, (), ());
 #endif
 
 namespace WebKit {
@@ -259,9 +265,6 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
     WebKit::initializeLogChannelsIfNecessary(parameters.webKitLoggingChannels);
 #endif
 
-    WebCore::setApplicationBundleIdentifier(parameters.uiProcessBundleIdentifier);
-    setApplicationSDKVersion(parameters.uiProcessSDKVersion);
-
     m_uiProcessBundleIdentifier = parameters.uiProcessBundleIdentifier;
 
 #if ENABLE(SANDBOX_EXTENSIONS)
@@ -298,6 +301,7 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
 #if PLATFORM(IOS_FAMILY)
     setCurrentUserInterfaceIdiomIsPadOrMac(parameters.currentUserInterfaceIdiomIsPad);
     setLocalizedDeviceModel(parameters.localizedDeviceModel);
+    RenderThemeIOS::setContentSizeCategory(parameters.contentSizeCategory);
 #if ENABLE(VIDEO_PRESENTATION_MODE)
     setSupportsPictureInPicture(parameters.supportsPictureInPicture);
 #endif
@@ -1116,6 +1120,13 @@ static void setPreferenceValue(const String& domain, const String& key, id value
 
         WTF::languageDidChange();
     }
+
+#if PLATFORM(IOS_FAMILY)
+    if (domain == String(kAXSAccessibilityPreferenceDomain)) {
+        if (_AXSUpdateWebAccessibilitySettingsPtr())
+            _AXSUpdateWebAccessibilitySettingsPtr()();
+    }
+#endif
 }
 
 void WebProcess::notifyPreferencesChanged(const String& domain, const String& key, const Optional<String>& encodedValue)
@@ -1269,6 +1280,22 @@ void WebProcess::systemDidWake()
         PlatformMediaSessionManager::sharedManager().processSystemDidWake();
 }
 #endif
+
+void WebProcess::consumeAudioComponentRegistrations(const IPC::DataReference& data)
+{
+    using namespace PAL;
+
+    if (!isAudioToolboxCoreFrameworkAvailable() || !canLoad_AudioToolboxCore_AudioComponentApplyServerRegistrations())
+        return;
+
+    auto registrations = adoptCF(CFDataCreate(kCFAllocatorDefault, data.data(), data.size()));
+    if (!registrations)
+        return;
+
+    auto err = AudioComponentApplyServerRegistrations(registrations.get());
+    if (noErr != err)
+        RELEASE_LOG_ERROR_IF_ALLOWED(Process, "Could not apply AudioComponent registrations, err(%ld)", static_cast<long>(err));
+}
 
 } // namespace WebKit
 

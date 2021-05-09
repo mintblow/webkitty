@@ -139,7 +139,7 @@ public:
 #endif
     void cancelLoad() final;
     void prepareToPlay() final;
-    void play() final;
+    void play() override;
     void pause() override;
     bool paused() const final;
     bool seeking() const override { return m_isSeeking; }
@@ -252,7 +252,6 @@ protected:
 
     virtual void durationChanged();
     virtual void sourceSetup(GstElement*);
-    virtual void configurePlaySink() { }
     virtual bool changePipelineState(GstState);
     virtual void updatePlaybackRate();
 
@@ -280,7 +279,6 @@ protected:
 
     void setStreamVolumeElement(GstStreamVolume*);
 
-    void setPipeline(GstElement*);
     GstElement* pipeline() const { return m_pipeline.get(); }
 
     void repaint();
@@ -303,6 +301,9 @@ protected:
 
     void ensureAudioSourceProvider();
     void setAudioStreamProperties(GObject*);
+
+    virtual bool doSeek(const MediaTime& position, float rate, GstSeekFlags);
+    void invalidateCachedPosition() { m_lastQueryTime.reset(); }
 
     static void setAudioStreamPropertiesCallback(MediaPlayerPrivateGStreamer*, GObject*);
 
@@ -411,7 +412,7 @@ private:
     virtual void updateStates();
     virtual void asyncStateChangeDone();
 
-    void createGSTPlayBin(const URL&, const String& pipelineName);
+    void createGSTPlayBin(const URL&);
 
     bool loadNextLocation();
     void mediaLocationChanged(GstMessage*);
@@ -432,8 +433,6 @@ private:
     void purgeInvalidVideoTracks(Vector<String> validTrackIds);
     void purgeInvalidTextTracks(Vector<String> validTrackIds);
 
-    virtual bool doSeek(const MediaTime& position, float rate, GstSeekFlags seekType);
-
     String engineDescription() const override { return "GStreamer"; }
     bool didPassCORSAccessCheck() const override;
     bool canSaveMediaData() const override;
@@ -443,11 +442,11 @@ private:
     static void downloadBufferFileCreatedCallback(MediaPlayerPrivateGStreamer*);
 
     void setPlaybinURL(const URL& urlString);
-    void loadFull(const String& url, const String& pipelineName);
 
     void updateTracks(const GRefPtr<GstStreamCollection>&);
     void videoSinkCapsChanged(GstPad*);
     void updateVideoSizeAndOrientationFromCaps(const GstCaps*);
+    bool hasFirstVideoSampleReachedSink() const;
 
 #if ENABLE(ENCRYPTED_MEDIA)
     bool isCDMAttached() const { return m_cdmInstance; }
@@ -457,12 +456,15 @@ private:
     bool waitForCDMAttachment();
 #endif
 
+    void configureMediaStreamAudioTracks();
+
     Atomic<bool> m_isPlayerShuttingDown;
     GRefPtr<GstElement> m_textSink;
     GstStructure* m_mediaLocations { nullptr };
     int m_mediaLocationCurrentIndex { 0 };
     bool m_isPlaybackRatePaused { false };
     MediaTime m_timeOfOverlappingSeek;
+    // Last playback rate sent through a GStreamer seek.
     float m_lastPlaybackRate { 1 };
     Timer m_fillTimer;
     MediaTime m_maxTimeLoaded;
@@ -529,6 +531,9 @@ private:
     GRefPtr<GstElement> m_fpsSink { nullptr };
     uint64_t m_totalVideoFrames { 0 };
     uint64_t m_droppedVideoFrames { 0 };
+
+    // This is set to true if no videoflip element has been added to the pipeline.
+    bool m_shouldHandleOrientationTags { false };
 
 private:
 #if USE(WPE_VIDEO_PLANE_DISPLAY_DMABUF)

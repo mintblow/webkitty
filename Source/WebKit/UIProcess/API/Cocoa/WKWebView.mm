@@ -70,7 +70,7 @@
 #import "WKLayoutMode.h"
 #import "WKNSData.h"
 #import "WKNSURLExtras.h"
-#import "WKNavigationDelegate.h"
+#import <WebKit/WKNavigationDelegate.h>
 #import "WKNavigationInternal.h"
 #import "WKPDFConfiguration.h"
 #import "WKPreferencesInternal.h"
@@ -78,8 +78,8 @@
 #import "WKSafeBrowsingWarning.h"
 #import "WKSharedAPICast.h"
 #import "WKSnapshotConfiguration.h"
-#import "WKUIDelegate.h"
-#import "WKUIDelegatePrivate.h"
+#import <WebKit/WKUIDelegate.h>
+#import <WebKit/WKUIDelegatePrivate.h>
 #import "WKUserContentControllerInternal.h"
 #import "WKWebViewConfigurationInternal.h"
 #import "WKWebViewContentProvider.h"
@@ -124,6 +124,7 @@
 #import <WebCore/AttributedString.h>
 #import <WebCore/ColorCocoa.h>
 #import <WebCore/ColorSerialization.h>
+#import <WebCore/ContentExtensionsBackend.h>
 #import <WebCore/ElementContext.h>
 #import <WebCore/JSDOMBinding.h>
 #import <WebCore/JSDOMExceptionHandling.h>
@@ -148,6 +149,7 @@
 #import <wtf/NeverDestroyed.h>
 #import <wtf/Optional.h>
 #import <wtf/RetainPtr.h>
+#import <wtf/SystemTracing.h>
 #import <wtf/UUID.h>
 #import <wtf/cocoa/VectorCocoa.h>
 #import <wtf/spi/darwin/dyldSPI.h>
@@ -196,17 +198,6 @@ static const BOOL defaultFastClickingEnabled = NO;
 
 static const uint32_t firstSDKVersionWithLinkPreviewEnabledByDefault = 0xA0000;
 #endif // PLATFORM(IOS_FAMILY)
-
-static HashMap<WebKit::WebPageProxy*, __unsafe_unretained WKWebView *>& pageToViewMap()
-{
-    static NeverDestroyed<HashMap<WebKit::WebPageProxy*, __unsafe_unretained WKWebView *>> map;
-    return map;
-}
-
-WKWebView* fromWebPageProxy(WebKit::WebPageProxy& page)
-{
-    return pageToViewMap().get(&page);
-}
 
 RetainPtr<NSError> nsErrorFromExceptionDetails(const WebCore::ExceptionDetails& details)
 {
@@ -440,7 +431,7 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
     for (auto& pair : pageConfiguration->urlSchemeHandlers())
         _page->setURLSchemeHandlerForScheme(WebKit::WebURLSchemeHandlerCocoa::create(static_cast<WebKit::WebURLSchemeHandlerCocoa&>(pair.value.get()).apiHandler()), pair.key);
 
-    pageToViewMap().add(_page.get(), self);
+    _page->setCocoaView(self);
 
     [WebViewVisualIdentificationOverlay installForWebViewIfNeeded:self kind:@"WKWebView" deprecated:NO];
 
@@ -449,7 +440,7 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
     _timeOfRequestForVisibleContentRectUpdate = timeNow;
     _timeOfLastVisibleContentRectUpdate = timeNow;
     _timeOfFirstVisibleContentRectUpdateWithPendingCommit = timeNow;
-#endif // PLATFORM(IOS_FAMILY)
+#endif
 }
 
 - (void)_setupPageConfiguration:(Ref<API::PageConfiguration>&)pageConfiguration
@@ -553,6 +544,10 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
     pageConfiguration->preferences()->setColorFilterEnabled(!![_configuration _colorFilterEnabled]);
 
     pageConfiguration->preferences()->setUndoManagerAPIEnabled(!![_configuration _undoManagerAPIEnabled]);
+    
+#if ENABLE(APP_HIGHLIGHTS)
+    pageConfiguration->preferences()->setAppHighlightsEnabled(!![_configuration _appHighlightsEnabled]);
+#endif
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA)
     pageConfiguration->preferences()->setLegacyEncryptedMediaAPIEnabled(!![_configuration _legacyEncryptedMediaAPIEnabled]);
@@ -564,6 +559,9 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
         pageConfiguration->preferences()->setServiceWorkersEnabled(false);
     pageConfiguration->preferences()->setServiceWorkerEntitlementDisabledForTesting(!![_configuration preferences]._serviceWorkerEntitlementDisabledForTesting);
 #endif
+
+    pageConfiguration->preferences()->setSampledPageTopColorMaxDifference([_configuration _sampledPageTopColorMaxDifference]);
+    pageConfiguration->preferences()->setSampledPageTopColorMinHeight([_configuration _sampledPageTopColorMinHeight]);
 
     if (!linkedOnOrAfter(WebCore::SDKVersion::FirstWhereSiteSpecificQuirksAreEnabledByDefault))
         pageConfiguration->preferences()->setNeedsSiteSpecificQuirks(false);
@@ -642,9 +640,6 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
 
     CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFStringRef)[NSString stringWithUTF8String:kGSEventHardwareKeyboardAvailabilityChangedNotification], nullptr);
 #endif
-
-    if (_page)
-        pageToViewMap().remove(_page.get());
 
     [super dealloc];
 }
@@ -989,6 +984,68 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
     });
 }
 
+- (WKMediaCaptureState)cameraCaptureState
+{
+    auto state = _page->reportedMediaState();
+    if (state & WebCore::MediaProducer::MediaState::HasActiveVideoCaptureDevice)
+        return WKMediaCaptureStateActive;
+    if (state & WebCore::MediaProducer::MediaState::HasMutedVideoCaptureDevice)
+        return WKMediaCaptureStateMuted;
+    return WKMediaCaptureStateNone;
+}
+
+- (WKMediaCaptureState)microphoneCaptureState
+{
+    auto state = _page->reportedMediaState();
+    if (state & WebCore::MediaProducer::MediaState::HasActiveAudioCaptureDevice)
+        return WKMediaCaptureStateActive;
+    if (state & WebCore::MediaProducer::MediaState::HasMutedAudioCaptureDevice)
+        return WKMediaCaptureStateMuted;
+    return WKMediaCaptureStateNone;
+}
+
+- (void)setMicrophoneCaptureState:(WKMediaCaptureState)state completionHandler:(void (^)(void))completionHandler
+{
+    if (!completionHandler)
+        completionHandler = [] { };
+
+    if (state == WKMediaCaptureStateNone) {
+        _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::Audio, [completionHandler = makeBlockPtr(completionHandler)] {
+            completionHandler();
+        });
+        return;
+    }
+    auto mutedState = _page->mutedStateFlags();
+    if (state == WKMediaCaptureStateActive)
+        mutedState.remove(WebCore::MediaProducer::MutedState::AudioCaptureIsMuted);
+    else if (state == WKMediaCaptureStateMuted)
+        mutedState.add(WebCore::MediaProducer::MutedState::AudioCaptureIsMuted);
+    _page->setMuted(mutedState, [completionHandler = makeBlockPtr(completionHandler)] {
+        completionHandler();
+    });
+}
+
+- (void)setCameraCaptureState:(WKMediaCaptureState)state completionHandler:(void (^)(void))completionHandler
+{
+    if (!completionHandler)
+        completionHandler = [] { };
+
+    if (state == WKMediaCaptureStateNone) {
+        _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::Video, [completionHandler = makeBlockPtr(completionHandler)] {
+            completionHandler();
+        });
+        return;
+    }
+    auto mutedState = _page->mutedStateFlags();
+    if (state == WKMediaCaptureStateActive)
+        mutedState.remove(WebCore::MediaProducer::MutedState::VideoCaptureIsMuted);
+    else if (state == WKMediaCaptureStateMuted)
+        mutedState.add(WebCore::MediaProducer::MutedState::VideoCaptureIsMuted);
+    _page->setMuted(mutedState, [completionHandler = makeBlockPtr(completionHandler)] {
+        completionHandler();
+    });
+}
+
 - (void)_evaluateJavaScript:(NSString *)javaScriptString asAsyncFunction:(BOOL)asAsyncFunction withSourceURL:(NSURL *)sourceURL withArguments:(NSDictionary<NSString *, id> *)arguments forceUserGesture:(BOOL)forceUserGesture inFrame:(WKFrameInfo *)frame inWorld:(WKContentWorld *)world completionHandler:(void (^)(id, NSError *))completionHandler
 {
     auto handler = adoptNS([completionHandler copy]);
@@ -1052,6 +1109,9 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
 
 - (void)takeSnapshotWithConfiguration:(WKSnapshotConfiguration *)snapshotConfiguration completionHandler:(void(^)(CocoaImage *, NSError *))completionHandler
 {
+    constexpr bool snapshotFailedTraceValue = false;
+    tracePoint(TakeSnapshotStart);
+
     CGRect rectInViewCoordinates = snapshotConfiguration && !CGRectIsNull(snapshotConfiguration.rect) ? snapshotConfiguration.rect : self.bounds;
     CGFloat snapshotWidth;
     if (snapshotConfiguration)
@@ -1076,12 +1136,14 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
     // in snapshotConfiguration.afterScreenUpdates at that time.
     _page->takeSnapshot(WebCore::enclosingIntRect(rectInViewCoordinates), bitmapSize, WebKit::SnapshotOptionsInViewCoordinates, [handler, snapshotWidth, imageHeight](const WebKit::ShareableBitmap::Handle& imageHandle) {
         if (imageHandle.isNull()) {
+            tracePoint(TakeSnapshotEnd, snapshotFailedTraceValue);
             handler(nil, createNSError(WKErrorUnknown).get());
             return;
         }
         auto bitmap = WebKit::ShareableBitmap::create(imageHandle, WebKit::SharedMemory::Protection::ReadOnly);
         RetainPtr<CGImageRef> cgImage = bitmap ? bitmap->makeCGImage() : nullptr;
         auto image = adoptNS([[NSImage alloc] initWithCGImage:cgImage.get() size:NSMakeSize(snapshotWidth, imageHeight)]);
+        tracePoint(TakeSnapshotEnd, true);
         handler(image.get(), nil);
     });
 #else
@@ -1096,7 +1158,8 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
                 error = createNSError(WKErrorUnknown);
             else
                 image = adoptNS([[UIImage alloc] initWithCGImage:snapshotImage scale:deviceScale orientation:UIImageOrientationUp]);
-            
+
+            tracePoint(TakeSnapshotEnd, !!snapshotImage);
             handler(image.get(), error.get());
         }];
     };
@@ -1108,6 +1171,7 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
 
     _page->callAfterNextPresentationUpdate([callSnapshotRect = WTFMove(callSnapshotRect), handler](WebKit::CallbackBase::Error error) {
         if (error != WebKit::CallbackBase::Error::None) {
+            tracePoint(TakeSnapshotEnd, snapshotFailedTraceValue);
             handler(nil, createNSError(WKErrorUnknown).get());
             return;
         }
@@ -1403,25 +1467,6 @@ inline OptionSet<WebKit::FindOptions> toFindOptions(WKFindConfiguration *configu
 
 #endif // ENABLE(ATTACHMENT_ELEMENT)
 
-- (BOOL)_hasBlankOverlay
-{
-    return !!_blankOverlayView;
-}
-
-- (void)_setHasBlankOverlay:(BOOL)hasBlankOverlay
-{
-    if (!!_blankOverlayView == hasBlankOverlay)
-        return;
-
-    if (hasBlankOverlay) {
-        _blankOverlayView = adoptNS([[WKBlankOverlayView alloc] initWithFrame:[self bounds]]);
-        [self addSubview:_blankOverlayView.get()];
-    } else {
-        [_blankOverlayView removeFromSuperview];
-        _blankOverlayView = nullptr;
-    }
-}
-
 - (id <_WKAppHighlightDelegate>)_appHighlightDelegate
 {
 #if ENABLE(APP_HIGHLIGHTS)
@@ -1586,6 +1631,52 @@ static _WKSelectionAttributes selectionAttributes(const WebKit::EditorState& edi
         [uiDelegate _webView:self editorStateDidChange:dictionaryRepresentationForEditorState(_page->editorState())];
 }
 
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request response:(NSURLResponse *)response responseData:(NSData *)data
+{
+    return wrapper(_page->loadSimulatedRequest(request, response, { static_cast<const uint8_t*>(data.bytes), data.length }));
+}
+
+// FIXME(223658): Remove this once adopters have moved to the final API.
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponse:(NSURLResponse *)response responseData:(NSData *)data
+{
+    return [self loadSimulatedRequest:request response:response responseData:data];
+}
+
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request responseHTMLString:(NSString *)string
+{
+    NSData *data = [string dataUsingEncoding:NSUTF8StringEncoding];
+    auto response = adoptNS([[NSURLResponse alloc] initWithURL:request.URL MIMEType:@"text/html" expectedContentLength:string.length textEncodingName:@"UTF-8"]);
+
+    return [self loadSimulatedRequest:request response:response.get() responseData:data];
+}
+
+// FIXME(223658): Remove this once adopters have moved to the final API.
+- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponseHTMLString:(NSString *)string
+{
+    return [self loadSimulatedRequest:request responseHTMLString:string];
+}
+
+- (WKNavigation *)loadFileRequest:(NSURLRequest *)request allowingReadAccessToURL:(NSURL *)readAccessURL
+{
+    auto URL = request.URL;
+
+    if (![URL isFileURL])
+        [NSException raise:NSInvalidArgumentException format:@"%@ is not a file URL", URL];
+
+    if (![readAccessURL isFileURL])
+        [NSException raise:NSInvalidArgumentException format:@"%@ is not a file URL", readAccessURL];
+
+    return wrapper(_page->loadFile(URL.absoluteString, readAccessURL.absoluteString));
+}
+
+- (CocoaColor *)themeColor
+{
+    auto themeColor = _page->themeColor();
+    if (!themeColor.isValid())
+        return nil;
+    return WebCore::platformColor(themeColor);
+}
+
 @end
 
 #pragma mark -
@@ -1746,62 +1837,6 @@ FOR_EACH_PRIVATE_WKCONTENTVIEW_ACTION(FORWARD_ACTION_TO_WKCONTENTVIEW)
     return _page->pageLoadState().hasNegotiatedLegacyTLS();
 }
 
-- (_WKMediaCaptureState)_cameraCaptureState
-{
-    auto state = _page->reportedMediaState();
-    if (state & WebCore::MediaProducer::HasActiveVideoCaptureDevice)
-        return _WKMediaCaptureStateActive;
-    if (state & WebCore::MediaProducer::HasMutedVideoCaptureDevice)
-        return _WKMediaCaptureStateMuted;
-    return _WKMediaCaptureStateNone;
-}
-
-- (_WKMediaCaptureState)_microphoneCaptureState
-{
-    auto state = _page->reportedMediaState();
-    if (state & WebCore::MediaProducer::HasActiveAudioCaptureDevice)
-        return _WKMediaCaptureStateActive;
-    if (state & WebCore::MediaProducer::HasMutedAudioCaptureDevice)
-        return _WKMediaCaptureStateMuted;
-    return _WKMediaCaptureStateNone;
-}
-
-- (void)setMicrophoneCaptureState:(_WKMediaCaptureState)state completionHandler:(void (^)(void))completionHandler
-{
-    if (state == _WKMediaCaptureStateNone) {
-        _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::Audio, [completionHandler = makeBlockPtr(completionHandler)] {
-            completionHandler();
-        });
-        return;
-    }
-    auto mutedState = _page->mutedStateFlags();
-    if (state == _WKMediaCaptureStateActive && mutedState & WebCore::MediaProducer::AudioCaptureIsMuted)
-        mutedState ^= WebCore::MediaProducer::AudioCaptureIsMuted;
-    else if (state == _WKMediaCaptureStateMuted)
-        mutedState = WebCore::MediaProducer::AudioCaptureIsMuted;
-    _page->setMuted(mutedState, [completionHandler = makeBlockPtr(completionHandler)] {
-        completionHandler();
-    });
-}
-
-- (void)setCameraCaptureState:(_WKMediaCaptureState)state completionHandler:(void (^)(void))completionHandler
-{
-    if (state == _WKMediaCaptureStateNone) {
-        _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::Video, [completionHandler = makeBlockPtr(completionHandler)] {
-            completionHandler();
-        });
-        return;
-    }
-    auto mutedState = _page->mutedStateFlags();
-    if (state == _WKMediaCaptureStateActive && mutedState & WebCore::MediaProducer::VideoCaptureIsMuted)
-        mutedState ^= WebCore::MediaProducer::VideoCaptureIsMuted;
-    else if (state == _WKMediaCaptureStateMuted)
-        mutedState = WebCore::MediaProducer::VideoCaptureIsMuted;
-    _page->setMuted(mutedState, [completionHandler = makeBlockPtr(completionHandler)] {
-        completionHandler();
-    });
-}
-
 - (void)_frames:(void (^)(_WKFrameTreeNode *))completionHandler
 {
     _page->getAllFrames([completionHandler = makeBlockPtr(completionHandler), page = makeRef(*_page.get())] (WebKit::FrameTreeNodeData&& data) {
@@ -1920,14 +1955,14 @@ static RetainPtr<NSDictionary<NSString *, id>> createUserInfo(const Optional<Web
     });
 }
 
-static WebCore::TextManipulationController::ItemIdentifier coreTextManipulationItemIdentifierFromString(NSString* identifier)
+static WebCore::TextManipulationController::ItemIdentifier coreTextManipulationItemIdentifierFromString(NSString *identifier)
 {
-    return makeObjectIdentifier<WebCore::TextManipulationController::ItemIdentifierType>(String(identifier).toUInt64());
+    return makeObjectIdentifier<WebCore::TextManipulationController::ItemIdentifierType>(identifier.longLongValue);
 }
 
-static WebCore::TextManipulationController::TokenIdentifier coreTextManipulationTokenIdentifierFromString(NSString* identifier)
+static WebCore::TextManipulationController::TokenIdentifier coreTextManipulationTokenIdentifierFromString(NSString *identifier)
 {
-    return makeObjectIdentifier<WebCore::TextManipulationController::TokenIdentifierType>(String(identifier).toUInt64());
+    return makeObjectIdentifier<WebCore::TextManipulationController::TokenIdentifierType>(identifier.longLongValue);
 }
 
 - (void)_completeTextManipulation:(_WKTextManipulationItem *)item completion:(void(^)(BOOL success))completionHandler
@@ -2130,21 +2165,40 @@ static RetainPtr<NSArray> wkTextManipulationErrors(NSArray<_WKTextManipulationIt
     [self setAllMediaPlaybackSuspended:NO completionHandler:nil];
 }
 
+#if ENABLE(APP_HIGHLIGHTS)
+static void convertAndAddHighlight(Vector<Ref<WebKit::SharedMemory>>& buffers, NSData *highlight)
+{
+    auto sharedMemory = WebKit::SharedMemory::allocate(highlight.length);
+    if (sharedMemory) {
+        [highlight getBytes:sharedMemory->data() length:highlight.length];
+        buffers.append(*sharedMemory);
+    }
+}
+#endif
+
 - (void)_restoreAppHighlights:(NSArray<NSData *> *)highlights
 {
 #if ENABLE(APP_HIGHLIGHTS)
     Vector<Ref<WebKit::SharedMemory>> buffers;
 
-    for (NSData *highlight in highlights) {
-        auto sharedMemory = WebKit::SharedMemory::allocate(highlight.length);
-        if (sharedMemory) {
-            [highlight getBytes:sharedMemory->data() length:highlight.length];
-            buffers.append(*sharedMemory);
-        }
-    }
-    _page->restoreAppHighlights(buffers);
+    for (NSData *highlight in highlights)
+        convertAndAddHighlight(buffers, highlight);
+    
+    _page->restoreAppHighlightsAndScrollToIndex(buffers, WTF::nullopt);
 #else
     UNUSED_PARAM(highlights);
+#endif
+}
+
+- (void)_restoreAndScrollToAppHighlight:(NSData *)highlight
+{
+#if ENABLE(APP_HIGHLIGHTS)
+    Vector<Ref<WebKit::SharedMemory>> buffers;
+    
+    convertAndAddHighlight(buffers, highlight);
+    _page->restoreAppHighlightsAndScrollToIndex(buffers, 0);
+#else
+    UNUSED_PARAM(highlight);
 #endif
 }
 
@@ -2201,32 +2255,6 @@ static RetainPtr<NSArray> wkTextManipulationErrors(NSArray<_WKTextManipulationIt
     return wrapper(_page->loadRequest(request, policy));
 }
 
-- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponse:(NSURLResponse *)response responseData:(NSData *)data
-{
-    return wrapper(_page->loadSimulatedRequest(request, response, { static_cast<const uint8_t*>(data.bytes), data.length }));
-}
-
-- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponseHTMLString:(NSString *)string
-{
-    NSData *data = [string dataUsingEncoding:NSUTF8StringEncoding];
-    auto response = adoptNS([[NSURLResponse alloc] initWithURL:request.URL MIMEType:@"text/html" expectedContentLength:string.length textEncodingName:@"UTF-8"]);
-
-    return [self loadSimulatedRequest:request withResponse:response.get() responseData:data];
-}
-
-- (WKNavigation *)loadFileRequest:(NSURLRequest *)request allowingReadAccessToURL:(NSURL *)readAccessURL
-{
-    auto URL = request.URL;
-
-    if (![URL isFileURL])
-        [NSException raise:NSInvalidArgumentException format:@"%@ is not a file URL", URL];
-
-    if (![readAccessURL isFileURL])
-        [NSException raise:NSInvalidArgumentException format:@"%@ is not a file URL", readAccessURL];
-
-    return wrapper(_page->loadFile(URL.absoluteString, readAccessURL.absoluteString));
-}
-
 - (void)_grantAccessToAssetServices
 {
     if (_page)
@@ -2243,6 +2271,18 @@ static RetainPtr<NSArray> wkTextManipulationErrors(NSArray<_WKTextManipulationIt
 {
     if (_page)
         _page->switchFromStaticFontRegistryToUserFontRegistry();
+}
+
+- (void)_appBoundNavigationDataForDomain:(NSString *)domain completionHandler:(void (^)(NSString * context))completionHandler
+{
+    _page->appBoundNavigationData([registrableDomain = WebCore::RegistrableDomain::uncheckedCreateFromHost(domain), completionHandler = makeBlockPtr(completionHandler)] (auto&& appBoundData) mutable {
+        if (!appBoundData.contextData.contains(registrableDomain)) {
+            completionHandler(nil);
+            return;
+        }
+
+        completionHandler(appBoundData.contextData.get(registrableDomain).string());
+    });
 }
 
 - (NSArray *)_certificateChain
@@ -2479,6 +2519,11 @@ static RetainPtr<NSArray> wkTextManipulationErrors(NSArray<_WKTextManipulationIt
 + (BOOL)_handlesSafeBrowsing
 {
     return true;
+}
+
++ (BOOL)_willUpgradeToHTTPS:(NSURL *)url
+{
+    return WebCore::ContentExtensions::ContentExtensionsBackend::shouldBeMadeSecure(url);
 }
 
 - (void)_showSafeBrowsingWarningWithTitle:(NSString *)title warning:(NSString *)warning details:(NSAttributedString *)details completionHandler:(void(^)(BOOL))completionHandler
@@ -2983,10 +3028,7 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
 
 - (CocoaColor *)_themeColor
 {
-    auto themeColor = _page->themeColor();
-    if (!themeColor.isValid())
-        return nil;
-    return WebCore::platformColor(themeColor);
+    return [self themeColor];
 }
 
 - (CocoaColor *)_pageExtendedBackgroundColor
@@ -2995,6 +3037,14 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
     if (!pageExtendedBackgroundColor.isValid())
         return nil;
     return WebCore::platformColor(pageExtendedBackgroundColor);
+}
+
+- (CocoaColor *)_sampledPageTopColor
+{
+    auto sampledPageTopColor = _page->sampledPageTopColor();
+    if (!sampledPageTopColor.isValid())
+        return nil;
+    return WebCore::platformColor(sampledPageTopColor);
 }
 
 - (id <_WKInputDelegate>)_inputDelegate
@@ -3307,14 +3357,14 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
 
 - (void)_setPageMuted:(_WKMediaMutedState)mutedState
 {
-    WebCore::MediaProducer::MutedStateFlags coreState = WebCore::MediaProducer::NoneMuted;
+    WebCore::MediaProducer::MutedStateFlags coreState;
 
     if (mutedState & _WKMediaAudioMuted)
-        coreState |= WebCore::MediaProducer::AudioIsMuted;
+        coreState.add(WebCore::MediaProducer::MutedState::AudioIsMuted);
     if (mutedState & _WKMediaCaptureDevicesMuted)
-        coreState |= WebCore::MediaProducer::AudioAndVideoCaptureIsMuted;
+        coreState.add(WebCore::MediaProducer::AudioAndVideoCaptureIsMuted);
     if (mutedState & _WKMediaScreenCaptureMuted)
-        coreState |= WebCore::MediaProducer::ScreenCaptureIsMuted;
+        coreState.add(WebCore::MediaProducer::MutedState::ScreenCaptureIsMuted);
 
     _page->setMuted(coreState);
 }
@@ -3355,31 +3405,6 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
         return @[ ];
 
     return (__bridge NSArray *)certificateInfo->certificateInfo().certificateChain() ?: @[ ];
-}
-
-- (void)pauseAllMediaPlayback:(void (^)(void))completionHandler
-{
-    [self pauseAllMediaPlaybackWithCompletionHandler:completionHandler];
-}
-
-- (void)suspendAllMediaPlayback:(void (^)(void))completionHandler
-{
-    [self setAllMediaPlaybackSuspended:YES completionHandler:completionHandler];
-}
-
-- (void)resumeAllMediaPlayback:(void (^)(void))completionHandler
-{
-    [self setAllMediaPlaybackSuspended:NO completionHandler:completionHandler];
-}
-
-- (void)closeAllMediaPresentations:(void (^)(void))completionHandler
-{
-    [self closeAllMediaPresentationsWithCompletionHandler:completionHandler];
-}
-
-- (void)requestMediaPlaybackState:(void (^)(WKMediaPlaybackState))completionHandler
-{
-    [self requestMediaPlaybackStateWithCompletionHandler:completionHandler];
 }
 
 @end

@@ -28,12 +28,12 @@
 
 #import "APIPageConfiguration.h"
 #import "UserInterfaceIdiom.h"
-#import "WKPreferences.h"
-#import "WKProcessPool.h"
-#import "WKRetainPtr.h"
-#import "WKUserContentController.h"
+#import <WebKit/WKPreferences.h>
+#import <WebKit/WKProcessPool.h>
+#import <WebKit/WKRetainPtr.h>
+#import <WebKit/WKUserContentController.h>
 #import "WKWebpagePreferencesInternal.h"
-#import "WKWebView.h"
+#import <WebKit/WKWebView.h>
 #import "WKWebViewContentProviderRegistry.h"
 #import "WebKit2Initialize.h"
 #import "WebPreferencesDefaultValues.h"
@@ -174,6 +174,11 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
     BOOL _shouldDeferAsynchronousScriptsUntilAfterDocumentLoad;
     BOOL _drawsBackground;
     BOOL _undoManagerAPIEnabled;
+#if ENABLE(APP_HIGHLIGHTS)
+    BOOL _appHighlightsEnabled;
+#endif
+    double _sampledPageTopColorMaxDifference;
+    double _sampledPageTopColorMinHeight;
 
     RetainPtr<NSString> _mediaContentTypesRequiringHardwareSupport;
     RetainPtr<NSArray<NSString *>> _additionalSupportedImageTypes;
@@ -196,8 +201,7 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
     _allowsInlineMediaPlayback = WebKit::currentUserInterfaceIdiomIsPadOrMac();
     _inlineMediaPlaybackRequiresPlaysInlineAttribute = !_allowsInlineMediaPlayback;
     _allowsInlineMediaPlaybackAfterFullscreen = !_allowsInlineMediaPlayback;
-
-    _mediaDataLoadsAutomatically = NO;
+    _mediaDataLoadsAutomatically = _allowsInlineMediaPlayback;
 #if !PLATFORM(WATCHOS)
     if (WebCore::linkedOnOrAfter(WebCore::SDKVersion::FirstWithMediaTypesRequiringUserActionForPlayback))
         _mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAudio;
@@ -268,6 +272,13 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
 #if ENABLE(APPLE_PAY)
     _applePayEnabled = DEFAULT_VALUE_FOR_ApplePayEnabled;
 #endif
+
+#if ENABLE(APP_HIGHLIGHTS)
+    _appHighlightsEnabled = DEFAULT_VALUE_FOR_AppHighlightsEnabled;
+#endif
+
+    _sampledPageTopColorMaxDifference = DEFAULT_VALUE_FOR_SampledPageTopColorMaxDifference;
+    _sampledPageTopColorMinHeight = DEFAULT_VALUE_FOR_SampledPageTopColorMinHeight;
 
     return self;
 }
@@ -443,6 +454,12 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
     configuration->_drawsBackground = self->_drawsBackground;
 
     configuration->_undoManagerAPIEnabled = self->_undoManagerAPIEnabled;
+#if ENABLE(APP_HIGHLIGHTS)
+    configuration->_appHighlightsEnabled = self->_appHighlightsEnabled;
+#endif
+
+    configuration->_sampledPageTopColorMaxDifference = self->_sampledPageTopColorMaxDifference;
+    configuration->_sampledPageTopColorMinHeight = self->_sampledPageTopColorMinHeight;
 
     return configuration;
 }
@@ -1219,6 +1236,22 @@ ALLOW_DEPRECATED_DECLARATIONS_END
     return _undoManagerAPIEnabled;
 }
 
+- (void)_setAppHighlightsEnabled:(BOOL)enabled
+{
+#if ENABLE(APP_HIGHLIGHTS)
+    _appHighlightsEnabled = enabled;
+#endif
+}
+
+- (BOOL)_appHighlightsEnabled
+{
+#if ENABLE(APP_HIGHLIGHTS)
+    return _appHighlightsEnabled;
+#else
+    return NO;
+#endif
+}
+
 - (BOOL)_shouldRelaxThirdPartyCookieBlocking
 {
     return _pageConfiguration->shouldRelaxThirdPartyCookieBlocking() == WebCore::ShouldRelaxThirdPartyCookieBlocking::Yes;
@@ -1246,6 +1279,26 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 - (void)_setProcessDisplayName:(NSString *)lsDisplayName
 {
     _pageConfiguration->setProcessDisplayName(lsDisplayName);
+}
+
+- (void)_setSampledPageTopColorMaxDifference:(double)value
+{
+    _sampledPageTopColorMaxDifference = value;
+}
+
+- (double)_sampledPageTopColorMaxDifference
+{
+    return _sampledPageTopColorMaxDifference;
+}
+
+- (void)_setSampledPageTopColorMinHeight:(double)value
+{
+    _sampledPageTopColorMinHeight = value;
+}
+
+- (double)_sampledPageTopColorMinHeight
+{
+    return _sampledPageTopColorMinHeight;
 }
 
 @end

@@ -47,7 +47,7 @@ class AudioSampleDataSource : public ThreadSafeRefCounted<AudioSampleDataSource,
 #endif
     {
 public:
-    static Ref<AudioSampleDataSource> create(size_t, WTF::LoggerHelper&);
+    static Ref<AudioSampleDataSource> create(size_t, WTF::LoggerHelper&, size_t waitToStartForPushCount = 2);
 
     ~AudioSampleDataSource();
 
@@ -61,7 +61,7 @@ public:
     bool pullSamples(AudioSampleBufferList&, size_t, uint64_t, double, PullMode);
     bool pullSamples(AudioBufferList&, size_t, uint64_t, double, PullMode);
 
-    bool pullAvalaibleSamplesAsChunks(AudioBufferList&, size_t frameCount, uint64_t timeStamp, Function<void()>&&);
+    bool pullAvailableSamplesAsChunks(AudioBufferList&, size_t frameCount, uint64_t timeStamp, Function<void()>&&);
 
     void setVolume(float volume) { m_volume = volume; }
     float volume() const { return m_volume; }
@@ -69,7 +69,7 @@ public:
     void setMuted(bool muted) { m_muted = muted; }
     bool muted() const { return m_muted; }
 
-    const CAAudioStreamDescription* inputDescription() const { return m_inputDescription.get(); }
+    const CAAudioStreamDescription* inputDescription() const { return m_inputDescription ? &m_inputDescription.value() : nullptr; }
 
 #if !RELEASE_LOG_DISABLED
     const Logger& logger() const final { return m_logger; }
@@ -80,15 +80,15 @@ public:
     static constexpr float EquivalentToMaxVolume = 0.95;
 
 private:
-    AudioSampleDataSource(size_t, LoggerHelper&);
+    AudioSampleDataSource(size_t, LoggerHelper&, size_t waitToStartForPushCount);
 
     OSStatus setupConverter();
     bool pullSamplesInternal(AudioBufferList&, size_t, uint64_t, double, PullMode);
 
     void pushSamplesInternal(const AudioBufferList&, const MediaTime&, size_t frameCount);
 
-    std::unique_ptr<CAAudioStreamDescription> m_inputDescription;
-    std::unique_ptr<CAAudioStreamDescription> m_outputDescription;
+    Optional<CAAudioStreamDescription> m_inputDescription;
+    Optional<CAAudioStreamDescription> m_outputDescription;
 
     MediaTime hostTime() const;
 
@@ -98,7 +98,9 @@ private:
 #endif
 
     uint64_t m_lastPushedSampleCount { 0 };
+    size_t m_waitToStartForPushCount { 2 };
     MediaTime m_expectedNextPushedSampleTime { MediaTime::invalidTime() };
+    bool m_isFirstPull { true };
 
     MediaTime m_inputSampleOffset;
     int64_t m_outputSampleOffset { 0 };
@@ -106,7 +108,7 @@ private:
     AudioConverterRef m_converter;
     RefPtr<AudioSampleBufferList> m_scratchBuffer;
 
-    std::unique_ptr<CARingBuffer> m_ringBuffer;
+    UniqueRef<CARingBuffer> m_ringBuffer;
     size_t m_maximumSampleCount { 0 };
 
     float m_volume { 1.0 };

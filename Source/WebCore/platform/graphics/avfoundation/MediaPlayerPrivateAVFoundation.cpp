@@ -451,14 +451,10 @@ void MediaPlayerPrivateAVFoundation::prepareForRendering()
 
 bool MediaPlayerPrivateAVFoundation::supportsFullscreen() const
 {
-#if ENABLE(FULLSCREEN_API)
+    // FIXME: WebVideoFullscreenController assumes a QTKit/QuickTime media engine
+#if ENABLE(FULLSCREEN_API) || (PLATFORM(IOS_FAMILY) && HAVE(AVKIT))
     return true;
 #else
-    // FIXME: WebVideoFullscreenController assumes a QTKit/QuickTime media engine
-#if PLATFORM(IOS_FAMILY)
-    if (DeprecatedGlobalSettings::avKitEnabled())
-        return true;
-#endif
     return false;
 #endif
 }
@@ -669,12 +665,11 @@ void MediaPlayerPrivateAVFoundation::invalidateCachedDuration()
     // so report duration changed when the estimate is upated.
     MediaTime duration = this->durationMediaTime();
     if (duration != m_reportedDuration) {
-        INFO_LOG(LOGIDENTIFIER, "- ", m_cachedDuration);
+        INFO_LOG(LOGIDENTIFIER, duration);
         if (m_reportedDuration.isValid())
             m_player->durationChanged();
         m_reportedDuration = duration;
     }
-    
 }
 
 MediaPlayer::MovieLoadType MediaPlayerPrivateAVFoundation::movieLoadType() const
@@ -1066,37 +1061,37 @@ WTFLogChannel& MediaPlayerPrivateAVFoundation::logChannel() const
 const HashSet<String, ASCIICaseInsensitiveHash>& MediaPlayerPrivateAVFoundation::staticMIMETypeList()
 {
     static const auto cache = makeNeverDestroyed(HashSet<String, ASCIICaseInsensitiveHash> {
-        "application/vnd.apple.mpegurl",
-        "application/x-mpegurl",
-        "audio/3gpp",
-        "audio/aac",
-        "audio/aacp",
-        "audio/aiff",
-        "audio/basic",
-        "audio/mp3",
-        "audio/mp4",
-        "audio/mpeg",
-        "audio/mpeg3",
-        "audio/mpegurl",
-        "audio/mpg",
-        "audio/vnd.wave",
-        "audio/wav",
-        "audio/wave",
-        "audio/x-aac",
-        "audio/x-aiff",
-        "audio/x-m4a",
-        "audio/x-mpegurl",
-        "audio/x-wav",
-        "video/3gpp",
-        "video/3gpp2",
-        "video/mp4",
-        "video/mpeg",
-        "video/mpeg2",
-        "video/mpg",
-        "video/quicktime",
-        "video/x-m4v",
-        "video/x-mpeg",
-        "video/x-mpg",
+        "application/vnd.apple.mpegurl"_s,
+        "application/x-mpegurl"_s,
+        "audio/3gpp"_s,
+        "audio/aac"_s,
+        "audio/aacp"_s,
+        "audio/aiff"_s,
+        "audio/basic"_s,
+        "audio/mp3"_s,
+        "audio/mp4"_s,
+        "audio/mpeg"_s,
+        "audio/mpeg3"_s,
+        "audio/mpegurl"_s,
+        "audio/mpg"_s,
+        "audio/vnd.wave"_s,
+        "audio/wav"_s,
+        "audio/wave"_s,
+        "audio/x-aac"_s,
+        "audio/x-aiff"_s,
+        "audio/x-m4a"_s,
+        "audio/x-mpegurl"_s,
+        "audio/x-wav"_s,
+        "video/3gpp"_s,
+        "video/3gpp2"_s,
+        "video/mp4"_s,
+        "video/mpeg"_s,
+        "video/mpeg2"_s,
+        "video/mpg"_s,
+        "video/quicktime"_s,
+        "video/x-m4v"_s,
+        "video/x-mpeg"_s,
+        "video/x-mpg"_s,
     });
     return cache;
 }

@@ -39,6 +39,7 @@
 #import "SafeBrowsingWarning.h"
 #import "SharedBufferCopy.h"
 #import "SharedBufferDataReference.h"
+#import "WebContextMenuProxy.h"
 #import "WebPage.h"
 #import "WebPageMessages.h"
 #import "WebPasteboardProxy.h"
@@ -396,17 +397,20 @@ void WebPageProxy::voicesDidChange()
 #endif // ENABLE(SPEECH_SYNTHESIS)
 
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
-void WebPageProxy::didCreateContextForVisibilityPropagation(LayerHostingContextID contextID)
+void WebPageProxy::didCreateContextInWebProcessForVisibilityPropagation(LayerHostingContextID contextID)
 {
-    m_contextIDForVisibilityPropagation = contextID;
-    pageClient().didCreateContextForVisibilityPropagation(contextID);
+    m_contextIDForVisibilityPropagationInWebProcess = contextID;
+    pageClient().didCreateContextInWebProcessForVisibilityPropagation(contextID);
 }
 
+#if ENABLE(GPU_PROCESS)
 void WebPageProxy::didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID contextID)
 {
+    m_contextIDForVisibilityPropagationInGPUProcess = contextID;
     pageClient().didCreateContextInGPUProcessForVisibilityPropagation(contextID);
 }
-#endif
+#endif // ENABLE(GPU_PROCESS)
+#endif // HAVE(VISIBILITY_PROPAGATION_VIEW)
 
 void WebPageProxy::grantAccessToPreferenceService()
 {
@@ -555,7 +559,7 @@ void WebPageProxy::createAppHighlightInSelectedRange(WebCore::CreateNewGroupForH
     send(Messages::WebPage::CreateAppHighlightInSelectedRange(createNewGroup, requestOriginatedInApp));
 }
 
-void WebPageProxy::restoreAppHighlights(const Vector<Ref<SharedMemory>>& highlights)
+void WebPageProxy::restoreAppHighlightsAndScrollToIndex(const Vector<Ref<SharedMemory>>& highlights, const Optional<unsigned> index)
 {
     if (!hasRunningProcess())
         return;
@@ -568,9 +572,20 @@ void WebPageProxy::restoreAppHighlights(const Vector<Ref<SharedMemory>>& highlig
 
         memoryHandles.append(SharedMemory::IPCHandle { WTFMove(handle), highlight->size() });
     }
+    
+    setUpHighlightsObserver();
 
-    send(Messages::WebPage::RestoreAppHighlights(WTFMove(memoryHandles)));
+    send(Messages::WebPage::RestoreAppHighlightsAndScrollToIndex(WTFMove(memoryHandles), index));
 }
+
+void WebPageProxy::setAppHighlightsVisibility(WebCore::HighlightVisibility appHighlightsVisibility)
+{
+    if (!hasRunningProcess())
+        return;
+
+    send(Messages::WebPage::SetAppHighlightsVisibility(appHighlightsVisibility));
+}
+
 #endif
 
 SandboxExtension::HandleArray WebPageProxy::createNetworkExtensionsSandboxExtensions(WebProcessProxy& process)
@@ -609,6 +624,11 @@ void WebPageProxy::handleContextMenuRevealImage()
 bool WebPageProxy::canHandleContextMenuTranslation() const
 {
     return pageClient().canHandleContextMenuTranslation();
+}
+
+void WebPageProxy::handleContextMenuTranslation(const TranslationContextMenuInfo& info)
+{
+    return pageClient().handleContextMenuTranslation(info);
 }
 
 #endif // HAVE(TRANSLATION_UI_SERVICES)
@@ -652,6 +672,16 @@ SandboxExtension::Handle WebPageProxy::fontdMachExtensionHandle()
     SandboxExtension::Handle fontMachExtensionHandle;
     SandboxExtension::createHandleForMachLookup("com.apple.fonts"_s, WTF::nullopt, fontMachExtensionHandle);
     return fontMachExtensionHandle;
+}
+
+NSDictionary *WebPageProxy::contentsOfUserInterfaceItem(NSString *userInterfaceItem)
+{
+#if ENABLE(CONTEXT_MENUS)
+    if (m_activeContextMenu && [userInterfaceItem isEqualToString:@"mediaControlsContextMenu"])
+        return @{ userInterfaceItem: m_activeContextMenu->platformData() };
+#endif // ENABLE(CONTEXT_MENUS)
+
+    return nil;
 }
 
 } // namespace WebKit

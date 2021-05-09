@@ -25,10 +25,9 @@
 
 #import "PDFPluginIdentifier.h"
 #import "SameDocumentNavigationType.h"
-#import "WKBlankOverlayView.h"
-#import "WKShareSheet.h"
-#import "WKWebViewConfiguration.h"
-#import "WKWebViewPrivate.h"
+#import <WebKit/WKShareSheet.h>
+#import <WebKit/WKWebViewConfiguration.h>
+#import <WebKit/WKWebViewPrivate.h>
 #import "_WKAttachmentInternal.h"
 #import "_WKWebViewPrintFormatterInternal.h"
 #import <wtf/CompletionHandler.h>
@@ -133,8 +132,6 @@ class ViewGestureController;
     _WKRenderingProgressEvents _observedRenderingProgressEvents;
     BOOL _usePlatformFindUI;
 
-    RetainPtr<WKBlankOverlayView> _blankOverlayView;
-
 #if PLATFORM(MAC)
     std::unique_ptr<WebKit::WebViewImpl> _impl;
     RetainPtr<WKTextFinderClient> _textFinderClient;
@@ -193,6 +190,10 @@ class ViewGestureController;
     WebKit::DynamicViewportSizeUpdateID _currentDynamicViewportSizeUpdateID;
     CATransform3D _resizeAnimationTransformAdjustments;
     CGFloat _animatedResizeOriginalContentWidth;
+    CGRect _animatedResizeOldBounds;
+    CGFloat _animatedResizeOldMinimumEffectiveDeviceWidth;
+    int32_t _animatedResizeOldOrientation;
+    UIEdgeInsets _animatedResizeOldObscuredInsets;
     RetainPtr<UIView> _resizeAnimationView;
     CGFloat _lastAdjustmentForScroller;
     Optional<CGRect> _frozenVisibleContentRect;
@@ -282,7 +283,6 @@ class ViewGestureController;
 
 @end
 
-WKWebView* fromWebPageProxy(WebKit::WebPageProxy&);
 RetainPtr<NSError> nsErrorFromExceptionDetails(const WebCore::ExceptionDetails&);
 
 #if ENABLE(FULLSCREEN_API) && PLATFORM(IOS_FAMILY)

@@ -144,6 +144,9 @@ WTF_EXPORT_PRIVATE String stringFromFileSystemRepresentation(const char*);
 
 inline bool isHandleValid(const PlatformFileHandle& handle) { return handle != invalidPlatformFileHandle; }
 
+using Salt = std::array<uint8_t, 8>;
+WTF_EXPORT_PRIVATE Optional<Salt> readOrMakeSalt(const String& path);
+
 // Prefix is what the filename should be prefixed with, not the full path.
 WTF_EXPORT_PRIVATE String openTemporaryFile(const String& prefix, PlatformFileHandle&, const String& suffix = { });
 WTF_EXPORT_PRIVATE PlatformFileHandle openFile(const String& path, FileOpenMode, FileAccessPermission = FileAccessPermission::All, bool failIfFileExists = false);
@@ -163,9 +166,9 @@ WTF_EXPORT_PRIVATE void unlockAndCloseFile(PlatformFileHandle);
 // Returns true if the write was successful, false if it was not.
 WTF_EXPORT_PRIVATE bool appendFileContentsToFileHandle(const String& path, PlatformFileHandle&);
 
-WTF_EXPORT_PRIVATE bool hardLink(const String& source, const String& destination);
+WTF_EXPORT_PRIVATE bool hardLink(const String& targetPath, const String& linkPath);
 // Hard links a file if possible, copies it if not.
-WTF_EXPORT_PRIVATE bool hardLinkOrCopyFile(const String& source, const String& destination);
+WTF_EXPORT_PRIVATE bool hardLinkOrCopyFile(const String& targetPath, const String& linkPath);
 
 #if USE(FILE_LOCK)
 WTF_EXPORT_PRIVATE bool lockFile(PlatformFileHandle, OptionSet<FileLockMode>);
@@ -190,13 +193,13 @@ WTF_EXPORT_PRIVATE String filenameForDisplay(const String&);
 WTF_EXPORT_PRIVATE String localUserSpecificStorageDirectory();
 WTF_EXPORT_PRIVATE String roamingUserSpecificStorageDirectory();
 WTF_EXPORT_PRIVATE String createTemporaryDirectory();
-WTF_EXPORT_PRIVATE bool deleteNonEmptyDirectory(const String&);
 #endif
 
 #if PLATFORM(COCOA)
 WTF_EXPORT_PRIVATE NSString *createTemporaryDirectory(NSString *directoryPrefix);
-WTF_EXPORT_PRIVATE bool deleteNonEmptyDirectory(const String&);
 #endif
+
+WTF_EXPORT_PRIVATE bool deleteNonEmptyDirectory(const String&);
 
 WTF_EXPORT_PRIVATE String realPath(const String&);
 
@@ -251,6 +254,10 @@ inline MappedFileData& MappedFileData::operator=(MappedFileData&& other)
     m_fileSize = std::exchange(other.m_fileSize, 0);
     return *this;
 }
+
+// This creates the destination file, maps it, write the provided data to it and returns the mapped file.
+// This function fails if there is already a file at the destination path.
+WTF_EXPORT_PRIVATE MappedFileData mapToFile(const String& path, size_t bytesSize, Function<void(const Function<bool(const uint8_t*, size_t)>&)>&& apply, PlatformFileHandle* = nullptr);
 
 } // namespace FileSystemImpl
 } // namespace WTF

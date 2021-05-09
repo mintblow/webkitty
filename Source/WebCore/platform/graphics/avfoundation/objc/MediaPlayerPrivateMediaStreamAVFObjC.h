@@ -168,6 +168,8 @@ private:
 
     void scheduleDeferredTask(Function<void ()>&&);
 
+    void layersAreInitialized(IntSize, bool);
+
     enum DisplayMode {
         None,
         PaintItBlack,
@@ -261,6 +263,9 @@ private:
     void sampleBufferDisplayLayerStatusDidChange(SampleBufferDisplayLayer&) final;
 
     RetainPtr<WebRootSampleBufferBoundsChangeListener> m_boundsChangeListener;
+
+    Lock m_currentVideoSampleLock;
+    RefPtr<MediaSample> m_currentVideoSample;
 
     bool m_playing { false };
     bool m_muted { false };

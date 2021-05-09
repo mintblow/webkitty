@@ -32,6 +32,7 @@
 #include "Font.h"
 #include "FontSelector.h"
 #include "Timer.h"
+#include "WebKitFontFamilyNames.h"
 #include <memory>
 #include <wtf/Forward.h>
 #include <wtf/HashSet.h>
@@ -63,13 +64,14 @@ public:
     size_t fallbackFontCount() final;
     RefPtr<Font> fallbackFontAt(const FontDescription&, size_t) final;
 
-    void stopLoadingAndClearFonts();
+    void clearFonts();
     void emptyCaches();
     void buildStarted();
     void buildCompleted();
 
     void addFontFaceRule(StyleRuleFontFace&, bool isInitiatingElementInUserAgentShadowTree);
 
+    FontCache& fontCache() const final { return m_fontCache.get(); }
     void fontCacheInvalidated() final;
 
     bool isEmpty() const;
@@ -78,9 +80,6 @@ public:
     void unregisterForInvalidationCallbacks(FontSelectorClient&) final;
 
     ScriptExecutionContext* scriptExecutionContext() const { return m_context.get(); }
-
-    void beginLoadingFontSoon(CachedFont&);
-    void suspendFontLoadingTimer();
 
     FontFaceSet* fontFaceSetIfExists();
     FontFaceSet& fontFaceSet();
@@ -108,12 +107,8 @@ private:
     void fontStyleUpdateNeeded(CSSFontFace&) final;
 
     void fontModified();
-    void fontLoadingTimerFired();
 
     // ActiveDOMObject
-    void stop() final;
-    void suspend(ReasonForSuspension) final;
-    void resume() final;
     const char* activeDOMObjectName() const final { return "CSSFontSelector"_s; }
 
     struct PendingFontFaceRule {
@@ -123,18 +118,15 @@ private:
     Vector<PendingFontFaceRule> m_stagingArea;
 
     WeakPtr<ScriptExecutionContext> m_context;
+    Ref<FontCache> m_fontCache;
     RefPtr<FontFaceSet> m_fontFaceSet;
     Ref<CSSFontFaceSet> m_cssFontFaceSet;
     HashSet<FontSelectorClient*> m_clients;
 
-    Vector<CachedResourceHandle<CachedFont>> m_fontsToBeginLoading;
     HashSet<RefPtr<CSSFontFace>> m_cssConnectionsPossiblyToRemove;
     HashSet<RefPtr<StyleRuleFontFace>> m_cssConnectionsEncounteredDuringBuild;
 
     CSSFontFaceSet::FontModifiedObserver m_fontModifiedObserver;
-
-    Timer m_fontLoadingTimer;
-    bool m_isFontLoadingSuspended { false };
 
     unsigned m_uniqueId;
     unsigned m_version;
@@ -143,7 +135,7 @@ private:
     bool m_buildIsUnderway { false };
     bool m_isStopped { false };
 
-    WTF::Vector<AtomString> m_fontFamilyNames;
+    WebKitFontFamilyNames::FamilyNamesList<AtomString> m_fontFamilyNames;
 };
 
 } // namespace WebCore

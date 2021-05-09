@@ -176,6 +176,18 @@ public:
         return false;
     }
 
+    virtual bool isAnimatingDragCancel() const
+    {
+        notImplemented();
+        return false;
+    }
+
+    virtual JSObjectRef tapHighlightViewRect() const
+    {
+        notImplemented();
+        return nullptr;
+    }
+
     virtual void rawKeyDown(JSStringRef) { notImplemented(); }
     virtual void rawKeyUp(JSStringRef) { notImplemented(); }
 
@@ -211,6 +223,7 @@ public:
 
     // Form Controls
     
+    virtual JSObjectRef filePickerAcceptedTypeIdentifiers() { notImplemented(); return nullptr; }
     virtual void dismissFilePicker(JSValueRef) { notImplemented(); }
     virtual void dismissFormAccessoryView() { notImplemented(); }
     virtual void selectFormAccessoryPickerRow(long) { notImplemented(); }

@@ -72,12 +72,16 @@ private:
     void processDidExit() override;
     void processWillSwap() override;
     void didRelaunchProcess() override;
+
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
-    void didCreateContextForVisibilityPropagation(LayerHostingContextID) override;
-    void didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID) override;
-#endif
+    void didCreateContextInWebProcessForVisibilityPropagation(LayerHostingContextID) override;
 #if ENABLE(GPU_PROCESS)
-    void gpuProcessCrashed() override;
+    void didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID) override;
+#endif // ENABLE(GPU_PROCESS)
+#endif // HAVE(VISIBILITY_PROPAGATION_VIEW)
+
+#if ENABLE(GPU_PROCESS)
+    void gpuProcessDidExit() override;
 #endif
     void preferencesDidChange() override;
     void toolTipChanged(const String&, const String&) override;
@@ -148,6 +152,8 @@ private:
     void setRemoteLayerTreeRootNode(RemoteLayerTreeNode*) override;
     CALayer* acceleratedCompositingRootLayer() const override;
     LayerHostingMode viewLayerHostingMode() override { return LayerHostingMode::OutOfProcess; }
+
+    void makeViewBlank(bool) final;
 
     RefPtr<ViewSnapshot> takeViewSnapshot(Optional<WebCore::IntRect>&&) override;
     void wheelEventWasNotHandledByWebCore(const NativeWebWheelEvent&) override;
@@ -235,7 +241,10 @@ private:
     void didFailNavigation(API::Navigation*) override;
     void didSameDocumentNavigationForMainFrame(SameDocumentNavigationType) override;
     void didNotHandleTapAsClick(const WebCore::IntPoint&) override;
+    void didNotHandleTapAsMeaningfulClickAtPoint(const WebCore::IntPoint&) final;
     void didCompleteSyntheticClick() override;
+
+    void runModalJavaScriptDialog(CompletionHandler<void()>&& callback) final;
 
     void didChangeBackgroundColor() override;
     void videoControlsManagerDidChange() override;
@@ -267,9 +276,9 @@ private:
 
     void setMouseEventPolicy(WebCore::MouseEventPolicy) final;
 
-#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
     void showMediaControlsContextMenu(WebCore::FloatRect&&, Vector<WebCore::MediaControlsContextMenuItem>&&, CompletionHandler<void(WebCore::MediaControlsContextMenuItem::ID)>&&) final;
-#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
 
 #if ENABLE(ATTACHMENT_ELEMENT)
     void writePromisedAttachmentToPasteboard(WebCore::PromisedAttachmentInfo&&) final;

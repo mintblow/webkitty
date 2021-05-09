@@ -26,7 +26,9 @@
 #import "config.h"
 #import "ProcessLauncher.h"
 
+#import "ReasonSPI.h"
 #import "WebPreferencesDefaultValues.h"
+#import <WebCore/RuntimeApplicationChecks.h>
 #import <crt_externs.h>
 #import <mach-o/dyld.h>
 #import <mach/mach_error.h>
@@ -39,6 +41,7 @@
 #import <wtf/RunLoop.h>
 #import <wtf/SoftLinking.h>
 #import <wtf/Threading.h>
+#import <wtf/cocoa/RuntimeApplicationChecksCocoa.h>
 #import <wtf/spi/cf/CFBundleSPI.h>
 #import <wtf/spi/darwin/XPCSPI.h>
 #import <wtf/text/CString.h>
@@ -207,6 +210,8 @@ void ProcessLauncher::launchProcess()
     xpc_dictionary_set_mach_send(bootstrapMessage.get(), "server-port", listeningPort);
 
     xpc_dictionary_set_string(bootstrapMessage.get(), "client-identifier", !clientIdentifier.isEmpty() ? clientIdentifier.utf8().data() : *_NSGetProgname());
+    xpc_dictionary_set_string(bootstrapMessage.get(), "client-bundle-identifier", WebCore::applicationBundleIdentifier().utf8().data());
+    xpc_dictionary_set_string(bootstrapMessage.get(), "client-sdk-version", String::number(applicationSDKVersion()).utf8().data());
     xpc_dictionary_set_string(bootstrapMessage.get(), "process-identifier", String::number(m_launchOptions.processIdentifier.toUInt64()).utf8().data());
     xpc_dictionary_set_string(bootstrapMessage.get(), "ui-process-name", [[[NSProcessInfo processInfo] processName] UTF8String]);
     xpc_dictionary_set_string(bootstrapMessage.get(), "service-name", name);
@@ -332,11 +337,22 @@ void ProcessLauncher::platformInvalidate()
         return;
 
     xpc_connection_cancel(m_xpcConnection.get());
-ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    // FIXME: This was deprecated in favor of terminate_with_reason().
-    xpc_connection_kill(m_xpcConnection.get(), SIGKILL);
-ALLOW_DEPRECATED_DECLARATIONS_END
+    terminateWithReason(m_xpcConnection.get(), WebKit::ReasonCode::Invalidation, "ProcessLauncher::platformInvalidate");
     m_xpcConnection = nullptr;
+}
+
+void terminateWithReason(xpc_connection_t connection, ReasonCode reasonCode, const char* reason)
+{
+#if PLATFORM(MACCATALYST) || PLATFORM(IOS)
+    // FIXME: Remove this once rdar://76601307 and rdar://76652763 are fixed.
+    ALLOW_DEPRECATED_DECLARATIONS_BEGIN
+    xpc_connection_kill(connection, SIGKILL);
+    ALLOW_DEPRECATED_DECLARATIONS_END
+    UNUSED_PARAM(reasonCode);
+    UNUSED_PARAM(reason);
+#else
+    terminate_with_reason(xpc_connection_get_pid(connection), OS_REASON_WEBKIT, static_cast<uint64_t>(reasonCode), reason, OS_REASON_FLAG_NO_CRASH_REPORT);
+#endif
 }
 
 } // namespace WebKit

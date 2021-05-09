@@ -102,9 +102,8 @@ void Update::addText(Text& text, Element* parent, TextUpdate&& textUpdate)
 
     addPossibleRoot(parent);
 
-    auto result = m_texts.ensure(&text, [&] {
-        return WTFMove(textUpdate);
-    });
+    auto result = m_texts.add(&text, WTFMove(textUpdate));
+
     if (!result.isNewEntry) {
         auto& entry = result.iterator->value;
         auto startOffset = std::min(entry.offset, textUpdate.offset);

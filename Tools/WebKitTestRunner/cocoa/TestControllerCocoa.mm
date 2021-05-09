@@ -176,6 +176,7 @@ void TestController::platformCreateWebView(WKPageConfigurationRef, const TestOpt
 
     [copiedConfiguration setWebsiteDataStore:(WKWebsiteDataStore *)websiteDataStore()];
     [copiedConfiguration _setAllowTopNavigationToDataURLs:options.allowTopNavigationToDataURLs()];
+    [copiedConfiguration _setAppHighlightsEnabled:options.appHighlightsEnabled()];
 
     configureContentMode(copiedConfiguration.get(), options);
 
@@ -381,6 +382,35 @@ void TestController::clearLoadedSubresourceDomains()
         return;
 
     [[globalWebViewConfiguration() websiteDataStore] _clearLoadedSubresourceDomainsFor:parentView->platformView()];
+}
+
+void TestController::appBoundRequestContextDataForDomain(WKStringRef domain)
+{
+    auto* parentView = mainWebView();
+    if (!parentView)
+        return;
+
+    [m_mainWebView->platformView() _appBoundNavigationDataForDomain:toWTFString(domain) completionHandler:^(NSString *context) {
+        if (!context) {
+            m_currentInvocation->didReceiveAppBoundRequestContextDataForDomain({ });
+            return;
+        }
+
+        m_currentInvocation->didReceiveAppBoundRequestContextDataForDomain(String(context));
+    }];
+}
+
+void TestController::clearAppBoundNavigationData()
+{
+    auto* parentView = mainWebView();
+    if (!parentView)
+        return;
+
+    __block bool doneClearing = false;
+    [m_mainWebView->platformView() _clearAppBoundNavigationData:^{
+        doneClearing = true;
+    }];
+    platformRunUntil(doneClearing, noTimeout);
 }
 
 void TestController::injectUserScript(WKStringRef script)

@@ -97,7 +97,7 @@
 #endif
 
 #if PLATFORM(IOS_FAMILY)
-#include "SelectionRect.h"
+#include "SelectionGeometry.h"
 #endif
 
 namespace WebCore {
@@ -526,7 +526,7 @@ bool DragController::dispatchTextInputEventFor(Frame* innerFrame, const DragData
 {
     ASSERT(m_page.dragCaretController().hasCaret());
     String text = m_page.dragCaretController().isContentRichlyEditable() ? emptyString() : dragData.asPlainText();
-    Element* target = innerFrame->editor().findEventTargetFrom(m_page.dragCaretController().caretPosition());
+    auto target = innerFrame->editor().findEventTargetFrom(m_page.dragCaretController().caretPosition());
     // FIXME: What guarantees target is not null?
     auto event = TextEvent::createForDrop(&innerFrame->windowProxy(), text);
     target->dispatchEvent(event);
@@ -785,6 +785,10 @@ Element* DragController::draggableElement(const Frame* sourceFrame, Element* sta
     }
 #endif
 
+    auto selectionDragElement = state.type.contains(DragSourceAction::Selection) && m_dragSourceAction.contains(DragSourceAction::Selection) ? startElement : nullptr;
+    if (HTMLElement::isImageOverlayText(startElement))
+        return selectionDragElement;
+
     for (auto* element = startElement; element; element = element->parentOrShadowHostElement()) {
         auto* renderer = element->renderer();
         if (!renderer)
@@ -824,10 +828,7 @@ Element* DragController::draggableElement(const Frame* sourceFrame, Element* sta
     }
 
     // We either have nothing to drag or we have a selection and we're not over a draggable element.
-    if (state.type.contains(DragSourceAction::Selection) && m_dragSourceAction.contains(DragSourceAction::Selection))
-        return startElement;
-
-    return nullptr;
+    return selectionDragElement;
 }
 
 static CachedImage* getCachedImage(Element& element)
@@ -1019,8 +1020,12 @@ bool DragController::startDrag(Frame& src, const DragState& state, OptionSet<Dra
             ASSERT(selectionRange);
 
             src.editor().willWriteSelectionToPasteboard(*selectionRange);
+            auto selection = src.selection().selection();
+            bool shouldDragAsPlainText = enclosingTextFormControl(selection.start());
+            if (auto range = selection.range(); range && HTMLElement::isInsideImageOverlay(*range))
+                shouldDragAsPlainText = true;
 
-            if (enclosingTextFormControl(src.selection().selection().start())) {
+            if (shouldDragAsPlainText) {
                 if (mustUseLegacyDragClient)
                     dataTransfer.pasteboard().writePlainText(src.editor().selectedTextForDataTransfer(), Pasteboard::CannotSmartReplace);
                 else {

@@ -48,11 +48,11 @@ describe('/api/build-requests', function () {
                 {commit: '2017', commitOwner: "96336", patch: null, requiresBuild: true, rootFile: null}]);
 
             assert.strictEqual(content['commits'].length, 5);
-            assert.deepStrictEqual(content['commits'][0], {commitOwner: null, id: '87832', repository: '9', revision: '10.11 15A284', time: 0});
-            assert.deepStrictEqual(content['commits'][1], {commitOwner: null, id: '93116', repository: '11', revision: '191622', time: 1445945816878})
-            assert.deepStrictEqual(content['commits'][2], {commitOwner: '93116', id: '1797', repository: '213', revision: 'owned-jsc-6161', time: 1456960795300})
-            assert.deepStrictEqual(content['commits'][3], {commitOwner: null, id: '96336', repository: '11', revision: '192736', time: 1448225325650})
-            assert.deepStrictEqual(content['commits'][4], {commitOwner: '96336', id: '2017', repository: '213', revision: 'owned-jsc-9191', time: 1462230837100})
+            assert.deepStrictEqual(content['commits'][0], {commitOwner: null, id: '87832', repository: '9', revision: '10.11 15A284', revisionIdentifier: null, time: 0});
+            assert.deepStrictEqual(content['commits'][1], {commitOwner: null, id: '93116', repository: '11', revision: '191622', revisionIdentifier: null, time: 1445945816878})
+            assert.deepStrictEqual(content['commits'][2], {commitOwner: '93116', id: '1797', repository: '213', revision: 'owned-jsc-6161', revisionIdentifier: null, time: 1456960795300})
+            assert.deepStrictEqual(content['commits'][3], {commitOwner: null, id: '96336', repository: '11', revision: '192736', revisionIdentifier: null, time: 1448225325650})
+            assert.deepStrictEqual(content['commits'][4], {commitOwner: '96336', id: '2017', repository: '213', revision: 'owned-jsc-9191', revisionIdentifier: null, time: 1462230837100})
 
             assert.strictEqual(content['buildRequests'].length, 4);
             content['buildRequests'][0]['createdAt'] = 0;
@@ -64,6 +64,40 @@ describe('/api/build-requests', function () {
             assert.deepStrictEqual(content['buildRequests'][2], {id: '706', task: '1080', triggerable: '1000', repositoryGroup: '2001', test: '200', platform: '65', testGroup: '900', order: '2', commitSet: '403', status: 'pending', statusDescription: null, url: null, build: null, createdAt: 0});
             assert.deepStrictEqual(content['buildRequests'][3], {id: '707', task: '1080', triggerable: '1000', repositoryGroup: '2001', test: '200', platform: '65', testGroup: '900', order: '3', commitSet: '404', status: 'pending', statusDescription: null, url: null, build: null, createdAt: 0});
        });
+    });
+
+    it('should return build requests associated with a given triggerable with appropriate commits with commit revision identifier and commitSets with owned components', async () => {
+        await MockData.addTestGroupWithOwnedCommitsWithRevisionIdentifier(TestServer.database())
+        const content = await TestServer.remoteAPI().getJSONWithStatus('/api/build-requests/build-webkit');
+        assert.deepStrictEqual(Object.keys(content).sort(), ['buildRequests', 'commitSets', 'commits', 'status', 'uploadedFiles']);
+        assert.strictEqual(content['commitSets'].length, 2);
+        assert.strictEqual(parseInt(content['commitSets'][0].id), 403);
+        assert.deepStrictEqual(content['commitSets'][0].revisionItems,
+            [{commit: '87832', commitOwner: null, patch: null, requiresBuild: false, rootFile: null},
+            {commit: '1797', commitOwner: "193116", patch: null, requiresBuild: true, rootFile: null},
+            {commit: '193116', commitOwner: null, patch: null, requiresBuild: false, rootFile: null},]);
+        assert.strictEqual(parseInt(content['commitSets'][1].id), 404);
+        assert.deepStrictEqual(content['commitSets'][1].revisionItems,
+            [{commit: '87832', commitOwner: null, patch: null, requiresBuild: false, rootFile: null},
+            {commit: '2017', commitOwner: "196336", patch: null, requiresBuild: true, rootFile: null},
+            {commit: '196336', commitOwner: null, patch: null, requiresBuild: false, rootFile: null},]);
+
+        assert.strictEqual(content['commits'].length, 5);
+        assert.deepStrictEqual(content['commits'][0], {commitOwner: null, id: '87832', repository: '9', revision: '10.11 15A284', revisionIdentifier: null, time: 0});
+        assert.deepStrictEqual(content['commits'][1], {commitOwner: '193116', id: '1797', repository: '213', revision: 'owned-jsc-6161', revisionIdentifier: null, time: 1456960795300})
+        assert.deepStrictEqual(content['commits'][2], {commitOwner: null, id: '193116', repository: String(MockData.gitWebkitRepositoryId()), revision: '2ceda45d3cd63cde58d0dbf5767714e03d902e43', revisionIdentifier: '193116@main', time: 1445945816878})
+        assert.deepStrictEqual(content['commits'][3], {commitOwner: '196336', id: '2017', repository: '213', revision: 'owned-jsc-9191', revisionIdentifier: null, time: 1462230837100})
+        assert.deepStrictEqual(content['commits'][4], {commitOwner: null, id: '196336', repository: String(MockData.gitWebkitRepositoryId()), revision: '8e294365a452a89785d6536ca7f0fc8a95fa152d', revisionIdentifier: '196336@main', time: 1448225325650})
+
+        assert.strictEqual(content['buildRequests'].length, 4);
+        content['buildRequests'][0]['createdAt'] = 0;
+        content['buildRequests'][1]['createdAt'] = 0;
+        content['buildRequests'][2]['createdAt'] = 0;
+        content['buildRequests'][3]['createdAt'] = 0;
+        assert.deepStrictEqual(content['buildRequests'][0], {id: '704', task: '1080', triggerable: '1000', repositoryGroup: '2001', test: '200', platform: '65', testGroup: '900', order: '0', commitSet: '403', status: 'pending', statusDescription: null, url: null, build: null, createdAt: 0});
+        assert.deepStrictEqual(content['buildRequests'][1], {id: '705', task: '1080', triggerable: '1000', repositoryGroup: '2001', test: '200', platform: '65', testGroup: '900', order: '1', commitSet: '404', status: 'pending', statusDescription: null, url: null, build: null, createdAt: 0});
+        assert.deepStrictEqual(content['buildRequests'][2], {id: '706', task: '1080', triggerable: '1000', repositoryGroup: '2001', test: '200', platform: '65', testGroup: '900', order: '2', commitSet: '403', status: 'pending', statusDescription: null, url: null, build: null, createdAt: 0});
+        assert.deepStrictEqual(content['buildRequests'][3], {id: '707', task: '1080', triggerable: '1000', repositoryGroup: '2001', test: '200', platform: '65', testGroup: '900', order: '3', commitSet: '404', status: 'pending', statusDescription: null, url: null, build: null, createdAt: 0});
     });
 
     it('reuse roots from existing build requests if the commits sets are equal except the existence of roots', async () => {
@@ -95,8 +129,8 @@ describe('/api/build-requests', function () {
         const updates = {900: {
             status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: parseInt(content['buildRequests'][0].id)}};
         const response = await TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         });
 
@@ -153,8 +187,8 @@ describe('/api/build-requests', function () {
             status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: 704}};
 
         const response = await TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         });
 
@@ -222,8 +256,8 @@ describe('/api/build-requests', function () {
         const updates = {900: {
                 status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: parseInt(content['buildRequests'][0].id)}};
         const response = await TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         });
 
@@ -282,8 +316,8 @@ describe('/api/build-requests', function () {
         const updates = {900: {
             status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: content['buildRequests'][0].id}};
         await assertThrows('CannotReuseDeletedRoot', () => TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         }));
     });
@@ -325,8 +359,8 @@ describe('/api/build-requests', function () {
             status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: parseInt(content['buildRequests'][0].id)}};
 
         await assertThrows('CannotReuseDeletedRoot', () => TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         }));
     });
@@ -361,8 +395,8 @@ describe('/api/build-requests', function () {
                 status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: parseInt(content['buildRequests'][0].id)}};
 
         await assertThrows('NoMatchingCommitSetItem', () => TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         }));
     });
@@ -399,8 +433,8 @@ describe('/api/build-requests', function () {
                 status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: parseInt(content['buildRequests'][0].id)}};
 
         await assertThrows('CannotReuseRootWithNonMatchingCommitSets', () => TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         }));
     });
@@ -434,8 +468,8 @@ describe('/api/build-requests', function () {
         const updates = {900: {
             status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: parseInt(content['buildRequests'][0].id)}};
         await assertThrows('CanOnlyReuseCompletedBuildRequest', () => TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         }));
     });
@@ -470,8 +504,8 @@ describe('/api/build-requests', function () {
             status: content['buildRequests'][0].status, url: content['buildRequests'][0].url, buildRequestForRootReuse: 999}};
 
         await assertThrows('FailedToFindbuildRequestForRootReuse', () => TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         }));
     });
@@ -1003,8 +1037,8 @@ describe('/api/build-requests', function () {
         const updates = {'700': {status: 'canceled', url: 'http://build.webkit.org/someBuilder/builds'}};
         return MockData.addMockData(TestServer.database()).then(() => {
             return TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-                'slaveName': 'sync-slave',
-                'slavePassword': 'password',
+                'workerName': 'sync-worker',
+                'workerPassword': 'password',
                 'buildRequestUpdates': updates
             }).then((response) => {
                 assert.strictEqual(response['status'], 'OK');
@@ -1049,8 +1083,8 @@ describe('/api/build-requests', function () {
         await MockData.addMockData(TestServer.database(), ['running', 'pending', 'pending', 'pending']);
         await TestServer.database().query(`UPDATE build_requests SET request_url = '${url}' WHERE request_id = 700`);
         const response = await TestServer.remoteAPI().postJSONWithStatus('/api/build-requests/build-webkit', {
-            'slaveName': 'sync-slave',
-            'slavePassword': 'password',
+            'workerName': 'sync-worker',
+            'workerPassword': 'password',
             'buildRequestUpdates': updates
         });
         assert.equal(response['status'], 'OK');

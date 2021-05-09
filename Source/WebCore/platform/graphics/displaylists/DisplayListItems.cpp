@@ -769,6 +769,13 @@ static TextStream& operator<<(TextStream& ts, const FillEllipse& item)
     return ts;
 }
 
+static TextStream& operator<<(TextStream& ts, const GetImageData& item)
+{
+    ts.dumpProperty("outputFormat", item.outputFormat());
+    ts.dumpProperty("srcRect", item.srcRect());
+    return ts;
+}
+
 PutImageData::PutImageData(AlphaPremultiplication inputFormat, const ImageData& imageData, const IntRect& srcRect, const IntPoint& destPoint, AlphaPremultiplication destFormat)
     : m_srcRect(srcRect)
     , m_destPoint(destPoint)
@@ -787,12 +794,6 @@ PutImageData::PutImageData(AlphaPremultiplication inputFormat, Ref<ImageData>&& 
 {
 }
 
-NO_RETURN_DUE_TO_ASSERT void PutImageData::apply(GraphicsContext&) const
-{
-    // Should be handled by the delegate.
-    ASSERT_NOT_REACHED();
-}
-
 static TextStream& operator<<(TextStream& ts, const PutImageData& item)
 {
     ts.dumpProperty("inputFormat", item.inputFormat());
@@ -803,6 +804,7 @@ static TextStream& operator<<(TextStream& ts, const PutImageData& item)
     return ts;
 }
 
+#if ENABLE(VIDEO)
 PaintFrameForMedia::PaintFrameForMedia(MediaPlayer& player, const FloatRect& destination)
     : m_identifier(player.identifier())
     , m_destination(destination)
@@ -820,6 +822,7 @@ static TextStream& operator<<(TextStream& ts, const PaintFrameForMedia& item)
     ts.dumpProperty("destination", item.destination());
     return ts;
 }
+#endif
 
 Optional<FloatRect> StrokeRect::localBounds(const GraphicsContext&) const
 {
@@ -1061,8 +1064,11 @@ static TextStream& operator<<(TextStream& ts, ItemType type)
     case ItemType::FlushContext: ts << "flush-context"; break;
     case ItemType::MetaCommandChangeDestinationImageBuffer: ts << "meta-command-change-destination-image-buffer"; break;
     case ItemType::MetaCommandChangeItemBuffer: ts << "meta-command-change-item-buffer"; break;
+    case ItemType::GetImageData: ts << "get-image-data"; break;
     case ItemType::PutImageData: ts << "put-image-data"; break;
+#if ENABLE(VIDEO)
     case ItemType::PaintFrameForMedia: ts << "paint-frame-for-media"; break;
+#endif
     case ItemType::StrokeRect: ts << "stroke-rect"; break;
     case ItemType::StrokeLine: ts << "stroke-line"; break;
 #if ENABLE(INLINE_PATH_DATA)
@@ -1225,12 +1231,17 @@ TextStream& operator<<(TextStream& ts, ItemHandle item)
     case ItemType::MetaCommandChangeItemBuffer:
         ts << item.get<MetaCommandChangeItemBuffer>();
         break;
+    case ItemType::GetImageData:
+        ts << item.get<GetImageData>();
+        break;
     case ItemType::PutImageData:
         ts << item.get<PutImageData>();
         break;
+#if ENABLE(VIDEO)
     case ItemType::PaintFrameForMedia:
         ts << item.get<PaintFrameForMedia>();
         break;
+#endif
     case ItemType::StrokeRect:
         ts << item.get<StrokeRect>();
         break;

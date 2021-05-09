@@ -109,9 +109,8 @@ class CheckOutSource(git.Git):
     CHECKOUT_DELAY_AND_MAX_RETRIES_PAIR = (0, 2)
     haltOnFailure = False
 
-    def __init__(self, **kwargs):
-        self.repourl = 'https://github.com/WebKit/WebKit.git'
-        super(CheckOutSource, self).__init__(repourl=self.repourl,
+    def __init__(self, repourl='https://github.com/WebKit/WebKit.git', **kwargs):
+        super(CheckOutSource, self).__init__(repourl=repourl,
                                                 retry=self.CHECKOUT_DELAY_AND_MAX_RETRIES_PAIR,
                                                 timeout=2 * 60 * 60,
                                                 alwaysUseLatest=True,
@@ -169,6 +168,18 @@ class CheckOutSpecificRevision(shell.ShellCommand):
         return shell.ShellCommand.start(self)
 
 
+class GitResetHard(shell.ShellCommand):
+    name = 'git-reset-hard'
+    descriptionDone = ['Performed git reset --hard']
+
+    def __init__(self, **kwargs):
+        super(GitResetHard, self).__init__(logEnviron=False, **kwargs)
+
+    def start(self):
+        self.setCommand(['git', 'reset', 'HEAD~10', '--hard'])
+        return shell.ShellCommand.start(self)
+
+
 class FetchBranches(shell.ShellCommand):
     name = 'fetch-branch-references'
     descriptionDone = ['Updated branch information']
@@ -210,6 +221,8 @@ class ShowIdentifier(shell.ShellCommand):
         match = re.search(self.identifier_re, log_text, re.MULTILINE)
         if match:
             identifier = match.group(1)
+            if identifier:
+                identifier = identifier.replace('master', 'main')
             self.setProperty('identifier', identifier)
             ews_revision = self.getProperty('ews_revision')
             if ews_revision:
@@ -301,7 +314,10 @@ class ApplyPatch(shell.ShellCommand, CompositeStepMixin):
     def start(self):
         patch = self._get_patch()
         if not patch:
-            self.finished(FAILURE)
+            # Forced build, don't have patch_id raw data on the request, need to fech it.
+            patch_id = self.getProperty('patch_id', '')
+            self.command = ['/bin/sh', '-c', 'curl -L "https://bugs.webkit.org/attachment.cgi?id={}" -o .buildbot-diff && {}'.format(patch_id, ' '.join(self.command))]
+            shell.ShellCommand.start(self)
             return None
 
         patch_reviewer_name = self.getProperty('patch_reviewer_full_name', '')
@@ -333,12 +349,36 @@ class ApplyPatch(shell.ShellCommand, CompositeStepMixin):
         return rc
 
 
-class CheckPatchRelevance(buildstep.BuildStep):
+class AnalyzePatch(buildstep.BuildStep):
+    flunkOnFailure = True
+    haltOnFailure = True
+
+    def _get_patch(self):
+        sourcestamp = self.build.getSourceStamp(self.getProperty('codebase', ''))
+        if not sourcestamp or not sourcestamp.patch:
+            return None
+        return sourcestamp.patch[1]
+
+    @defer.inlineCallbacks
+    def _addToLog(self, logName, message):
+        try:
+            log = self.getLog(logName)
+        except KeyError:
+            log = yield self.addLog(logName)
+        log.addStdout(message)
+
+    def getResultSummary(self):
+        if self.results == FAILURE:
+            return {'step': 'Patch doesn\'t have relevant changes'}
+        if self.results == SUCCESS:
+            return {'step': 'Patch contains relevant changes'}
+        return buildstep.BuildStep.getResultSummary(self)
+
+
+class CheckPatchRelevance(AnalyzePatch):
     name = 'check-patch-relevance'
     description = ['check-patch-relevance running']
     descriptionDone = ['Patch contains relevant changes']
-    flunkOnFailure = True
-    haltOnFailure = True
 
     bindings_paths = [
         'Source/WebCore',
@@ -350,6 +390,8 @@ class CheckPatchRelevance(buildstep.BuildStep):
         'Tools/CISupport/ews-build',
         'Tools/CISupport/Shared',
         'Tools/Scripts/libraries/resultsdbpy',
+        'Tools/Scripts/libraries/webkitcorepy',
+        'Tools/Scripts/libraries/webkitscmpy',
     ]
 
     jsc_paths = [
@@ -415,20 +457,6 @@ class CheckPatchRelevance(buildstep.BuildStep):
                     return True
         return False
 
-    def _get_patch(self):
-        sourcestamp = self.build.getSourceStamp(self.getProperty('codebase', ''))
-        if not sourcestamp or not sourcestamp.patch:
-            return None
-        return sourcestamp.patch[1]
-
-    @defer.inlineCallbacks
-    def _addToLog(self, logName, message):
-        try:
-            log = self.getLog(logName)
-        except KeyError:
-            log = yield self.addLog(logName)
-        log.addStdout(message)
-
     def start(self):
         patch = self._get_patch()
         if not patch:
@@ -447,10 +475,45 @@ class CheckPatchRelevance(buildstep.BuildStep):
         self.build.buildFinished(['Patch {} doesn\'t have relevant changes'.format(self.getProperty('patch_id', ''))], SKIPPED)
         return None
 
-    def getResultSummary(self):
-        if self.results == FAILURE:
-            return {'step': 'Patch doesn\'t have relevant changes'}
-        return super(CheckPatchRelevance, self).getResultSummary()
+
+class FindModifiedLayoutTests(AnalyzePatch):
+    name = 'find-modified-layout-tests'
+    RE_LAYOUT_TEST = b'^(\+\+\+).*(LayoutTests.*\.html)'
+    DIRECTORIES_TO_IGNORE = ['reference', 'reftest', 'resources', 'support', 'script-tests', 'tools']
+    SUFFIXES_TO_IGNORE = ['-expected', '-expected-mismatch', '-ref', '-notref']
+
+    def find_test_names_from_patch(self, patch):
+        tests = []
+        for line in patch.splitlines():
+            match = re.search(self.RE_LAYOUT_TEST, line, re.IGNORECASE)
+            if match:
+                if any((suffix + '.html').encode('utf-8') in line for suffix in self.SUFFIXES_TO_IGNORE):
+                    continue
+                test_name = match.group(2).decode('utf-8')
+                if any(directory in test_name.split('/') for directory in self.DIRECTORIES_TO_IGNORE):
+                    continue
+                tests.append(test_name)
+        return list(set(tests))
+
+    def start(self):
+        patch = self._get_patch()
+        if not patch:
+            self.finished(SUCCESS)
+            return None
+
+        tests = self.find_test_names_from_patch(patch)
+
+        if tests:
+            self._addToLog('stdio', 'This patch modifies following tests: {}'.format(tests))
+            self.setProperty('modified_tests', tests)
+            self.finished(SUCCESS)
+            return None
+
+        self._addToLog('stdio', 'This patch does not modify any layout tests')
+        self.finished(FAILURE)
+        self.build.results = SKIPPED
+        self.build.buildFinished(['Patch {} doesn\'t have relevant changes'.format(self.getProperty('patch_id', ''))], SKIPPED)
+        return None
 
 
 class Bugzilla(object):
@@ -471,8 +534,7 @@ class BugzillaMixin(object):
     addURLs = False
     bug_open_statuses = ['UNCONFIRMED', 'NEW', 'ASSIGNED', 'REOPENED']
     bug_closed_statuses = ['RESOLVED', 'VERIFIED', 'CLOSED']
-    revert_preamble = 'REVERT of r'
-
+    fast_cq_preambles = ('revert of r', 'fast-cq', '[fast-cq]')
     @defer.inlineCallbacks
     def _addToLog(self, logName, message):
         try:
@@ -514,7 +576,11 @@ class BugzillaMixin(object):
         patch = self.fetch_data_from_url_with_authentication(patch_url)
         if not patch:
             return None
-        patch_json = patch.json().get('attachments')
+        try:
+            patch_json = patch.json().get('attachments')
+        except Exception as e:
+            print('Failed to fetch patch json from {}, error: {}'.format(patch_url, e))
+            return None
         if not patch_json or len(patch_json) == 0:
             return None
         return patch_json.get(str(patch_id))
@@ -524,7 +590,11 @@ class BugzillaMixin(object):
         bug = self.fetch_data_from_url_with_authentication(bug_url)
         if not bug:
             return None
-        bugs_json = bug.json().get('bugs')
+        try:
+            bugs_json = bug.json().get('bugs')
+        except Exception as e:
+            print('Failed to fetch bug json from {}, error: {}'.format(bug_url, e))
+            return None
         if not bugs_json or len(bugs_json) == 0:
             return None
         return bugs_json[0]
@@ -549,8 +619,8 @@ class BugzillaMixin(object):
         patch_author = patch_json.get('creator')
         self.setProperty('patch_author', patch_author)
         patch_title = patch_json.get('summary')
-        if patch_title.startswith(self.revert_preamble):
-            self.setProperty('revert', True)
+        if patch_title.lower().startswith(self.fast_cq_preambles):
+            self.setProperty('fast_commit_queue', True)
         if self.addURLs:
             self.addURL('Patch by: {}'.format(patch_author), '')
         return patch_json.get('is_obsolete')
@@ -1440,7 +1510,8 @@ class BuildLogLineObserver(logobserver.LogLineObserver, object):
             self.error_context_buffer.append(line)
 
         if self.searchString in line:
-            map(self.errorReceived, self.error_context_buffer)
+            for log in self.error_context_buffer:
+                self.errorReceived(log)
             self.error_context_buffer = []
 
 
@@ -1458,7 +1529,7 @@ class CompileWebKit(shell.Compile):
         super(CompileWebKit, self).__init__(logEnviron=False, **kwargs)
 
     def doStepIf(self, step):
-        return not (self.getProperty('revert') and self.getProperty('buildername', '').lower() == 'commit-queue')
+        return not (self.getProperty('fast_commit_queue') and self.getProperty('buildername', '').lower() == 'commit-queue')
 
     def start(self):
         platform = self.getProperty('platform')
@@ -1528,6 +1599,10 @@ class CompileWebKit(shell.Compile):
     def getResultSummary(self):
         if self.results == FAILURE:
             return {'step': 'Failed to compile WebKit'}
+        if self.results == SKIPPED:
+            if self.getProperty('fast_commit_queue'):
+                return {'step': 'Skipped compiling WebKit in fast-cq mode'}
+            return {'step': 'Skipped compiling WebKit'}
         return shell.Compile.getResultSummary(self)
 
 
@@ -2017,6 +2092,8 @@ class RunWebKitTests(shell.Test):
     jsonFileName = 'layout-test-results/full_results.json'
     logfiles = {'json': jsonFileName}
     test_failures_log_name = 'test-failures'
+    ENABLE_GUARD_MALLOC = False
+    EXIT_AFTER_FAILURES = '30'
     command = ['python', 'Tools/Scripts/run-webkit-tests',
                '--no-build',
                '--no-show-results',
@@ -2028,16 +2105,17 @@ class RunWebKitTests(shell.Test):
         shell.Test.__init__(self, logEnviron=False, **kwargs)
         self.incorrectLayoutLines = []
 
+    def _get_patch(self):
+        sourcestamp = self.build.getSourceStamp(self.getProperty('codebase', ''))
+        if not sourcestamp or not sourcestamp.patch:
+            return None
+        return sourcestamp.patch[1]
+
     def doStepIf(self, step):
         return not ((self.getProperty('buildername', '').lower() == 'commit-queue') and
-                    (self.getProperty('revert') or self.getProperty('passed_mac_wk2')))
+                    (self.getProperty('fast_commit_queue') or self.getProperty('passed_mac_wk2')))
 
-    def start(self):
-        self.log_observer = logobserver.BufferLogObserver(wantStderr=True)
-        self.addLogObserver('stdio', self.log_observer)
-        self.log_observer_json = logobserver.BufferLogObserver()
-        self.addLogObserver('json', self.log_observer_json)
-
+    def setLayoutTestCommand(self):
         platform = self.getProperty('platform')
         appendCustomBuildFlags(self, platform, self.getProperty('fullPlatform'))
         additionalArguments = self.getProperty('additionalArguments')
@@ -2052,10 +2130,45 @@ class RunWebKitTests(shell.Test):
         if patch_author in ['webkit-wpt-import-bot@igalia.com']:
             self.setCommand(self.command + ['imported/w3c/web-platform-tests'])
         else:
-            self.setCommand(self.command + ['--exit-after-n-failures', '30', '--skip-failing-tests'])
+            self.setCommand(self.command + ['--exit-after-n-failures', self.EXIT_AFTER_FAILURES, '--skip-failing-tests'])
 
         if additionalArguments:
             self.setCommand(self.command + additionalArguments)
+
+        if self.ENABLE_GUARD_MALLOC:
+            self.setCommand(self.command + ['--guard-malloc'])
+
+        if self.name == 'run-layout-tests-without-patch':
+            # In order to speed up testing, on the step that retries running the layout tests without patch
+            # only run the subset of tests that failed on the previous steps.
+            # But only do that if the previous steps didn't exceed the test failure limit and the patch doesn't
+            # modify the TestExpectations files (there are corner cases where we can't guarantee the correctnes
+            # of this optimization if the patch modifies the TestExpectations files, for example, if the patch
+            # removes skipped tests but those tests still fail).
+            first_results_did_exceed_test_failure_limit = self.getProperty('first_results_exceed_failure_limit', False)
+            second_results_did_exceed_test_failure_limit = self.getProperty('second_results_exceed_failure_limit', False)
+            if not first_results_did_exceed_test_failure_limit and not second_results_did_exceed_test_failure_limit:
+                patch_modifies_expectation_files = False
+                patch = self._get_patch()
+                if patch:
+                    for line in patch.splitlines():
+                        line = line.strip()
+                        # patch is stored by buildbot as bytes: https://github.com/buildbot/buildbot/issues/5812#issuecomment-790175979
+                        if (b'LayoutTests/' in line and b'TestExpectations' in line) and (line.startswith(b'---') or line.startswith(b'+++')):
+                            patch_modifies_expectation_files = True
+                            break
+                if not patch_modifies_expectation_files:
+                    first_results_failing_tests = set(self.getProperty('first_run_failures', set()))
+                    second_results_failing_tests = set(self.getProperty('second_run_failures', set()))
+                    list_retry_tests = sorted(first_results_failing_tests.union(second_results_failing_tests))
+                    self.setCommand(self.command + list_retry_tests)
+
+    def start(self):
+        self.log_observer = logobserver.BufferLogObserver(wantStderr=True)
+        self.addLogObserver('stdio', self.log_observer)
+        self.log_observer_json = logobserver.BufferLogObserver()
+        self.addLogObserver('json', self.log_observer_json)
+        self.setLayoutTestCommand()
         return shell.Test.start(self)
 
     # FIXME: This will break if run-webkit-tests changes its default log formatter.
@@ -2163,8 +2276,49 @@ class RunWebKitTests(shell.Test):
         if self.results != SUCCESS and self.incorrectLayoutLines:
             status = ' '.join(self.incorrectLayoutLines)
             return {'step': status}
+        if self.results == SKIPPED:
+            if self.getProperty('fast_commit_queue'):
+                return {'step': 'Skipped layout-tests in fast-cq mode'}
+            return {'step': 'Skipped layout-tests'}
 
         return super(RunWebKitTests, self).getResultSummary()
+
+
+class RunWebKitTestsInStressMode(RunWebKitTests):
+    name = 'run-layout-tests-in-stress-mode'
+    suffix = 'stress-mode'
+    EXIT_AFTER_FAILURES = '10'
+    NUM_ITERATIONS = 100
+
+    def setLayoutTestCommand(self):
+        RunWebKitTests.setLayoutTestCommand(self)
+
+        self.setCommand(self.command + ['--iterations', self.NUM_ITERATIONS])
+        modified_tests = self.getProperty('modified_tests')
+        if modified_tests:
+            self.setCommand(self.command + modified_tests)
+
+    def evaluateCommand(self, cmd):
+        rc = self.evaluateResult(cmd)
+        if rc == SUCCESS or rc == WARNINGS:
+            message = 'Passed layout tests'
+            self.descriptionDone = message
+            self.build.results = SUCCESS
+            self.setProperty('build_summary', message)
+        else:
+            self.setProperty('build_summary', 'Found test failures')
+            self.build.addStepsAfterCurrentStep([
+                ArchiveTestResults(),
+                UploadTestResults(identifier=self.suffix),
+                ExtractTestResults(identifier=self.suffix),
+            ])
+        return rc
+
+
+class RunWebKitTestsInStressGuardmallocMode(RunWebKitTestsInStressMode):
+    name = 'run-layout-tests-in-guard-malloc-stress-mode'
+    suffix = 'guard-malloc'
+    ENABLE_GUARD_MALLOC = True
 
 
 class ReRunWebKitTests(RunWebKitTests):
@@ -2982,6 +3136,31 @@ class PrintConfiguration(steps.ShellSequence):
         return {'step': configuration}
 
 
+class CleanGitRepo(steps.ShellSequence):
+    name = 'clean-up-git-repo'
+    haltOnFailure = False
+    flunkOnFailure = False
+    logEnviron = False
+    # This somewhat quirky sequence of steps seems to clear up all the broken
+    # git situations we've gotten ourself into in the past.
+    command_list = [['git', 'clean', '-f', '-d'],  # Remove any left-over layout test results, added files, etc.
+                    ['git', 'fetch', 'origin'],  # Avoid updating the working copy to a stale revision.
+                    ['git', 'checkout', 'origin/master', '-f'],
+                    ['git', 'branch', '-D', 'master'],
+                    ['git', 'checkout', 'origin/master', '-b', 'master']]
+
+    def run(self):
+        self.commands = []
+        for command in self.command_list:
+            self.commands.append(util.ShellArg(command=command, logname='stdio'))
+        return super(CleanGitRepo, self).run()
+
+    def getResultSummary(self):
+        if self.results != SUCCESS:
+            return {'step': 'Encountered some issues during cleanup'}
+        return {'step': 'Cleaned up git repository'}
+
+
 class ApplyWatchList(shell.ShellCommand):
     name = 'apply-watch-list'
     description = ['applying watchilist']
@@ -3138,17 +3317,18 @@ class PushCommitToWebKitRepo(shell.ShellCommand):
         if rc == SUCCESS:
             log_text = self.log_observer.getStdout() + self.log_observer.getStderr()
             svn_revision = self.svn_revision_from_commit_text(log_text)
-            self.setProperty('bugzilla_comment_text', self.comment_text_for_bug(svn_revision))
-            commit_summary = 'Committed r{}'.format(svn_revision)
+            identifier = self.identifier_for_revision(svn_revision)
+            self.setProperty('bugzilla_comment_text', self.comment_text_for_bug(svn_revision, identifier))
+            commit_summary = 'Committed {}'.format(identifier)
             self.descriptionDone = commit_summary
-            self.setProperty('build_summary', 'Committed r{}'.format(svn_revision))
+            self.setProperty('build_summary', commit_summary)
             self.build.addStepsAfterCurrentStep([CommentOnBug(), RemoveFlagsOnPatch(), CloseBug()])
-            self.addURL('r{}'.format(svn_revision), self.url_for_revision(svn_revision))
+            self.addURL(identifier, self.url_for_identifier(identifier))
         else:
             retry_count = int(self.getProperty('retry_count', 0))
             if retry_count < self.MAX_RETRY:
                 self.setProperty('retry_count', retry_count + 1)
-                self.build.addStepsAfterCurrentStep([CheckOutSource(), ShowIdentifier(), UpdateWorkingDirectory(), ApplyPatch(), CreateLocalGITCommit(), PushCommitToWebKitRepo()])
+                self.build.addStepsAfterCurrentStep([GitResetHard(), CheckOutSource(repourl='https://git.webkit.org/git/WebKit-https'), ShowIdentifier(), UpdateWorkingDirectory(), ApplyPatch(), CreateLocalGITCommit(), PushCommitToWebKitRepo()])
                 return rc
 
             self.setProperty('bugzilla_comment_text', self.comment_text_for_bug())
@@ -3156,16 +3336,33 @@ class PushCommitToWebKitRepo(shell.ShellCommand):
             self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
         return rc
 
-    def url_for_revision(self, revision):
-        return 'https://commits.webkit.org/r{}'.format(revision)
+    def url_for_revision_details(self, revision):
+        return '{}r{}/json'.format(COMMITS_INFO_URL, revision)
 
-    def comment_text_for_bug(self, svn_revision=None):
+    def url_for_identifier(self, identifier):
+        return '{}{}'.format(COMMITS_INFO_URL, identifier)
+
+    def identifier_for_revision(self, revision):
+        try:
+            response = requests.get(self.url_for_revision_details(revision), timeout=60)
+            if response and response.status_code == 200:
+                return response.json().get('identifier', 'r{}'.format(revision))
+            else:
+                print('Non-200 status code received from {}: {}'.format(COMMITS_INFO_URL, response.status_code))
+                print(response.text)
+        except Exception as e:
+            print(e)
+        return 'r{}'.format(revision)
+
+    def comment_text_for_bug(self, svn_revision=None, identifier=None):
         patch_id = self.getProperty('patch_id', '')
         if not svn_revision:
             comment = 'commit-queue failed to commit attachment {} to WebKit repository.'.format(patch_id)
             comment += ' To retry, please set cq+ flag again.'
             return comment
-        comment = 'Committed r{}: <{}>'.format(svn_revision, self.url_for_revision(svn_revision))
+
+        identifier_str = identifier if identifier and '@' in identifier else '?'
+        comment = 'Committed r{} ({}): <{}>'.format(svn_revision, identifier_str, self.url_for_identifier(identifier))
         comment += '\n\nAll reviewed patches have been landed. Closing bug and clearing flags on attachment {}.'.format(patch_id)
         return comment
 

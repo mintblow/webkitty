@@ -48,7 +48,8 @@
       "expertise" : "WebKit on Windows",
       "nicks" : [
          "chanada"
-      ]
+      ],
+      "status" : "committer"
    },
    "Adam Barth" : {
       "emails" : [
@@ -188,6 +189,18 @@
       "nicks" : [
          "akiss"
       ]
+   },
+   "Alan Bujtas" : {
+      "emails" : [
+         "zalan@apple.com",
+         "zbujtas@gmail.com",
+         "zalan.bujtas@nokia.com"
+      ],
+      "expertise" : "Layout and Rendering, subpixel positioning, frame flattening",
+      "nicks" : [
+         "zalan"
+      ],
+      "status" : "reviewer"
    },
    "Alan Coon" : {
       "emails" : [
@@ -622,6 +635,16 @@
          "wingo"
       ]
    },
+   "Angelos Oikonomopoulos" : {
+      "emails" : [
+         "angelos@igalia.com"
+      ],
+      "expertise" : "JavaScriptCore",
+      "nicks" : [
+         "angelos"
+      ],
+      "status" : "committer"
+   },
    "Anna Cavender" : {
       "emails" : [
          "annacc@chromium.org"
@@ -1038,12 +1061,13 @@
    },
    "Caio Araujo Neponoceno de Lima" : {
       "emails" : [
-         "ticaiolima@gmail.com"
+         "ticaiolima@gmail.com",
+         "clima@igalia.com"
       ],
       "nicks" : [
          "caiolima"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    "Caio Marcelo de Oliveira Filho" : {
       "emails" : [
@@ -1066,12 +1090,14 @@
    },
    "Cameron McCormack" : {
       "emails" : [
+         "heycam@apple.com",
          "cam@mcc.id.au",
          "cam@webkit.org"
       ],
       "nicks" : [
          "heycam"
-      ]
+      ],
+      "status" : "committer"
    },
    "Cameron Zwarich" : {
       "emails" : [
@@ -2780,6 +2806,15 @@
          "jcivelli"
       ]
    },
+   "Jean-Yves Avenard" : {
+      "emails" : [
+         "jya@apple.com"
+      ],
+      "nicks" : [
+         "jya"
+      ],
+      "status" : "committer"
+   },
    "Jeff Miller" : {
       "emails" : [
          "jeffm@apple.com"
@@ -2866,7 +2901,8 @@
       ],
       "nicks" : [
          "jessieberlin"
-      ]
+      ],
+      "status" : "committer"
    },
    "Jesus Sanchez-Palencia" : {
       "emails" : [
@@ -3320,7 +3356,7 @@
       "nicks" : [
          "kate"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    "Katie Madonna" : {
       "emails" : [
@@ -3624,6 +3660,15 @@
       "nicks" : [
          "hyuki"
       ]
+   },
+   "Kyle Piddington" : {
+      "emails" : [
+         "kpiddington@apple.com"
+      ],
+      "nicks" : [
+         "kpiddington"
+      ],
+      "status" : "committer"
    },
    "Lars Knoll" : {
       "emails" : [
@@ -5505,6 +5550,16 @@
       ],
       "status" : "reviewer"
    },
+   "Tim Nguyen" : {
+      "emails" : [
+         "ntim@apple.com",
+         "ntim.bugs@gmail.com"
+      ],
+      "nicks" : [
+         "ntim"
+      ],
+      "status": "committer"
+   },
    "Tim Omernick" : {
       "emails" : [
          "timo@apple.com"
@@ -5989,18 +6044,6 @@
       "nicks" : [
          "zackr"
       ]
-   },
-   "Zalan Bujtas" : {
-      "emails" : [
-         "zalan@apple.com",
-         "zbujtas@gmail.com",
-         "zalan.bujtas@nokia.com"
-      ],
-      "expertise" : "Layout and Rendering, subpixel positioning, frame flattening",
-      "nicks" : [
-         "zalan"
-      ],
-      "status" : "reviewer"
    },
    "Zeev Lieber" : {
       "emails" : [

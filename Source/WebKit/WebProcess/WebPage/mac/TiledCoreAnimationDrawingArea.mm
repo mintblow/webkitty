@@ -29,6 +29,7 @@
 #if PLATFORM(MAC)
 
 #import "ColorSpaceData.h"
+#import "DisplayRefreshMonitorMac.h"
 #import "DrawingAreaProxyMessages.h"
 #import "LayerHostingContext.h"
 #import "LayerTreeContext.h"
@@ -450,6 +451,7 @@ void TiledCoreAnimationDrawingArea::updateRendering(UpdateRenderingType flushTyp
         m_webPage.updateRendering();
         m_webPage.flushPendingThemeColorChange();
         m_webPage.flushPendingPageExtendedBackgroundColorChange();
+        m_webPage.flushPendingSampledPageTopColorChange();
         m_webPage.flushPendingEditorStateUpdate();
         m_webPage.flushPendingIntrinsicContentSizeUpdate();
 
@@ -651,6 +653,11 @@ void TiledCoreAnimationDrawingArea::setLayerHostingMode(LayerHostingMode)
 void TiledCoreAnimationDrawingArea::setColorSpace(const ColorSpaceData& colorSpace)
 {
     m_layerHostingContext->setColorSpace(colorSpace.cgColorSpace.get());
+}
+
+RefPtr<WebCore::DisplayRefreshMonitor> TiledCoreAnimationDrawingArea::createDisplayRefreshMonitor(PlatformDisplayID displayID)
+{
+    return DisplayRefreshMonitorMac::create(displayID);
 }
 
 void TiledCoreAnimationDrawingArea::updateLayerHostingContext()

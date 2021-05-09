@@ -186,7 +186,7 @@ public:
     void setCustomWebContentServiceBundleIdentifier(const String&);
     const String& customWebContentServiceBundleIdentifier() { return m_configuration->customWebContentServiceBundleIdentifier(); }
 
-    const Vector<RefPtr<WebProcessProxy>>& processes() const { return m_processes; }
+    const Vector<Ref<WebProcessProxy>>& processes() const { return m_processes; }
 
     // WebProcessProxy object which does not have a running process which is used for convenience, to avoid
     // null checks in WebPageProxy.
@@ -195,12 +195,12 @@ public:
     template<typename T> void sendToAllProcesses(const T& message);
     template<typename T> void sendToAllProcessesForSession(const T& message, PAL::SessionID);
 
-    void processDidFinishLaunching(WebProcessProxy*);
+    void processDidFinishLaunching(WebProcessProxy&);
 
     WebProcessCache& webProcessCache() { return m_webProcessCache.get(); }
 
     // Disconnect the process from the context.
-    void disconnectProcess(WebProcessProxy*);
+    void disconnectProcess(WebProcessProxy&);
 
     Ref<WebPageProxy> createWebPage(PageClient&, Ref<API::PageConfiguration>&&);
 
@@ -238,10 +238,13 @@ public:
 #endif
 
 #if HAVE(CVDISPLAYLINK)
-    Optional<unsigned> nominalFramesPerSecondForDisplay(WebCore::PlatformDisplayID);
-    void startDisplayLink(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID);
+    Optional<WebCore::FramesPerSecond> nominalFramesPerSecondForDisplay(WebCore::PlatformDisplayID);
+    void startDisplayLink(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID, WebCore::FramesPerSecond);
     void stopDisplayLink(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID);
+    void setDisplayLinkPreferredFramesPerSecond(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID, WebCore::FramesPerSecond);
     void stopDisplayLinks(IPC::Connection&);
+
+    void setDisplayLinkForDisplayWantsFullSpeedUpdates(IPC::Connection&, WebCore::PlatformDisplayID, bool wantsFullSpeedUpdates);
 #endif
 
     void addSupportedPlugin(String&& matchingDomain, String&& name, HashSet<String>&& mimeTypes, HashSet<String> extensions);
@@ -313,7 +316,7 @@ public:
 
     void prewarmProcess();
 
-    bool shouldTerminate(WebProcessProxy*);
+    bool shouldTerminate(WebProcessProxy&);
 
     void disableProcessTermination() { m_processTerminationEnabled = false; }
     void enableProcessTermination();
@@ -354,7 +357,7 @@ public:
     void textCheckerStateChanged();
 
 #if ENABLE(GPU_PROCESS)
-    void gpuProcessCrashed(ProcessID);
+    void gpuProcessExited(ProcessID, GPUProcessTerminationReason);
 
     void getGPUProcessConnection(WebProcessProxy&, GPUProcessConnectionParameters&&, Messages::WebProcessProxy::GetGPUProcessConnectionDelayedReply&&);
 
@@ -367,7 +370,7 @@ public:
 #endif
 
     // Network Process Management
-    void networkProcessCrashed(NetworkProcessProxy&);
+    void networkProcessDidTerminate(NetworkProcessProxy&, NetworkProcessProxy::TerminationReason);
 
     bool isServiceWorkerPageID(WebPageProxyIdentifier) const;
 #if ENABLE(SERVICE_WORKER)
@@ -593,8 +596,8 @@ private:
 
     IPC::MessageReceiverMap m_messageReceiverMap;
 
-    Vector<RefPtr<WebProcessProxy>> m_processes;
-    WebProcessProxy* m_prewarmedProcess { nullptr };
+    Vector<Ref<WebProcessProxy>> m_processes;
+    WeakPtr<WebProcessProxy> m_prewarmedProcess;
 
     HashMap<PAL::SessionID, WeakPtr<WebProcessProxy>> m_dummyProcessProxies; // Lightweight WebProcessProxy objects without backing process.
 
@@ -709,7 +712,7 @@ private:
 #endif
 
 #if ENABLE(GAMEPAD)
-    HashSet<WebProcessProxy*> m_processesUsingGamepads;
+    WeakHashSet<WebProcessProxy> m_processesUsingGamepads;
 #endif
 
 #if PLATFORM(COCOA)
@@ -794,9 +797,7 @@ private:
 template<typename T>
 void WebProcessPool::sendToAllProcesses(const T& message)
 {
-    size_t processCount = m_processes.size();
-    for (size_t i = 0; i < processCount; ++i) {
-        WebProcessProxy* process = m_processes[i].get();
+    for (auto& process : m_processes) {
         if (process->canSendMessage())
             process->send(T(message), 0);
     }
@@ -805,9 +806,7 @@ void WebProcessPool::sendToAllProcesses(const T& message)
 template<typename T>
 void WebProcessPool::sendToAllProcessesForSession(const T& message, PAL::SessionID sessionID)
 {
-    size_t processCount = m_processes.size();
-    for (size_t i = 0; i < processCount; ++i) {
-        WebProcessProxy* process = m_processes[i].get();
+    for (auto& process : m_processes) {
         if (process->canSendMessage() && !process->isPrewarmed() && process->sessionID() == sessionID)
             process->send(T(message), 0);
     }

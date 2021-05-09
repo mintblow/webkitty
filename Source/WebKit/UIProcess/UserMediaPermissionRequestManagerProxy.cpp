@@ -49,7 +49,7 @@ namespace WebKit {
 using namespace WebCore;
 
 #if ENABLE(MEDIA_STREAM)
-static const MediaProducer::MediaStateFlags activeCaptureMask = MediaProducer::HasActiveAudioCaptureDevice | MediaProducer::HasActiveVideoCaptureDevice;
+static const MediaProducer::MediaStateFlags activeCaptureMask { MediaProducer::MediaState::HasActiveAudioCaptureDevice, MediaProducer::MediaState::HasActiveVideoCaptureDevice };
 
 static uint64_t generateRequestID()
 {
@@ -260,10 +260,13 @@ void UserMediaPermissionRequestManagerProxy::grantRequest(UserMediaPermissionReq
 }
 
 #if ENABLE(MEDIA_STREAM)
+
+#if PLATFORM(COCOA)
 static bool doesPageNeedTCCD(const WebPageProxy& page)
 {
     return (!page.preferences().captureAudioInGPUProcessEnabled() && !page.preferences().captureAudioInUIProcessEnabled()) || !page.preferences().captureVideoInGPUProcessEnabled();
 }
+#endif
 
 void UserMediaPermissionRequestManagerProxy::finishGrantingRequest(UserMediaPermissionRequestProxy& request)
 {
@@ -650,14 +653,15 @@ void UserMediaPermissionRequestManagerProxy::checkUserMediaPermissionForSpeechRe
 
     auto request = UserMediaPermissionRequestProxy::create(*this, 0, frameIdentifier, frameIdentifier, requestingOrigin.isolatedCopy(), topOrigin.isolatedCopy(), Vector<WebCore::CaptureDevice> { device }, { }, { }, WTFMove(completionHandler));
 
+    // FIXME: Use switch on action.
     auto action = getRequestAction(request.get());
     if (action == RequestAction::Deny) {
-        completionHandler(false);
+        request->decisionCompletionHandler()(false);
         return;
     }
     
     if (action == RequestAction::Grant) {
-        completionHandler(true);
+        request->decisionCompletionHandler()(true);
         return;
     }
 
@@ -738,8 +742,10 @@ void UserMediaPermissionRequestManagerProxy::computeFilteredDeviceList(bool reve
 
     platformGetMediaStreamDevices([this, weakThis = makeWeakPtr(this), revealIdsAndLabels, completion = WTFMove(completion)](auto&& devices) mutable {
 
-        if (!weakThis)
+        if (!weakThis) {
             completion({ });
+            return;
+        }
 
         unsigned cameraCount = 0;
         unsigned microphoneCount = 0;
@@ -872,7 +878,7 @@ void UserMediaPermissionRequestManagerProxy::captureStateChanged(MediaProducer::
     if (m_captureState == (newState & activeCaptureMask))
         return;
 
-    ALWAYS_LOG(LOGIDENTIFIER, "state was: ", m_captureState, ", is now: ", newState & activeCaptureMask);
+    ALWAYS_LOG(LOGIDENTIFIER, "state was: ", m_captureState.toRaw(), ", is now: ", (newState & activeCaptureMask).toRaw());
     m_captureState = newState & activeCaptureMask;
 
     Seconds interval;

@@ -183,12 +183,6 @@ void slowValidateCell(JSCell* cell)
     ASSERT_GC_OBJECT_LOOKS_VALID(cell);
 }
 
-JSValue JSCell::defaultValue(const JSObject*, JSGlobalObject*, PreferredPrimitiveType)
-{
-    RELEASE_ASSERT_NOT_REACHED();
-    return jsUndefined();
-}
-
 bool JSCell::getOwnPropertySlot(JSObject*, JSGlobalObject*, PropertyName, PropertySlot&)
 {
     RELEASE_ASSERT_NOT_REACHED();
@@ -201,11 +195,6 @@ bool JSCell::getOwnPropertySlotByIndex(JSObject*, JSGlobalObject*, unsigned, Pro
     return false;
 }
 
-void JSCell::doPutPropertySecurityCheck(JSObject*, JSGlobalObject*, PropertyName, PutPropertySlot&)
-{
-    RELEASE_ASSERT_NOT_REACHED();
-}
-
 void JSCell::getOwnPropertyNames(JSObject*, JSGlobalObject*, PropertyNameArray&, DontEnumPropertiesMode)
 {
     RELEASE_ASSERT_NOT_REACHED();
@@ -214,18 +203,6 @@ void JSCell::getOwnPropertyNames(JSObject*, JSGlobalObject*, PropertyNameArray&,
 void JSCell::getOwnSpecialPropertyNames(JSObject*, JSGlobalObject*, PropertyNameArray&, DontEnumPropertiesMode)
 {
     RELEASE_ASSERT_NOT_REACHED();
-}
-
-String JSCell::className(const JSObject*, VM&)
-{
-    RELEASE_ASSERT_NOT_REACHED();
-    return String();
-}
-
-String JSCell::toStringName(const JSObject*, JSGlobalObject*)
-{
-    RELEASE_ASSERT_NOT_REACHED();
-    return String();
 }
 
 const char* JSCell::className(VM& vm) const

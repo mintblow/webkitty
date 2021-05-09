@@ -16,6 +16,7 @@ imported/w3c/web-platform-tests/fetch/cross-origin-resource-policy [ Skip ]
 
 # Skip WebRTC for now in WK1
 imported/w3c/web-platform-tests/webrtc [ Skip ]
+imported/w3c/web-platform-tests/webrtc-encoded-transform [ Skip ]
 webrtc [ Skip ]
 
 # Not supported on WK1
@@ -532,7 +533,6 @@ compositing/columns/hittest-composited-in-paginated.html [ Failure ]
 compositing/columns/rotated-in-paginated.html [ Failure ]
 compositing/columns/untransformed-composited-in-paginated.html [ Failure ]
 compositing/contents-opaque/control-layer.html [ Failure ]
-compositing/contents-scale/rasterization-scale.html [ ImageOnlyFailure ]
 compositing/contents-scale/rounded-contents-scale.html [ Failure ]
 compositing/contents-scale/scaled-ancestor.html [ Failure ]
 compositing/contents-scale/simple-scale.html [ Failure ]
@@ -1053,8 +1053,8 @@ http/tests/globalhistory/history-delegate-basic-refresh-redirect.html
 http/tests/globalhistory/history-delegate-basic-title.html
 http/tests/globalhistory/history-delegate-basic-visited-links.html
 http/tests/history/back-during-onload-triggered-by-back.html
-http/tests/history/back-to-post.php
-http/tests/history/back-with-fragment-change.php
+http/tests/history/back-to-post.py
+http/tests/history/back-with-fragment-change.py
 http/tests/history/cross-origin-replace-history-object-child.html
 http/tests/local/blob/send-sliced-data-blob.html
 http/tests/local/formdata/send-form-data-with-empty-blob-filename.html
@@ -1392,9 +1392,6 @@ fast/shapes/shape-outside-floats/shape-outside-imagedata-overflow.html [ Pass ]
 imported/w3c/web-platform-tests/html/browsers/browsing-the-web/scroll-to-fragid/scroll-to-anchor-name.html [ Failure ]
 imported/w3c/web-platform-tests/html/browsers/browsing-the-web/scroll-to-fragid/scroll-to-id-top.html [ Failure ]
 imported/w3c/web-platform-tests/html/browsers/browsing-the-web/scroll-to-fragid/scroll-to-top.html [ Failure ]
-
-# w3c tests that pass
-imported/w3c/canvas/2d.line.cap.round.html [ Pass ]
 
 # import tests that pass
 imported/mozilla/svg/smil/transform/rotate-angle-4.svg [ Pass ]
@@ -1954,3 +1951,5 @@ http/tests/is-logged-in/ [ Skip ]
 
 # Stale-while-revalidate is not supported on WK1
 imported/w3c/web-platform-tests/fetch/stale-while-revalidate [ Skip ]
+
+webkit.org/b/223193 imported/w3c/web-platform-tests/html/canvas/element/path-objects/2d.path.stroke.scale2.html [ Failure ]

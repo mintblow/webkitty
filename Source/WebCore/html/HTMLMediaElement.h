@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2007-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,12 +40,13 @@
 #include "MediaElementSession.h"
 #include "MediaPlayer.h"
 #include "MediaProducer.h"
-#include "MediaSessionIdentifier.h"
+#include "MediaUniqueIdentifier.h"
 #include "TextTrack.h"
 #include "VideoTrack.h"
 #include "VisibilityChangeClient.h"
 #include <wtf/Function.h>
 #include <wtf/LoggerHelper.h>
+#include <wtf/Optional.h>
 #include <wtf/WeakPtr.h>
 
 #if USE(AUDIO_SESSION) && PLATFORM(MAC)
@@ -155,7 +156,7 @@ public:
 
     static HashSet<HTMLMediaElement*>& allMediaElements();
 
-    WEBCORE_EXPORT static RefPtr<HTMLMediaElement> bestMediaElementForShowingPlaybackControlsManager(MediaElementSession::PlaybackControlsPurpose);
+    WEBCORE_EXPORT static RefPtr<HTMLMediaElement> bestMediaElementForRemoteControls(MediaElementSession::PlaybackControlsPurpose, const Document* = nullptr);
 
     WEBCORE_EXPORT void rewind(double timeDelta);
     WEBCORE_EXPORT void returnToRealtime() override;
@@ -489,11 +490,12 @@ public:
     RefPtr<VideoPlaybackQuality> getVideoPlaybackQuality();
 
     MediaPlayer::Preload preloadValue() const { return m_preload; }
-    MediaElementSession& mediaSession() const { return *m_mediaSession; }
+    WEBCORE_EXPORT MediaElementSession& mediaSession() const;
 
     void pageScaleFactorChanged();
     void userInterfaceLayoutDirectionChanged();
     WEBCORE_EXPORT String getCurrentMediaControlsStatus();
+    WEBCORE_EXPORT void setMediaControlsMaximumRightContainerButtonCountOverride(size_t);
     MediaControlsHost* mediaControlsHost() { return m_mediaControlsHost.get(); }
 
     bool isDisablingSleep() const { return m_sleepDisabler.get(); }
@@ -565,16 +567,17 @@ public:
     void applicationWillResignActive();
     void applicationDidBecomeActive();
 
-    MediaSessionIdentifier mediaSessionUniqueIdentifier() const;
+    MediaUniqueIdentifier mediaUniqueIdentifier() const;
     String mediaSessionTitle() const;
     String sourceApplicationIdentifier() const;
 
     WEBCORE_EXPORT void setOverridePreferredDynamicRangeMode(DynamicRangeMode);
     void setPreferredDynamicRangeMode(DynamicRangeMode);
 
+    void didReceiveRemoteControlCommand(PlatformMediaSession::RemoteControlCommandType, const PlatformMediaSession::RemoteCommandArgument&) override;
+
 protected:
     HTMLMediaElement(const QualifiedName&, Document&, bool createdByParser);
-    virtual void finishInitialization();
     virtual ~HTMLMediaElement();
 
     void parseAttribute(const QualifiedName&, const AtomString&) override;
@@ -722,6 +725,8 @@ private:
     String mediaPlayerSourceApplicationIdentifier() const override { return sourceApplicationIdentifier(); }
     Vector<String> mediaPlayerPreferredAudioCharacteristics() const override;
 
+    String mediaPlayerElementId() const override { return m_id; }
+
 #if PLATFORM(IOS_FAMILY)
     String mediaPlayerNetworkInterfaceName() const override;
     void mediaPlayerGetRawCookies(const URL&, MediaPlayerClient::GetRawCookiesCallback&&) const final;
@@ -735,6 +740,7 @@ private:
     bool mediaPlayerShouldDisableSleep() const final { return shouldDisableSleep() == SleepType::Display; }
     bool mediaPlayerShouldCheckHardwareSupport() const final;
     const Vector<ContentType>& mediaContentTypesRequiringHardwareSupport() const final;
+    void mediaPlayerBufferedTimeRangesChanged() final;
 
 #if USE(GSTREAMER)
     void requestInstallMissingPlugins(const String& details, const String& description, MediaPlayerRequestInstallMissingPluginsCallback&) final;
@@ -845,6 +851,7 @@ private:
     void updateMediaController();
     bool isBlocked() const;
     bool isBlockedOnMediaController() const;
+    void setCurrentSrc(const URL&);
     bool hasCurrentSrc() const override { return !m_currentSrc.isEmpty(); }
     bool isLiveStream() const override { return movieLoadType() == MovieLoadType::LiveStream; }
 
@@ -864,12 +871,12 @@ private:
     void resumeAutoplaying() override;
     void mayResumePlayback(bool shouldResume) override;
     bool canReceiveRemoteControlCommands() const override { return true; }
-    void didReceiveRemoteControlCommand(PlatformMediaSession::RemoteControlCommandType, const PlatformMediaSession::RemoteCommandArgument&) override;
     bool shouldOverrideBackgroundPlaybackRestriction(PlatformMediaSession::InterruptionType) const override;
     bool shouldOverrideBackgroundLoadingRestriction() const override;
     bool canProduceAudio() const final;
     bool hasMediaStreamSource() const final;
     void processIsSuspendedChanged() final;
+    bool shouldOverridePauseDuringRouteChange() const final;
 
     void pageMutedStateDidChange() override;
 
@@ -884,6 +891,8 @@ private:
 
     void registerWithDocument(Document&);
     void unregisterWithDocument(Document&);
+
+    void initializeMediaSession();
 
     void updateCaptionContainer();
     void ensureMediaControlsShadowRoot();
@@ -943,6 +952,7 @@ private:
     DeferrableTask<Timer> m_resumeTaskQueue;
     DeferrableTask<Timer> m_seekTaskQueue;
     DeferrableTask<Timer> m_playbackControlsManagerBehaviorRestrictionsQueue;
+    DeferrableTask<Timer> m_bufferedTimeRangesChangedQueue;
     GenericTaskQueue<Timer> m_promiseTaskQueue;
     GenericTaskQueue<Timer> m_pauseAfterDetachedTaskQueue;
     GenericTaskQueue<Timer> m_resourceSelectionTaskQueue;
@@ -965,6 +975,7 @@ private:
     ReadyState m_readyState { HAVE_NOTHING };
     ReadyState m_readyStateMaximum { HAVE_NOTHING };
     URL m_currentSrc;
+    MediaUniqueIdentifier m_currentIdentifier;
 
     RefPtr<MediaError> m_error;
 
@@ -1097,6 +1108,8 @@ private:
     bool m_tracksAreReady : 1;
     bool m_haveVisibleTextTrack : 1;
     bool m_processingPreferenceChange : 1;
+    bool m_shouldAudioPlaybackRequireUserGesture : 1;
+    bool m_shouldVideoPlaybackRequireUserGesture : 1;
 
     AutoplayEventPlaybackState m_autoplayEventPlaybackState { AutoplayEventPlaybackState::None };
 
@@ -1174,7 +1187,7 @@ private:
 #endif
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
-    MediaProducer::MediaStateFlags m_mediaState { MediaProducer::IsNotPlaying };
+    MediaProducer::MediaStateFlags m_mediaState;
     MonotonicTime m_currentPlaybackTargetIsWirelessEventFiredTime;
     bool m_hasPlaybackTargetAvailabilityListeners { false };
     bool m_failedToPlayToWirelessTarget { false };
@@ -1188,6 +1201,7 @@ private:
 #if ENABLE(MEDIA_STREAM)
     String m_audioOutputHashedDeviceId;
 #endif
+    String m_id;
 };
 
 String convertEnumerationToString(HTMLMediaElement::AutoplayEventPlaybackState);

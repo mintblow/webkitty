@@ -94,10 +94,10 @@ CVPixelBufferPoolRef RealtimeIncomingVideoSourceCocoa::pixelBufferPool(size_t wi
         OSType poolBufferType;
         switch (bufferType) {
         case webrtc::BufferType::I420:
-            poolBufferType = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
+            poolBufferType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
             break;
         case webrtc::BufferType::I010:
-            poolBufferType = kCVPixelFormatType_420YpCbCr10BiPlanarFullRange;
+            poolBufferType = kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange;
         }
         m_pixelBufferPool = createPixelBufferPool(width, height, poolBufferType);
         m_pixelBufferPoolWidth = width;
@@ -141,8 +141,29 @@ void RealtimeIncomingVideoSourceCocoa::OnFrame(const webrtc::VideoFrame& frame)
     if (!isProducingData())
         return;
 
+    unsigned width = frame.width();
+    unsigned height = frame.height();
+
+    MediaSample::VideoRotation rotation;
+    switch (frame.rotation()) {
+    case webrtc::kVideoRotation_0:
+        rotation = MediaSample::VideoRotation::None;
+        break;
+    case webrtc::kVideoRotation_180:
+        rotation = MediaSample::VideoRotation::UpsideDown;
+        break;
+    case webrtc::kVideoRotation_90:
+        rotation = MediaSample::VideoRotation::Right;
+        std::swap(width, height);
+        break;
+    case webrtc::kVideoRotation_270:
+        rotation = MediaSample::VideoRotation::Left;
+        std::swap(width, height);
+        break;
+    }
+
 #if !RELEASE_LOG_DISABLED
-    ALWAYS_LOG_IF(loggerPtr() && !(++m_numberOfFrames % 60), LOGIDENTIFIER, "frame ", m_numberOfFrames);
+    ALWAYS_LOG_IF(loggerPtr() && !(++m_numberOfFrames % 60), LOGIDENTIFIER, "frame ", m_numberOfFrames, ", rotation ", frame.rotation(), " size ", width, "x", height);
 #endif
 
     auto pixelBuffer = pixelBufferFromVideoFrame(frame);
@@ -172,27 +193,6 @@ void RealtimeIncomingVideoSourceCocoa::OnFrame(const webrtc::VideoFrame& frame)
     }
 
     auto sample = adoptCF(sampleBuffer);
-
-    unsigned width = frame.width();
-    unsigned height = frame.height();
-
-    MediaSample::VideoRotation rotation;
-    switch (frame.rotation()) {
-    case webrtc::kVideoRotation_0:
-        rotation = MediaSample::VideoRotation::None;
-        break;
-    case webrtc::kVideoRotation_180:
-        rotation = MediaSample::VideoRotation::UpsideDown;
-        break;
-    case webrtc::kVideoRotation_90:
-        rotation = MediaSample::VideoRotation::Right;
-        std::swap(width, height);
-        break;
-    case webrtc::kVideoRotation_270:
-        rotation = MediaSample::VideoRotation::Left;
-        std::swap(width, height);
-        break;
-    }
 
     setIntrinsicSize(IntSize(width, height));
     videoSampleAvailable(MediaSampleAVFObjC::create(sample.get(), rotation));

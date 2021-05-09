@@ -126,6 +126,8 @@ def parse_args(args):
             help="Enable (disable) an internal feature (--internal-feature FeatureName[=true|false])"),
         optparse.make_option("--experimental-feature", type="string", action="append", default=[],
             help="Enable (disable) an experimental feature (--experimental-feature FeatureName[=true|false])"),
+        optparse.make_option("--no-enable-all-experimental-features", action="store_false", default=True, dest="enable_all_experimental_features",
+            help="Enables all experimental features in WebKitTestRunner"),
     ]))
 
     option_group_definitions.append(("WebKit Options", [
@@ -373,10 +375,10 @@ def parse_args(args):
         options.internal_feature.append('CaptureVideoInGPUProcessEnabled')
         options.internal_feature.append('UseGPUProcessForCanvasRenderingEnabled')
         options.internal_feature.append('UseGPUProcessForDOMRenderingEnabled')
-        options.internal_feature.append('UseGPUProcessForWebGLEnabled')
         if not options.experimental_feature:
             options.experimental_feature = []
         options.experimental_feature.append('WebRTCPlatformCodecsInGPUProcessEnabled')
+        options.experimental_feature.append('UseGPUProcessForWebGLEnabled')
         if options.result_report_flavor:
             raise RuntimeError('--use-gpu-process implicitly sets the result flavor, this should not be overridden')
         options.result_report_flavor = 'gpuprocess'

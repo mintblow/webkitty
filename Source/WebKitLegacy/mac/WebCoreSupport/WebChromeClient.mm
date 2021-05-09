@@ -946,11 +946,11 @@ void WebChromeClient::triggerRenderingUpdate()
 
 bool WebChromeClient::supportsVideoFullscreen(HTMLMediaElementEnums::VideoFullscreenMode)
 {
-#if PLATFORM(IOS_FAMILY)
-    if (!DeprecatedGlobalSettings::avKitEnabled())
-        return false;
-#endif
+#if !PLATFORM(IOS_FAMILY) || HAVE(AVKIT)
     return true;
+#else
+    return false;
+#endif
 }
 
 #if ENABLE(VIDEO_PRESENTATION_MODE)
@@ -1129,7 +1129,7 @@ void WebChromeClient::setMockMediaPlaybackTargetPickerEnabled(bool enabled)
     [m_webView _setMockMediaPlaybackTargetPickerEnabled:enabled];
 }
 
-void WebChromeClient::setMockMediaPlaybackTargetPickerState(const String& name, MediaPlaybackTargetContext::State state)
+void WebChromeClient::setMockMediaPlaybackTargetPickerState(const String& name, MediaPlaybackTargetContext::MockState state)
 {
     [m_webView _setMockMediaPlaybackTargetPickerName:name state:state];
 }

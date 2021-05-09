@@ -258,6 +258,8 @@ public:
 
     virtual String mediaPlayerSourceApplicationIdentifier() const { return emptyString(); }
 
+    virtual String mediaPlayerElementId() const { return emptyString(); }
+
     virtual void mediaPlayerEngineFailedToLoad() const { }
 
     virtual double mediaPlayerRequestedPlaybackRate() const { return 0; }
@@ -393,6 +395,9 @@ public:
     void seek(const MediaTime&);
     void seekWhenPossible(const MediaTime&);
     void seekWithTolerance(const MediaTime&, const MediaTime& negativeTolerance, const MediaTime& positiveTolerance);
+
+    using CurrentTimeDidChangeCallback = std::function<void(const MediaTime&)>;
+    bool setCurrentTimeDidChangeCallback(CurrentTimeDidChangeCallback&&);
 
     MediaTime startTime() const;
     MediaTime initialTime() const;
@@ -548,6 +553,8 @@ public:
 
     String engineDescription() const;
     long platformErrorCode() const;
+
+    String elementId() const;
 
     CachedResourceLoader* cachedResourceLoader();
     RefPtr<PlatformMediaResourceLoader> createResourceLoader();

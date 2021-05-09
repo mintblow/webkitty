@@ -45,6 +45,7 @@ void InteractionInformationAtPosition::encode(IPC::Encoder& encoder) const
     encoder << canBeValid;
     encoder << nodeAtPositionHasDoubleClickHandler;
     encoder << isSelectable;
+    encoder << isSelected;
     encoder << prefersDraggingOverTextSelection;
     encoder << isNearMarkedText;
     encoder << touchCalloutEnabled;
@@ -85,7 +86,9 @@ void InteractionInformationAtPosition::encode(IPC::Encoder& encoder) const
     encoder << preventTextInteraction;
 #endif
     encoder << shouldNotUseIBeamInEditableContent;
+    encoder << isImageOverlayText;
     encoder << elementContext;
+    encoder << imageElementContext;
 }
 
 bool InteractionInformationAtPosition::decode(IPC::Decoder& decoder, InteractionInformationAtPosition& result)
@@ -100,6 +103,9 @@ bool InteractionInformationAtPosition::decode(IPC::Decoder& decoder, Interaction
         return false;
 
     if (!decoder.decode(result.isSelectable))
+        return false;
+
+    if (!decoder.decode(result.isSelected))
         return false;
 
     if (!decoder.decode(result.prefersDraggingOverTextSelection))
@@ -204,7 +210,13 @@ bool InteractionInformationAtPosition::decode(IPC::Decoder& decoder, Interaction
     if (!decoder.decode(result.shouldNotUseIBeamInEditableContent))
         return false;
 
+    if (!decoder.decode(result.isImageOverlayText))
+        return false;
+
     if (!decoder.decode(result.elementContext))
+        return false;
+
+    if (!decoder.decode(result.imageElementContext))
         return false;
 
     return true;

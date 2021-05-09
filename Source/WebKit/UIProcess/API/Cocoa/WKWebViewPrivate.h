@@ -48,12 +48,6 @@ typedef NS_OPTIONS(NSUInteger, _WKMediaCaptureStateDeprecated) {
     _WKMediaCaptureStateDeprecatedMutedCamera = 1 << 3,
 } WK_API_AVAILABLE(macos(10.13), ios(11.0));
 
-typedef NS_OPTIONS(NSUInteger, _WKMediaCaptureState) {
-    _WKMediaCaptureStateNone = 0,
-    _WKMediaCaptureStateActive = 1 << 0,
-    _WKMediaCaptureStateMuted = 1 << 1,
-} WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-
 typedef NS_OPTIONS(NSUInteger, _WKMediaMutedState) {
     _WKMediaNoneMuted = 0,
     _WKMediaAudioMuted = 1 << 0,
@@ -66,12 +60,6 @@ typedef NS_OPTIONS(NSUInteger, _WKCaptureDevices) {
     _WKCaptureDeviceCamera = 1 << 1,
     _WKCaptureDeviceDisplay = 1 << 2,
 } WK_API_AVAILABLE(macos(10.13), ios(11.0));
-
-typedef NS_OPTIONS(NSUInteger, _WKPermissionDecision) {
-    _WKPermissionDecisionPrompt = 1 << 0,
-    _WKPermissionDecisionGrant = 1 << 1,
-    _WKPermissionDecisionDeny = 1 << 2,
-} WK_API_AVAILABLE(macos(12.00), ios(15.0));
 
 typedef NS_OPTIONS(NSUInteger, _WKSelectionAttributes) {
     _WKSelectionAttributeNoSelection = 0,
@@ -193,16 +181,6 @@ for this property.
 */
 @property (nonatomic, readonly) BOOL _negotiatedLegacyTLS WK_API_AVAILABLE(macos(10.15.4), ios(13.4));
 
-/*! @abstract The state of media capture on a web page.
- @discussion @link WKWebView @/link is key-value observing (KVO) compliant
- for this property.
- */
-@property (nonatomic, readonly) _WKMediaCaptureState _cameraCaptureState WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-@property (nonatomic, readonly) _WKMediaCaptureState _microphoneCaptureState WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-
-- (void)setMicrophoneCaptureState:(_WKMediaCaptureState)state completionHandler:(void (^)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-- (void)setCameraCaptureState:(_WKMediaCaptureState)state completionHandler:(void (^)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-
 - (void)_frames:(void (^)(_WKFrameTreeNode *))completionHandler WK_API_AVAILABLE(macos(11.0), ios(14.0));
 
 // FIXME: Remove these once nobody is using them.
@@ -267,6 +245,8 @@ for this property.
 - (_WKAttachment *)_attachmentForIdentifier:(NSString *)identifier WK_API_AVAILABLE(macos(10.14.4), ios(12.2));
 
 - (void)_simulateDeviceOrientationChangeWithAlpha:(double)alpha beta:(double)beta gamma:(double)gamma WK_API_AVAILABLE(macos(10.14.4), ios(12.2));
+
++ (BOOL)_willUpgradeToHTTPS:(NSURL *)url WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
 + (BOOL)_handlesSafeBrowsing WK_API_AVAILABLE(macos(10.14.4), ios(12.2));
 + (NSURL *)_confirmMalwareSentinel WK_API_AVAILABLE(macos(10.14.4), ios(12.2));
@@ -388,25 +368,16 @@ for this property.
 - (void)_didEnableBrowserExtensions:(NSDictionary<NSString *, NSString *> *)extensionIDToNameMap WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 - (void)_didDisableBrowserExtensions:(NSSet<NSString *> *)extensionIDs WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
-@property (nonatomic, setter=_setHasBlankOverlay:) BOOL _hasBlankOverlay WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-
 @property (nonatomic, weak, setter=_setAppHighlightDelegate:) id <_WKAppHighlightDelegate> _appHighlightDelegate WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-- (void)_restoreAppHighlights:(NSArray<NSData *> *)data WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+- (void)_restoreAppHighlights:(NSArray<NSData *> *)highlights WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+- (void)_restoreAndScrollToAppHighlight:(NSData *)highlight WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 - (void)_addAppHighlight WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
-/*! @abstract The theme color of the active page.
- @discussion This is the value of the most recently created or modified
- @textblock
-    <meta name="theme-color" contents="...">
- @/textblock
- in the current page.
- @link WKWebView @/link is key-value observing (KVO) compliant for this
- property.
- */
+// FIXME: Remove old `-[WKWebView _themeColor]` SPI <rdar://76662644>
 #if TARGET_OS_IPHONE
-@property (nonatomic, readonly) UIColor *_themeColor WK_API_AVAILABLE(ios(WK_IOS_TBA));
+@property (nonatomic, readonly) UIColor *_themeColor WK_API_DEPRECATED_WITH_REPLACEMENT("themeColor", ios(WK_IOS_TBA, WK_IOS_TBA));
 #else
-@property (nonatomic, readonly) NSColor *_themeColor WK_API_AVAILABLE(macos(WK_MAC_TBA));
+@property (nonatomic, readonly) NSColor *_themeColor WK_API_DEPRECATED_WITH_REPLACEMENT("themeColor", macos(WK_MAC_TBA, WK_MAC_TBA));
 #endif
 
 #if TARGET_OS_IPHONE
@@ -415,38 +386,12 @@ for this property.
 @property (nonatomic, readonly) NSColor *_pageExtendedBackgroundColor;
 #endif
 
-/*! @abstract Sets the webpage contents from the passed data as if it was the
- response to the supplied request. The request is never actually sent to the
- supplied URL, though loads of resources defined in the NSData object would
- be performed.
- @param request The request specifying the base URL and other loading details
- to be used while interpreting the supplied data object.
- @param response A response that is used to interpret the supplied data object.
- @param data The data to use as the contents of the webpage.
- @result A new navigation.
-*/
-- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponse:(NSURLResponse *)response responseData:(NSData *)data WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-
-/*! @abstract Navigates to the requested file URL on the filesystem.
- @param request The request specifying the file URL to which to navigate.
- @param readAccessURL The URL to allow read access to.
- @discussion If readAccessURL references a single file, only that file may be
- loaded by WebKit.
- If readAccessURL references a directory, files inside that file may be loaded by WebKit.
- @result A new navigation for the given file URL.
-*/
-- (WKNavigation *)loadFileRequest:(NSURLRequest *)request allowingReadAccessToURL:(NSURL *)readAccessURL WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-
-/*! @abstract Sets the webpage contents from the passed HTML string as if it was
- the response to the supplied request. The request is never actually sent to the
- supplied URL, though loads of resources defined in the HTML string would be
- performed.
- @param request The request specifying the base URL and other loading details
- to be used while interpreting the supplied data object.
- @param string The data to use as the contents of the webpage.
- @result A new navigation.
-*/
-- (WKNavigation *)loadSimulatedRequest:(NSURLRequest *)request withResponseHTMLString:(NSString *)string WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+// Only set if `-[WKWebViewConfiguration _sampledPageTopColorMaxDifference]` is a positive number.
+#if TARGET_OS_IPHONE
+@property (nonatomic, readonly) UIColor *_sampledPageTopColor WK_API_AVAILABLE(ios(WK_IOS_TBA));
+#else
+@property (nonatomic, readonly) NSColor *_sampledPageTopColor WK_API_AVAILABLE(macos(WK_MAC_TBA));
+#endif
 
 - (void)_grantAccessToAssetServices WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(14.0));
 - (void)_revokeAccessToAssetServices WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(14.0));
@@ -460,6 +405,8 @@ for this property.
  font registry to using fontd, including granting the relevant sandbox extension.
 */
 - (void)_switchFromStaticFontRegistryToUserFontRegistry WK_API_AVAILABLE(macos(WK_MAC_TBA));
+
+- (void)_appBoundNavigationDataForDomain:(NSString *)domain completionHandler:(void (^)(NSString * context))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
 
 @end
 

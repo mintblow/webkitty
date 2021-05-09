@@ -128,6 +128,8 @@ public:
     void repaintSweepHorizontally() { m_testRepaintSweepHorizontally = true; }
     void display();
     void displayAndTrackRepaints();
+    void displayOnLoadFinish() { m_displayOnLoadFinish = true; }
+    bool shouldDisplayOnLoadFinish() { return m_displayOnLoadFinish; }
 
     // UserContent testing.
     void addUserScript(JSStringRef source, bool runAtStart, bool allFrames);
@@ -141,7 +143,6 @@ public:
     // Local storage
     void clearAllDatabases();
     void setDatabaseQuota(uint64_t);
-    void setQuotaLoggingEnabled(bool);
     JSRetainPtr<JSStringRef> pathToLocalResource(JSStringRef);
     void syncLocalStorage();
 
@@ -344,6 +345,9 @@ public:
     void installCustomMenuAction(JSStringRef name, bool dismissesAutomatically, JSValueRef callback);
     void performCustomMenuAction();
 
+    void installDidNotHandleTapAsMeaningfulClickCallback(JSValueRef);
+    void callDidNotHandleTapAsMeaningfulClickCallback();
+
     void installDidBeginSwipeCallback(JSValueRef);
     void installWillEndSwipeCallback(JSValueRef);
     void installDidEndSwipeCallback(JSValueRef);
@@ -493,6 +497,8 @@ public:
     void clearAppBoundSession();
     void setAppBoundDomains(JSValueRef originArray, JSValueRef callback);
     void didSetAppBoundDomainsCallback();
+    void appBoundRequestContextDataForDomain(JSStringRef, JSValueRef);
+    void callDidReceiveAppBoundRequestContextDataForDomainCallback(String&&);
 
     size_t userScriptInjectedCount() const;
     void injectUserScript(JSStringRef);
@@ -515,7 +521,7 @@ public:
     void setPrivateClickMeasurementOverrideTimerForTesting(bool value);
     void setPrivateClickMeasurementTokenPublicKeyURLForTesting(JSStringRef);
     void setPrivateClickMeasurementTokenSignatureURLForTesting(JSStringRef);
-    void setPrivateClickMeasurementAttributionReportURLForTesting(JSStringRef);
+    void setPrivateClickMeasurementAttributionReportURLsForTesting(JSStringRef sourceURL, JSStringRef destinationURL);
     void markPrivateClickMeasurementsAsExpiredForTesting();
     void markAttributedPrivateClickMeasurementsAsExpiredForTesting();
     void setPrivateClickMeasurementFraudPreventionValuesForTesting(JSStringRef unlinkableToken, JSStringRef secretToken, JSStringRef signature, JSStringRef keyID);
@@ -571,6 +577,7 @@ private:
     bool m_disallowIncreaseForApplicationCacheQuota { false };
     bool m_testRepaint { false };
     bool m_testRepaintSweepHorizontally { false };
+    bool m_displayOnLoadFinish { false };
     bool m_isPrinting { false };
     bool m_willSendRequestReturnsNull { false };
     bool m_willSendRequestReturnsNullOnRedirect { false };

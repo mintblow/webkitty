@@ -26,6 +26,7 @@
 
 #include "FileChooser.h"
 #include "HTMLTextFormControlElement.h"
+#include "SelectionRestorationMode.h"
 #include <memory>
 #include <wtf/WeakPtr.h>
 
@@ -331,6 +332,7 @@ public:
     void capsLockStateMayHaveChanged();
 
     bool shouldTruncateText(const RenderStyle&) const;
+    void invalidateStyleOnFocusChangeIfNeeded();
 
     ExceptionOr<int> selectionStartForBindings() const;
     ExceptionOr<void> setSelectionStartForBindings(int);

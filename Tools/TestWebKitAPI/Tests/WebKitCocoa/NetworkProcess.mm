@@ -29,12 +29,14 @@
 #import "TestWKWebView.h"
 #import "Utilities.h"
 #import <WebKit/WKProcessPoolPrivate.h>
+#import <WebKit/WKWebViewPrivate.h>
 #import <WebKit/WKWebsiteDataStorePrivate.h>
+#import <WebKit/_WKWebsiteDataStoreConfiguration.h>
 #import <wtf/BlockPtr.h>
 #import <wtf/RetainPtr.h>
 #import <wtf/Vector.h>
 
-TEST(WebKit, NetworkProcessEntitlements)
+TEST(NetworkProcess, Entitlements)
 {
     auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:adoptNS([[WKWebViewConfiguration alloc] init]).get()]);
     [webView synchronouslyLoadTestPageNamed:@"simple"];
@@ -80,11 +82,66 @@ TEST(WebKit, HTTPReferer)
     checkReferer([NSURL URLWithString:shorterHost], shorterHost.UTF8String);
 }
 
-TEST(WebKit, NetworkProcessLaunchOnlyWhenNecessary)
+TEST(NetworkProcess, LaunchOnlyWhenNecessary)
 {
     auto webView = adoptNS([WKWebView new]);
     [webView configuration].websiteDataStore._resourceLoadStatisticsEnabled = YES;
     [[webView configuration].processPool _registerURLSchemeAsSecure:@"test"];
     [[webView configuration].processPool _registerURLSchemeAsBypassingContentSecurityPolicy:@"test"];
     EXPECT_FALSE([[webView configuration].websiteDataStore _networkProcessExists]);
+}
+
+TEST(NetworkProcess, CrashWhenNotAssociatedWithDataStore)
+{
+    pid_t networkProcessPID = 0;
+    @autoreleasepool {
+        auto viewConfiguration = adoptNS([[WKWebViewConfiguration alloc] init]);
+        auto dataStoreConfiguration = adoptNS([[_WKWebsiteDataStoreConfiguration alloc] initNonPersistentConfiguration]);
+        auto dataStore = adoptNS([[WKWebsiteDataStore alloc] _initWithConfiguration:dataStoreConfiguration.get()]);
+        [viewConfiguration setWebsiteDataStore:dataStore.get()];
+        auto webView = adoptNS([[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:viewConfiguration.get()]);
+        [webView loadHTMLString:@"foo" baseURL:[NSURL URLWithString:@"about:blank"]];
+        while (![dataStore _networkProcessIdentifier])
+            TestWebKitAPI::Util::spinRunLoop(10);
+        networkProcessPID = [dataStore _networkProcessIdentifier];
+        EXPECT_TRUE(!!networkProcessPID);
+    }
+    TestWebKitAPI::Util::spinRunLoop(10);
+
+    // Kill the network process once it is no longer associated with any WebsiteDataStore.
+    kill(networkProcessPID, 9);
+    TestWebKitAPI::Util::spinRunLoop(10);
+
+    auto viewConfiguration = adoptNS([[WKWebViewConfiguration alloc] init]);
+    auto dataStoreConfiguration = adoptNS([[_WKWebsiteDataStoreConfiguration alloc] initNonPersistentConfiguration]);
+    auto dataStore = adoptNS([[WKWebsiteDataStore alloc] _initWithConfiguration:dataStoreConfiguration.get()]);
+    [viewConfiguration setWebsiteDataStore:dataStore.get()];
+    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:viewConfiguration.get()]);
+    [webView synchronouslyLoadTestPageNamed:@"simple"];
+    EXPECT_NE(networkProcessPID, [webView configuration].websiteDataStore._networkProcessIdentifier);
+}
+
+TEST(NetworkProcess, TerminateWhenUnused)
+{
+    RetainPtr<WKProcessPool> retainedPool;
+    @autoreleasepool {
+        auto configuration = adoptNS([[WKWebViewConfiguration alloc] init]);
+        configuration.get().websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+        retainedPool = configuration.get().processPool;
+        auto webView = adoptNS([[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, 0, 0) configuration:configuration.get()]);
+        [webView synchronouslyLoadTestPageNamed:@"simple"];
+        EXPECT_TRUE([WKWebsiteDataStore _defaultNetworkProcessExists]);
+    }
+    while ([WKWebsiteDataStore _defaultNetworkProcessExists])
+        TestWebKitAPI::Util::spinRunLoop();
+    
+    retainedPool = nil;
+    
+    @autoreleasepool {
+        auto webView = adoptNS([WKWebView new]);
+        [webView synchronouslyLoadTestPageNamed:@"simple"];
+        EXPECT_TRUE([WKWebsiteDataStore _defaultNetworkProcessExists]);
+    }
+    while ([WKWebsiteDataStore _defaultNetworkProcessExists])
+        TestWebKitAPI::Util::spinRunLoop();
 }

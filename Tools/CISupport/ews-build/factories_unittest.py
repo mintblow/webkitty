@@ -30,6 +30,8 @@ import steps
 
 
 class TestCase(unittest.TestCase):
+    maxDiff = None
+
     def assertBuildSteps(self, actual_steps, expected_steps):
         assert all([isinstance(step, _BuildStepFactory) for step in actual_steps])
         assert all([isinstance(step, _BuildStepFactory) for step in expected_steps])
@@ -411,7 +413,8 @@ class TestCommitQueueFactory(TestCase):
             _BuildStepFactory(steps.ValidatePatch, verifycqplus=True),
             _BuildStepFactory(steps.ValidateCommiterAndReviewer),
             _BuildStepFactory(steps.PrintConfiguration),
-            _BuildStepFactory(steps.CheckOutSource),
+            _BuildStepFactory(steps.CleanGitRepo),
+            _BuildStepFactory(steps.CheckOutSource, repourl='https://git.webkit.org/git/WebKit-https'),
             _BuildStepFactory(steps.FetchBranches),
             _BuildStepFactory(steps.ShowIdentifier),
             _BuildStepFactory(steps.UpdateWorkingDirectory),
@@ -425,7 +428,7 @@ class TestCommitQueueFactory(TestCase):
             _BuildStepFactory(steps.CheckPatchStatusOnEWSQueues),
             _BuildStepFactory(steps.RunWebKitTests),
             _BuildStepFactory(steps.ValidatePatch, addURLs=False, verifycqplus=True),
-            _BuildStepFactory(steps.CheckOutSource),
+            _BuildStepFactory(steps.CheckOutSource, repourl='https://git.webkit.org/git/WebKit-https'),
             _BuildStepFactory(steps.ShowIdentifier),
             _BuildStepFactory(steps.UpdateWorkingDirectory),
             _BuildStepFactory(steps.ApplyPatch),
@@ -576,6 +579,31 @@ class TestJSCBuildFactory(TestCase):
             _BuildStepFactory(steps.ApplyPatch),
             _BuildStepFactory(steps.KillOldProcesses),
             _BuildStepFactory(steps.CompileJSC),
+        ])
+
+
+class TestStressTestFactory(TestCase):
+    def test_stress_test_factory(self):
+        factory = factories.StressTestFactory(platform='mac-catalina', configuration='release', architectures=["x86_64"])
+        self.assertBuildSteps(factory.steps, [
+            _BuildStepFactory(steps.ConfigureBuild, platform='mac-catalina', configuration='release', architectures=["x86_64"],
+                              buildOnly=False, triggers=None, triggered_by=None, remotes=None, additionalArguments=None),
+            _BuildStepFactory(steps.FindModifiedLayoutTests),
+            _BuildStepFactory(steps.ValidatePatch),
+            _BuildStepFactory(steps.PrintConfiguration),
+            _BuildStepFactory(steps.CheckOutSource),
+            _BuildStepFactory(steps.CheckOutSpecificRevision),
+            _BuildStepFactory(steps.FetchBranches),
+            _BuildStepFactory(steps.ShowIdentifier),
+            _BuildStepFactory(steps.ApplyPatch),
+            _BuildStepFactory(steps.DownloadBuiltProduct),
+            _BuildStepFactory(steps.ExtractBuiltProduct),
+            _BuildStepFactory(steps.WaitForCrashCollection),
+            _BuildStepFactory(steps.KillOldProcesses),
+            _BuildStepFactory(steps.RunWebKitTestsInStressMode),
+            _BuildStepFactory(steps.RunWebKitTestsInStressGuardmallocMode),
+            _BuildStepFactory(steps.TriggerCrashLogSubmission),
+            _BuildStepFactory(steps.SetBuildSummary),
         ])
 
 

@@ -56,6 +56,7 @@
 #include "StyleAdjuster.h"
 #include "StylePendingResources.h"
 #include "StyleResolver.h"
+#include "StyleScope.h"
 #include "TimingFunction.h"
 #include "TranslateTransformOperation.h"
 #include "WillChangeData.h"
@@ -1418,7 +1419,7 @@ void KeyframeEffect::setAnimatedPropertiesInStyle(RenderStyle& targetStyle, doub
     // progress which already accounts for the transition's timing function.
     if (m_blendingKeyframesSource == BlendingKeyframesSource::CSSTransition) {
         ASSERT(properties.size() == 1);
-        CSSPropertyAnimation::blendProperties(this, *properties.begin(), &targetStyle, m_blendingKeyframes[0].style(), m_blendingKeyframes[1].style(), iterationProgress);
+        CSSPropertyAnimation::blendProperties(this, *properties.begin(), targetStyle, *m_blendingKeyframes[0].style(), *m_blendingKeyframes[1].style(), iterationProgress);
         return;
     }
 
@@ -1532,7 +1533,7 @@ void KeyframeEffect::setAnimatedPropertiesInStyle(RenderStyle& targetStyle, doub
         if (intervalEndpoints.size() == 1) {
             auto keyframeIndex = intervalEndpoints[0];
             auto keyframeStyle = !keyframeIndex ? &targetStyle : m_blendingKeyframes[keyframeIndex.value()].style();
-            CSSPropertyAnimation::blendProperties(this, cssPropertyId, &targetStyle, keyframeStyle, keyframeStyle, 0);
+            CSSPropertyAnimation::blendProperties(this, cssPropertyId, targetStyle, *keyframeStyle, *keyframeStyle, 0);
             continue;
         }
 
@@ -1563,7 +1564,7 @@ void KeyframeEffect::setAnimatedPropertiesInStyle(RenderStyle& targetStyle, doub
         //     distance as the interpolation parameter p.
         auto startStyle = !startKeyframeIndex ? &targetStyle : m_blendingKeyframes[startKeyframeIndex.value()].style();
         auto endStyle = !endKeyframeIndex ? &targetStyle : m_blendingKeyframes[endKeyframeIndex.value()].style();
-        CSSPropertyAnimation::blendProperties(this, cssPropertyId, &targetStyle, startStyle, endStyle, transformedDistance);
+        CSSPropertyAnimation::blendProperties(this, cssPropertyId, targetStyle, *startStyle, *endStyle, transformedDistance);
     }
 }
 
@@ -1824,13 +1825,6 @@ Ref<const Animation> KeyframeEffect::backingAnimationForCompositedRenderer() con
     animation->setIterationCount(iterations());
     animation->setTimingFunction(timingFunction()->clone());
     animation->setPlaybackRate(effectAnimation->playbackRate());
-
-    if (m_blendingKeyframesSource == BlendingKeyframesSource::CSSTransition && is<CubicBezierTimingFunction>(timingFunction())) {
-        // FIXME: https://bugs.webkit.org/show_bug.cgi?id=215918
-        // If we are dealing with a CSS Transition and using a cubic bezier timing function, we set up
-        // the Animation object so that GraphicsLayerCA can work around a Core Animation limitation.
-        animation->setProperty({ Animation::TransitionMode::SingleProperty, *m_blendingKeyframes.properties().begin() });
-    }
 
     switch (fill()) {
     case FillMode::None:

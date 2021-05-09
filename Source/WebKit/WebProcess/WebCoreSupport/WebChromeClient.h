@@ -164,6 +164,8 @@ private:
     void didPreventDefaultForEvent() final;
 #endif
 
+    void didHandleOrPreventMouseDownOrMouseUpEvent() final;
+
 #if PLATFORM(IOS_FAMILY)
     void didReceiveMobileDocType(bool) final;
     void setNeedsScrollNotifications(WebCore::Frame&, bool) final;
@@ -239,7 +241,7 @@ private:
 
     void animationDidFinishForElement(const WebCore::Element&) final;
 
-    RefPtr<WebCore::DisplayRefreshMonitor> createDisplayRefreshMonitor(WebCore::PlatformDisplayID) const final;
+    WebCore::DisplayRefreshMonitorFactory* displayRefreshMonitorFactory() const final;
 
 #if ENABLE(GPU_PROCESS)
     RefPtr<WebCore::ImageBuffer> createImageBuffer(const WebCore::FloatSize&, WebCore::RenderingMode, WebCore::RenderingPurpose, float resolutionScale, WebCore::DestinationColorSpace, WebCore::PixelFormat) const final;
@@ -328,8 +330,9 @@ private:
 
     WebCore::Color underlayColor() const final;
 
-    void themeColorChanged(WebCore::Color) const final;
-    void pageExtendedBackgroundColorDidChange(WebCore::Color) const final;
+    void themeColorChanged() const final;
+    void pageExtendedBackgroundColorDidChange() const final;
+    void sampledPageTopColorChanged() const final;
     
     void wheelEventHandlersChanged(bool) final;
 
@@ -378,7 +381,7 @@ private:
     void showPlaybackTargetPicker(WebCore::PlaybackTargetClientContextIdentifier, const WebCore::IntPoint&, bool) final;
     void playbackTargetPickerClientStateDidChange(WebCore::PlaybackTargetClientContextIdentifier, WebCore::MediaProducer::MediaStateFlags) final;
     void setMockMediaPlaybackTargetPickerEnabled(bool) final;
-    void setMockMediaPlaybackTargetPickerState(const String&, WebCore::MediaPlaybackTargetContext::State) final;
+    void setMockMediaPlaybackTargetPickerState(const String&, WebCore::MediaPlaybackTargetContext::MockState) final;
     void mockMediaPlaybackTargetPickerDismissPopup() final;
 #endif
 
@@ -415,12 +418,29 @@ private:
 #endif
 
 #if ENABLE(IMAGE_EXTRACTION)
-    void requestImageExtraction(WebCore::Element&) final;
+    void requestImageExtraction(WebCore::Element&, CompletionHandler<void(RefPtr<WebCore::Element>&&)>&& = { }) final;
 #endif
 
-#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+    bool needsImageOverlayControllerForSelectionPainting() const final
+    {
+#if USE(UIKIT_EDITING)
+        return false;
+#else
+        return true;
+#endif
+    }
+
+#if ENABLE(TEXT_AUTOSIZING)
+    void textAutosizingUsesIdempotentModeChanged() final;
+#endif
+
+#if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
     void showMediaControlsContextMenu(WebCore::FloatRect&&, Vector<WebCore::MediaControlsContextMenuItem>&&, CompletionHandler<void(WebCore::MediaControlsContextMenuItem::ID)>&&) final;
-#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS)
+#endif // ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
+
+#if ENABLE(WEBXR) && PLATFORM(COCOA)
+    void enumerateImmersiveXRDevices(CompletionHandler<void(const PlatformXR::Instance::DeviceList&)>&&) final;
+#endif
 
     mutable bool m_cachedMainFrameHasHorizontalScrollbar { false };
     mutable bool m_cachedMainFrameHasVerticalScrollbar { false };

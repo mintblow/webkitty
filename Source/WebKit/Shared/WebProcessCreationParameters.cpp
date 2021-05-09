@@ -96,7 +96,6 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << backForwardCacheCapacity;
 #if PLATFORM(COCOA)
     encoder << uiProcessBundleIdentifier;
-    encoder << uiProcessSDKVersion;
     encoder << latencyQOS;
     encoder << throughputQOS;
 #endif
@@ -119,6 +118,7 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 
     encoder << memoryCacheDisabled;
     encoder << attrStyleEnabled;
+    encoder << shouldThrowExceptionForGlobalConstantRedeclaration;
 
 #if ENABLE(SERVICE_CONTROLS)
     encoder << hasImageServices;
@@ -180,6 +180,7 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << cssValueToSystemColorMap;
     encoder << focusRingColor;
     encoder << localizedDeviceModel;
+    encoder << contentSizeCategory;
 #endif
 
 #if PLATFORM(COCOA)
@@ -321,8 +322,6 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 #if PLATFORM(COCOA)
     if (!decoder.decode(parameters.uiProcessBundleIdentifier))
         return false;
-    if (!decoder.decode(parameters.uiProcessSDKVersion))
-        return false;
     if (!decoder.decode(parameters.latencyQOS))
         return false;
     if (!decoder.decode(parameters.throughputQOS))
@@ -370,6 +369,8 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     if (!decoder.decode(parameters.memoryCacheDisabled))
         return false;
     if (!decoder.decode(parameters.attrStyleEnabled))
+        return false;
+    if (!decoder.decode(parameters.shouldThrowExceptionForGlobalConstantRedeclaration))
         return false;
 
 #if ENABLE(SERVICE_CONTROLS)
@@ -507,6 +508,9 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     parameters.focusRingColor = WTFMove(*focusRingColor);
     
     if (!decoder.decode(parameters.localizedDeviceModel))
+        return false;
+
+    if (!decoder.decode(parameters.contentSizeCategory))
         return false;
 #endif
 

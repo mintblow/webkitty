@@ -31,19 +31,20 @@
 #include "PluginComplexTextInputState.h"
 #include "ShareableBitmap.h"
 #include "WKLayoutMode.h"
-#include "_WKOverlayScrollbarStyle.h"
 #include <WebCore/DOMPasteAccess.h>
 #include <WebCore/FocusDirection.h>
 #include <WebCore/ScrollTypes.h>
 #include <WebCore/TextIndicatorWindow.h>
 #include <WebCore/UserInterfaceLayoutDirection.h>
 #include <WebKit/WKDragDestinationAction.h>
+#include <WebKit/_WKOverlayScrollbarStyle.h>
 #include <pal/spi/cocoa/AVKitSPI.h>
 #include <wtf/BlockPtr.h>
 #include <wtf/CompletionHandler.h>
 #include <wtf/RetainPtr.h>
 #include <wtf/WeakObjCPtr.h>
 #include <wtf/WeakPtr.h>
+#include <wtf/WorkQueue.h>
 #include <wtf/text/WTFString.h>
 
 using _WKRectEdge = NSUInteger;
@@ -53,6 +54,7 @@ OBJC_CLASS NSImmediateActionGestureRecognizer;
 OBJC_CLASS NSMenu;
 OBJC_CLASS NSTextInputContext;
 OBJC_CLASS NSView;
+OBJC_CLASS QLPreviewPanel;
 OBJC_CLASS WKAccessibilitySettingsObserver;
 OBJC_CLASS WKBrowsingContextController;
 OBJC_CLASS WKDOMPasteMenuDelegate;
@@ -93,6 +95,10 @@ class PageConfiguration;
 
 namespace WebCore {
 struct ShareDataWithParsedURL;
+
+#if HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
+struct TranslationContextMenuInfo;
+#endif
 
 #if ENABLE(IMAGE_EXTRACTION)
 struct ImageExtractionResult;
@@ -151,6 +157,7 @@ namespace WebKit {
 class PageClient;
 class PageClientImpl;
 class DrawingAreaProxy;
+class MediaSessionCoordinatorProxyPrivate;
 class SafeBrowsingWarning;
 class ViewGestureController;
 class ViewSnapshot;
@@ -585,7 +592,12 @@ public:
 
 #if ENABLE(IMAGE_EXTRACTION)
     void requestImageExtraction(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::ImageExtractionResult&&)>&&);
+    void computeCanRevealImage(const URL& imageURL, ShareableBitmap& imageBitmap, CompletionHandler<void(bool)>&&);
 #endif
+
+    bool acceptsPreviewPanelControl(QLPreviewPanel *);
+    void beginPreviewPanelControl(QLPreviewPanel *);
+    void endPreviewPanelControl(QLPreviewPanel *);
 
     bool windowIsFrontWindowUnderMouse(NSEvent *);
 
@@ -640,7 +652,12 @@ public:
 
 #if HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
     bool canHandleContextMenuTranslation() const;
-    void handleContextMenuTranslation(const String& text, const WebCore::IntRect& boundsInView, const WebCore::IntPoint& menuLocation);
+    void handleContextMenuTranslation(const WebCore::TranslationContextMenuInfo&);
+#endif
+
+#if ENABLE(MEDIA_SESSION_COORDINATOR)
+    MediaSessionCoordinatorProxyPrivate* mediaSessionCoordinatorForTesting() { return m_coordinatorForTesting.get(); }
+    void setMediaSessionCoordinatorForTesting(MediaSessionCoordinatorProxyPrivate*);
 #endif
 
 private:
@@ -848,6 +865,10 @@ private:
     RetainPtr<NSMenu> m_domPasteMenu;
     RetainPtr<WKDOMPasteMenuDelegate> m_domPasteMenuDelegate;
     CompletionHandler<void(WebCore::DOMPasteAccessResponse)> m_domPasteRequestHandler;
+
+#if ENABLE(MEDIA_SESSION_COORDINATOR)
+    RefPtr<MediaSessionCoordinatorProxyPrivate> m_coordinatorForTesting;
+#endif
 
 #if USE(APPLE_INTERNAL_SDK)
 #import <WebKitAdditions/WebViewImplAdditionsAfter.h>

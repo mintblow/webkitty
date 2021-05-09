@@ -125,9 +125,9 @@ private:
         bool runOpenPanel(WebPageProxy&, WebFrameProxy*, FrameInfoData&&, API::OpenPanelParameters*, WebOpenPanelResultListenerProxy*) final;
         void didExceedBackgroundResourceLimitWhileInForeground(WebPageProxy&, WKResourceLimit) final;
         void saveDataToFileInDownloadsFolder(WebPageProxy*, const WTF::String&, const WTF::String&, const URL&, API::Data&) final;
-        Ref<API::InspectorConfiguration> configurationForLocalInspector(WebPageProxy&, WebInspectorProxy&) final;
-        void didAttachLocalInspector(WebPageProxy&, WebInspectorProxy&) final;
-        void willCloseLocalInspector(WebPageProxy&, WebInspectorProxy&) final;
+        Ref<API::InspectorConfiguration> configurationForLocalInspector(WebPageProxy&, WebInspectorUIProxy&) final;
+        void didAttachLocalInspector(WebPageProxy&, WebInspectorUIProxy&) final;
+        void willCloseLocalInspector(WebPageProxy&, WebInspectorUIProxy&) final;
 #endif
 #if ENABLE(DEVICE_ORIENTATION)
         void shouldAllowDeviceOrientationAndMotionAccess(WebKit::WebPageProxy&, WebFrameProxy&, FrameInfoData&&, CompletionHandler<void(bool)>&&) final;
@@ -144,6 +144,7 @@ private:
 #endif
         RetainPtr<NSArray> actionsForElement(_WKActivatedElementInfo *, RetainPtr<NSArray> defaultActions) final;
         void didNotHandleTapAsClick(const WebCore::IntPoint&) final;
+        void didNotHandleTapAsMeaningfulClickAtPoint(const WebCore::IntPoint&) final;
         UIViewController *presentingViewController() final;
 #endif // PLATFORM(IOS_FAMILY)
 
@@ -166,6 +167,10 @@ private:
         void didEnableInspectorBrowserDomain(WebPageProxy&) final;
         void didDisableInspectorBrowserDomain(WebPageProxy&) final;
 
+#if ENABLE(WEBXR) && PLATFORM(COCOA)
+        void startXRSession(WebPageProxy&, CompletionHandler<void(RetainPtr<id>)>&&) final;
+#endif
+
         WeakPtr<UIDelegate> m_uiDelegate;
     };
 
@@ -181,6 +186,7 @@ private:
         bool webViewRequestStorageAccessPanelUnderFirstPartyCompletionHandler : 1;
         bool webViewRunBeforeUnloadConfirmPanelWithMessageInitiatedByFrameCompletionHandler : 1;
         bool webViewRequestGeolocationPermissionForFrameDecisionHandler : 1;
+        bool webViewRequestGeolocationPermissionForOriginDecisionHandler : 1;
         bool webViewDidResignInputElementStrongPasswordAppearanceWithUserInfo : 1;
         bool webViewTakeFocus : 1;
         bool webViewHandleAutoplayEventWithFlags : 1;
@@ -211,7 +217,7 @@ private:
         bool webViewWillCloseLocalInspector : 1;
 #endif
 #if ENABLE(DEVICE_ORIENTATION)
-        bool webViewShouldAllowDeviceOrientationAndMotionAccessRequestedByFrameDecisionHandler : 1;
+        bool webViewRequestDeviceOrientationAndMotionPermissionForOriginDecisionHandler : 1;
 #endif
         bool webViewDecideDatabaseQuotaForSecurityOriginCurrentQuotaCurrentOriginUsageCurrentDatabaseUsageExpectedUsageDecisionHandler : 1;
         bool webViewDecideDatabaseQuotaForSecurityOriginDatabaseNameDisplayNameCurrentQuotaCurrentOriginUsageCurrentDatabaseUsageExpectedUsageDecisionHandler : 1;
@@ -232,6 +238,7 @@ private:
 #endif
         bool webViewActionsForElementDefaultActions : 1;
         bool webViewDidNotHandleTapAsClickAtPoint : 1;
+        bool webViewDidNotHandleTapAsMeaningfulClickAtPoint : 1;
         bool presentingViewControllerForWebView : 1;
 #endif
         bool dataDetectionContextForWebView : 1;
@@ -254,6 +261,9 @@ private:
 #endif
         bool webViewDidEnableInspectorBrowserDomain : 1;
         bool webViewDidDisableInspectorBrowserDomain : 1;
+#if ENABLE(WEBXR) && PLATFORM(COCOA)
+        bool webViewStartXRSessionWithCompletionHandler : 1;
+#endif
     } m_delegateMethods;
 };
 

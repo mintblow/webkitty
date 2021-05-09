@@ -260,7 +260,7 @@ WebProcessProxy::~WebProcessProxy()
         WebCore::enableSuddenTermination();
 
 #if PLATFORM(MAC)
-    HighPerformanceGPUManager::singleton().removeProcessRequiringHighPerformance(this);
+    HighPerformanceGPUManager::singleton().removeProcessRequiringHighPerformance(*this);
 #endif
 
     platformDestroy();
@@ -480,7 +480,7 @@ void WebProcessProxy::shutDown()
     m_routingArbitrator->processDidTerminate();
 #endif
 
-    m_processPool->disconnectProcess(this);
+    m_processPool->disconnectProcess(*this);
 }
 
 WebPageProxy* WebProcessProxy::webPage(WebPageProxyIdentifier pageID)
@@ -786,10 +786,10 @@ void WebProcessProxy::getGPUProcessConnection(GPUProcessConnectionParameters&& p
     m_processPool->getGPUProcessConnection(*this, WTFMove(parameters), WTFMove(reply));
 }
 
-void WebProcessProxy::gpuProcessCrashed()
+void WebProcessProxy::gpuProcessExited(GPUProcessTerminationReason reason)
 {
     for (auto& page : copyToVectorOf<RefPtr<WebPageProxy>>(m_pageMap.values()))
-        page->gpuProcessCrashed();
+        page->gpuProcessExited(reason);
 }
 #endif
 
@@ -845,9 +845,14 @@ bool WebProcessProxy::didReceiveSyncMessage(IPC::Connection& connection, IPC::De
     return false;
 }
 
-void WebProcessProxy::didClose(IPC::Connection&)
+void WebProcessProxy::didClose(IPC::Connection& connection)
 {
+#if OS(DARWIN)
+    RELEASE_LOG_IF(isReleaseLoggingAllowed(), Process, "%p - WebProcessProxy didClose (web process %d crash)", this, connection.remoteProcessID());
+#else
     RELEASE_LOG_IF(isReleaseLoggingAllowed(), Process, "%p - WebProcessProxy didClose (web process crash)", this);
+#endif
+
     processDidTerminateOrFailedToLaunch(ProcessTerminationReason::Crash);
 }
 
@@ -1023,7 +1028,7 @@ void WebProcessProxy::didFinishLaunching(ProcessLauncher* launcher, IPC::Connect
     RELEASE_ASSERT(!m_webConnection);
     m_webConnection = WebConnectionToWebProcess::create(this);
 
-    m_processPool->processDidFinishLaunching(this);
+    m_processPool->processDidFinishLaunching(*this);
     m_backgroundResponsivenessTimer.updateState();
 
 #if ENABLE(IPC_TESTING_API)
@@ -1144,7 +1149,7 @@ void WebProcessProxy::maybeShutDown()
 {
     if (isDummyProcessProxy() && m_pageMap.isEmpty()) {
         ASSERT(state() == State::Terminated);
-        m_processPool->disconnectProcess(this);
+        m_processPool->disconnectProcess(*this);
         return;
     }
 
@@ -1165,7 +1170,7 @@ bool WebProcessProxy::canTerminateAuxiliaryProcess()
     if (isRunningServiceWorkers())
         return false;
 
-    if (!m_processPool->shouldTerminate(this))
+    if (!m_processPool->shouldTerminate(*this))
         return false;
 
     return true;
@@ -1624,9 +1629,9 @@ void WebProcessProxy::updateBackgroundResponsivenessTimer()
 }
 
 #if !PLATFORM(COCOA)
-const HashSet<String>& WebProcessProxy::platformPathsWithAssumedReadAccess()
+const MemoryCompactLookupOnlyRobinHoodHashSet<String>& WebProcessProxy::platformPathsWithAssumedReadAccess()
 {
-    static NeverDestroyed<HashSet<String>> platformPathsWithAssumedReadAccess;
+    static NeverDestroyed<MemoryCompactLookupOnlyRobinHoodHashSet<String>> platformPathsWithAssumedReadAccess;
     return platformPathsWithAssumedReadAccess;
 }
 #endif
@@ -1780,7 +1785,7 @@ void WebProcessProxy::muteCaptureInPagesExcept(WebCore::PageIdentifier pageID)
 
 void WebProcessProxy::pageMutedStateChanged(WebCore::PageIdentifier identifier, WebCore::MediaProducer::MutedStateFlags flags)
 {
-    bool mutedForCapture = flags & MediaProducer::AudioAndVideoCaptureIsMuted;
+    bool mutedForCapture = flags.containsAny(MediaProducer::AudioAndVideoCaptureIsMuted);
     if (!mutedForCapture)
         return;
 
@@ -1951,14 +1956,6 @@ void WebProcessProxy::enableServiceWorkers(const UserContentControllerIdentifier
     updateServiceWorkerProcessAssertion();
 #endif
 }
-
-#if HAVE(VISIBILITY_PROPAGATION_VIEW)
-void WebProcessProxy::didCreateContextInGPUProcessForVisibilityPropagation(LayerHostingContextID contextID)
-{
-    for (auto& page : copyToVectorOf<RefPtr<WebPageProxy>>(m_pageMap.values()))
-        page->didCreateContextInGPUProcessForVisibilityPropagation(contextID);
-}
-#endif
 
 void WebProcessProxy::didCreateSleepDisabler(SleepDisablerIdentifier identifier, const String& reason, bool display)
 {

@@ -37,20 +37,6 @@ list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/platform/text/gtk"
 )
 
-if (USE_AVIF)
-    list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
-        "${WEBCORE_DIR}/platform/image-decoders/avif"
-    )
-    list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
-        platform/image-decoders/avif/AVIFUniquePtr.h
-    )
-    list(APPEND WebCore_SOURCES
-        platform/image-decoders/avif/AVIFImageDecoder.cpp
-        platform/image-decoders/avif/AVIFImageReader.cpp
-    )
-    list(APPEND WebCore_LIBRARIES AVIF::AVIF)
-endif ()
-
 if (USE_WPE_RENDERER)
     list(APPEND WebCore_INCLUDE_DIRECTORIES
         "${WEBCORE_DIR}/platform/graphics/libwpe"
@@ -93,7 +79,6 @@ list(APPEND WebCore_LIBRARIES
     ${GLIB_GMODULE_LIBRARIES}
     ${GLIB_GOBJECT_LIBRARIES}
     ${GLIB_LIBRARIES}
-    ${LCMS2_LIBRARIES}
     ${LIBSECRET_LIBRARIES}
     ${LIBTASN1_LIBRARIES}
     ${HYPHEN_LIBRARIES}
@@ -106,6 +91,12 @@ list(APPEND WebCore_LIBRARIES
     GTK::GTK
 )
 
+if (USE_LCMS)
+    list(APPEND WebCore_LIBRARIES
+        LCMS2::LCMS2
+    )
+endif ()
+
 if (USE_WPE_RENDERER)
     list(APPEND WebCore_LIBRARIES
         WPE::libwpe
@@ -117,7 +108,6 @@ list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
     ${ENCHANT_INCLUDE_DIRS}
     ${GIO_UNIX_INCLUDE_DIRS}
     ${GLIB_INCLUDE_DIRS}
-    ${LCMS2_INCLUDE_DIR}
     ${LIBSECRET_INCLUDE_DIRS}
     ${LIBTASN1_INCLUDE_DIRS}
     ${UPOWERGLIB_INCLUDE_DIRS}

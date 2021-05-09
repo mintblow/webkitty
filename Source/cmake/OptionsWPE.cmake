@@ -2,20 +2,8 @@ include(GNUInstallDirs)
 include(VersioningUtils)
 
 SET_PROJECT_VERSION(2 31 1)
-set(WPE_API_VERSION 1.0)
-
-CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(WEBKIT 16 0 13)
-
-# These are shared variables, but we special case their definition so that we can use the
-# CMAKE_INSTALL_* variables that are populated by the GNUInstallDirs macro.
-set(LIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}" CACHE PATH "Absolute path to library installation directory")
-set(EXEC_INSTALL_DIR "${CMAKE_INSTALL_FULL_BINDIR}" CACHE PATH "Absolute path to executable installation directory")
-set(LIBEXEC_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBEXECDIR}/wpe-webkit-${WPE_API_VERSION}" CACHE PATH "Absolute path to install executables executed by the library")
 
 set(USER_AGENT_BRANDING "" CACHE STRING "Branding to add to user agent string")
-if (USER_AGENT_BRANDING)
-    add_definitions(-DUSER_AGENT_BRANDING=${USER_AGENT_BRANDING})
-endif ()
 
 find_package(Cairo 1.14.0 REQUIRED)
 find_package(Fontconfig 2.8.0 REQUIRED)
@@ -27,6 +15,7 @@ find_package(JPEG REQUIRED)
 find_package(LibEpoxy 1.4.0 REQUIRED)
 find_package(LibGcrypt 1.6.0 REQUIRED)
 find_package(LibXml2 2.8.0 REQUIRED)
+find_package(OpenGLES2 3.0 REQUIRED)
 find_package(PNG REQUIRED)
 find_package(SQLite3 REQUIRED)
 find_package(Threads REQUIRED)
@@ -58,10 +47,9 @@ WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_AUTOCAPITALIZE PRIVATE ON)
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_CONTENT_EXTENSIONS PRIVATE ON)
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_CSS_CONIC_GRADIENTS PRIVATE ON)
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_CSS_PAINTING_API PRIVATE ${ENABLE_EXPERIMENTAL_FEATURES})
-WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_CSS_SCROLL_SNAP PRIVATE ${ENABLE_EXPERIMENTAL_FEATURES})
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_CSS_TYPED_OM PRIVATE ${ENABLE_EXPERIMENTAL_FEATURES})
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_FILTERS_LEVEL_2 PRIVATE ON)
-WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_GPU_PROCESS PRIVATE ${ENABLE_EXPERIMENTAL_FEATURES})
+WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_GPU_PROCESS PRIVATE OFF)
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_LAYOUT_FORMATTING_CONTEXT PRIVATE ${ENABLE_EXPERIMENTAL_FEATURES})
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_MEDIA_STREAM PRIVATE ${ENABLE_EXPERIMENTAL_FEATURES})
 WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_MHTML PRIVATE ON)
@@ -83,12 +71,13 @@ WEBKIT_OPTION_DEFAULT_PORT_VALUE(ENABLE_WEBXR PRIVATE ${ENABLE_EXPERIMENTAL_FEAT
 # there is a strong reason we should support changing the value of the option,
 # and the option is not relevant to any other WebKit ports.
 WEBKIT_OPTION_DEFINE(ENABLE_GTKDOC "Whether or not to use generate gtkdoc." PUBLIC OFF)
-WEBKIT_OPTION_DEFINE(USE_OPENJPEG "Whether to enable support for JPEG2000 images." PUBLIC ON)
-WEBKIT_OPTION_DEFINE(USE_WOFF2 "Whether to enable support for WOFF2 Web Fonts." PUBLIC ON)
 WEBKIT_OPTION_DEFINE(ENABLE_WPE_QT_API "Whether to enable support for the Qt5/QML plugin" PUBLIC ${ENABLE_DEVELOPER_MODE})
-WEBKIT_OPTION_DEFINE(USE_SYSTEMD "Whether to enable journald logging" PUBLIC ON)
-WEBKIT_OPTION_DEFINE(USE_SOUP2 "Whether to enable usage of Soup 2 instead of Soup 3." PUBLIC ON)
+WEBKIT_OPTION_DEFINE(USE_AVIF "Whether to enable support for AVIF images." PUBLIC ${ENABLE_EXPERIMENTAL_FEATURES})
 WEBKIT_OPTION_DEFINE(USE_LCMS "Whether to enable support for image color management using libcms2." PUBLIC ON)
+WEBKIT_OPTION_DEFINE(USE_OPENJPEG "Whether to enable support for JPEG2000 images." PUBLIC ON)
+WEBKIT_OPTION_DEFINE(USE_SOUP2 "Whether to enable usage of Soup 2 instead of Soup 3." PUBLIC OFF)
+WEBKIT_OPTION_DEFINE(USE_SYSTEMD "Whether to enable journald logging" PUBLIC ON)
+WEBKIT_OPTION_DEFINE(USE_WOFF2 "Whether to enable support for WOFF2 Web Fonts." PUBLIC ON)
 
 # Private options specific to the WPE port.
 WEBKIT_OPTION_DEFINE(USE_GSTREAMER_HOLEPUNCH "Whether to enable GStreamer holepunch" PRIVATE OFF)
@@ -130,10 +119,30 @@ WEBKIT_OPTION_END()
 
 if (USE_SOUP2)
     set(SOUP_MINIMUM_VERSION 2.54.0)
+    set(SOUP_API_VERSION 2.4)
+    set(WPE_API_VERSION 1.0)
+    set(WPE_API_DOC_VERSION 1.0)
 else ()
-    set(SOUP_MINIMUM_VERSION 2.99.2)
+    set(SOUP_MINIMUM_VERSION 2.99.5)
+    set(SOUP_API_VERSION 3.0)
+    set(WPE_API_VERSION 1.1)
+    # No API changes in 1.1, so keep using the same API documentation.
+    set(WPE_API_DOC_VERSION 1.0)
+    set(ENABLE_SERVER_PRECONNECT ON)
 endif ()
 find_package(LibSoup ${SOUP_MINIMUM_VERSION} REQUIRED)
+
+if (WPE_API_VERSION VERSION_EQUAL "1.0")
+    CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(WEBKIT 16 0 13)
+else ()
+    CALCULATE_LIBRARY_VERSIONS_FROM_LIBTOOL_TRIPLE(WEBKIT 0 0 0)
+endif ()
+
+# These are shared variables, but we special case their definition so that we can use the
+# CMAKE_INSTALL_* variables that are populated by the GNUInstallDirs macro.
+set(LIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}" CACHE PATH "Absolute path to library installation directory")
+set(EXEC_INSTALL_DIR "${CMAKE_INSTALL_FULL_BINDIR}" CACHE PATH "Absolute path to executable installation directory")
+set(LIBEXEC_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBEXECDIR}/wpe-webkit-${WPE_API_VERSION}" CACHE PATH "Absolute path to install executables executed by the library")
 
 if (ENABLE_ACCESSIBILITY)
     find_package(ATK 2.16.0)
@@ -196,9 +205,17 @@ if (ENABLE_WEBXR)
     if (NOT OPENXR_FOUND)
         message(FATAL_ERROR "OpenXR is required to enable WebXR support.")
     endif ()
+    SET_AND_EXPOSE_TO_BUILD(ENABLE_GAMEPAD ON)
     SET_AND_EXPOSE_TO_BUILD(USE_OPENXR ${OpenXR_FOUND})
     SET_AND_EXPOSE_TO_BUILD(XR_USE_PLATFORM_EGL TRUE)
     SET_AND_EXPOSE_TO_BUILD(XR_USE_GRAPHICS_API_OPENGL TRUE)
+endif ()
+
+if (USE_AVIF)
+    find_package(AVIF 0.9.0)
+    if (NOT AVIF_FOUND)
+        message(FATAL_ERROR "libavif 0.9.0 is required for USE_AVIF.")
+    endif ()
 endif ()
 
 if (USE_SYSTEMD)
@@ -225,6 +242,10 @@ endif ()
 add_definitions(-DBUILDING_WPE__=1)
 add_definitions(-DGETTEXT_PACKAGE="WPE")
 add_definitions(-DJSC_GLIB_API_ENABLED)
+
+if (USER_AGENT_BRANDING)
+    add_definitions(-DUSER_AGENT_BRANDING=${USER_AGENT_BRANDING})
+endif ()
 
 if (EXISTS "${TOOLS_DIR}/glib/svn-revision")
     execute_process(COMMAND ${TOOLS_DIR}/glib/svn-revision ERROR_QUIET OUTPUT_VARIABLE SVN_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -265,13 +286,31 @@ if (CMAKE_CROSSCOMPILING OR APPLE)
     set(ENABLE_GTKDOC OFF)
 endif ()
 
+# Using DERIVED_SOURCES_DIR is deprecated
+set(DERIVED_SOURCES_DIR "${CMAKE_BINARY_DIR}/DerivedSources")
+set(DERIVED_SOURCES_WEBKIT_DIR ${DERIVED_SOURCES_DIR}/WebKit)
+set(DERIVED_SOURCES_WPE_API_DIR ${DERIVED_SOURCES_WEBKIT_DIR}/wpe)
+set(DERIVED_SOURCES_WPETOOLINGBACKENDS_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WPEToolingBackends")
+
+# Using FORWARDING_HEADERS_DIR is deprecated
 set(FORWARDING_HEADERS_DIR ${DERIVED_SOURCES_DIR}/ForwardingHeaders)
 set(FORWARDING_HEADERS_WPE_DIR ${FORWARDING_HEADERS_DIR}/wpe)
 set(FORWARDING_HEADERS_WPE_EXTENSION_DIR ${FORWARDING_HEADERS_DIR}/wpe-webextension)
 set(FORWARDING_HEADERS_WPE_DOM_DIR ${FORWARDING_HEADERS_DIR}/wpe-dom)
 set(FORWARDING_HEADERS_WPE_JSC_DIR ${FORWARDING_HEADERS_DIR}/wpe-jsc)
-set(DERIVED_SOURCES_JAVASCRIPTCORE_GLIB_DIR ${DERIVED_SOURCES_JAVASCRIPTCORE_DIR}/javascriptcorewpe)
-set(DERIVED_SOURCES_WPE_API_DIR ${DERIVED_SOURCES_WEBKIT_DIR}/wpe)
+
+# FIXME: Remove in https://bugs.webkit.org/show_bug.cgi?id=210891
+set(WebKit_FRAMEWORK_HEADERS_DIR ${FORWARDING_HEADERS_DIR})
+set(WebKit_PRIVATE_FRAMEWORK_HEADERS_DIR ${FORWARDING_HEADERS_DIR})
+set(WebKit_DERIVED_SOURCES_DIR "${CMAKE_BINARY_DIR}/DerivedSources/WebKit")
+set(PAL_DERIVED_SOURCES_DIR "${CMAKE_BINARY_DIR}/DerivedSources/PAL")
+set(PAL_FRAMEWORK_HEADERS_DIR "${CMAKE_BINARY_DIR}/PAL/Headers")
+set(JavaScriptCore_FRAMEWORK_HEADERS_DIR "${CMAKE_BINARY_DIR}/JavaScriptCore/Headers")
+set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS_DIR "${CMAKE_BINARY_DIR}/JavaScriptCore/PrivateHeaders")
+set(WTF_FRAMEWORK_HEADERS_DIR "${CMAKE_BINARY_DIR}/WTF/Headers")
+
+set(JavaScriptCoreGLib_FRAMEWORK_HEADERS_DIR "${CMAKE_BINARY_DIR}/JavaScriptCoreGLib/Headers")
+set(JavaScriptCoreGLib_DERIVED_SOURCES_DIR "${CMAKE_BINARY_DIR}/JavaScriptCoreGLib/DerivedSources")
 
 set(WPE_PKGCONFIG_FILE ${CMAKE_BINARY_DIR}/wpe-webkit-${WPE_API_VERSION}.pc)
 set(WPEWebExtension_PKGCONFIG_FILE ${CMAKE_BINARY_DIR}/wpe-web-extension-${WPE_API_VERSION}.pc)

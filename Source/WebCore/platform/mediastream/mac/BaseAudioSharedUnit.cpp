@@ -33,6 +33,7 @@
 #include "DeprecatedGlobalSettings.h"
 #include "Logging.h"
 #include "PlatformMediaSessionManager.h"
+#include <wtf/FastMalloc.h>
 
 namespace WebCore {
 
@@ -43,12 +44,14 @@ BaseAudioSharedUnit::BaseAudioSharedUnit()
 
 void BaseAudioSharedUnit::addClient(CoreAudioCaptureSource& client)
 {
+    ASSERT(isMainThread());
     auto locker = holdLock(m_clientsLock);
     m_clients.add(&client);
 }
 
 void BaseAudioSharedUnit::removeClient(CoreAudioCaptureSource& client)
 {
+    ASSERT(isMainThread());
     auto locker = holdLock(m_clientsLock);
     m_clients.remove(&client);
 }
@@ -213,10 +216,16 @@ OSStatus BaseAudioSharedUnit::suspend()
 
 void BaseAudioSharedUnit::audioSamplesAvailable(const MediaTime& time, const PlatformAudioData& data, const AudioStreamDescription& description, size_t numberOfFrames)
 {
-    forEachClient([&](auto& client) {
-        if (client.isProducingData())
-            client.audioSamplesAvailable(time, data, description, numberOfFrames);
-    });
+    // We hold the lock here since adding/removing clients can only happen in main thread.
+    auto locker = holdLock(m_clientsLock);
+
+    // For performance reasons, we forbid heap allocations while doing rendering on the capture audio thread.
+    ForbidMallocUseForCurrentThreadScope forbidMallocUse;
+
+    for (auto* client : m_clients) {
+        if (client->isProducingData())
+            client->audioSamplesAvailable(time, data, description, numberOfFrames);
+    }
 }
 
 } // namespace WebCore

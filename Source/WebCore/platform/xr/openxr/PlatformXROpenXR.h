@@ -22,6 +22,8 @@
 #if ENABLE(WEBXR) && USE(OPENXR)
 
 #include "GLContextEGL.h"
+#include "GraphicsContextGL.h"
+#include "OpenXRLayer.h"
 #include "OpenXRUtils.h"
 #include "PlatformXR.h"
 
@@ -46,9 +48,12 @@ class OpenXRExtensions;
 // the XRSystem is basically the entry point for the WebXR API available via the Navigator object.
 class OpenXRDevice final : public Device {
 public:
-    OpenXRDevice(XrInstance, XrSystemId, WorkQueue&, const OpenXRExtensions&, CompletionHandler<void()>&&);
+    static Ref<OpenXRDevice> create(XrInstance, XrSystemId, Ref<WorkQueue>&&, const OpenXRExtensions&, CompletionHandler<void()>&&);
 
 private:
+    OpenXRDevice(XrInstance, XrSystemId, Ref<WorkQueue>&&, const OpenXRExtensions&);
+    void initialize(CompletionHandler<void()>&& callback);
+
     // PlatformXR::Device
     WebCore::IntSize recommendedResolution(SessionMode) final;
     void initializeTrackingAndRendering(SessionMode) final;
@@ -56,10 +61,13 @@ private:
     void initializeReferenceSpace(PlatformXR::ReferenceSpaceType) final;
     bool supportsSessionShutdownNotification() const final { return true; }
     void requestFrame(RequestFrameCallback&&) final;
+    void submitFrame(Vector<Device::Layer>&&) final;
     Vector<ViewData> views(SessionMode) const final;
+    Optional<LayerHandle> createLayerProjection(uint32_t width, uint32_t height, bool alpha) final;
+    void deleteLayer(LayerHandle) final;
 
     // Custom methods
-    ListOfEnabledFeatures collectEnabledFeatures();
+    FeatureList collectSupportedFeatures() const;
     void collectSupportedSessionModes();
     void collectConfigurationViews();
     XrSpace createReferenceSpace(XrReferenceSpaceType);
@@ -70,6 +78,7 @@ private:
     void handleSessionStateChange();
     void waitUntilStopping();
     void updateStageParameters();
+    LayerHandle generateLayerHandle() { return ++m_handleIndex; }
 
     XrInstance m_instance;
     XrSystemId m_systemId;
@@ -79,6 +88,11 @@ private:
     XrSessionState m_sessionState { XR_SESSION_STATE_UNKNOWN };
     XrGraphicsBindingEGLMNDX m_graphicsBinding;
     std::unique_ptr<WebCore::GLContextEGL> m_egl;
+    RefPtr<WebCore::GraphicsContextGL> m_gl;
+    XrFrameState m_frameState;
+    Vector<XrView> m_frameViews;
+    HashMap<LayerHandle, std::unique_ptr<OpenXRLayer>> m_layers;
+    LayerHandle m_handleIndex { 0 };
 
     using ViewConfigurationPropertiesMap = HashMap<XrViewConfigurationType, XrViewConfigurationProperties, IntHash<XrViewConfigurationType>, WTF::StrongEnumHashTraits<XrViewConfigurationType>>;
     ViewConfigurationPropertiesMap m_viewConfigurationProperties;

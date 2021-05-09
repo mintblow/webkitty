@@ -124,6 +124,9 @@
 /* Button title in Device Orientation Permission API prompt */
 "Allow (device motion and orientation access)" = "Allow";
 
+/* Allow button title in geolocation prompt */
+"Allow (geolocation)" = "Allow";
+
 /* Allow button title in speech recognition prompt */
 "Allow (speechrecognition)" = "Allow";
 
@@ -132,6 +135,9 @@
 
 /* Message for requesting cross-site cookie and website data access. */
 "Allow “%@” and “%@” to use cookies and website data while browsing “%@”?" = "Allow “%@” and “%@” to use cookies and website data while browsing “%@”?";
+
+/* Message for geolocation prompt */
+"Allow “%@” to use your current location?" = "Allow “%@” to use your current location?";
 
 /* Message for spechrecognition prompt */
 "Allow “%@” to capture your audio and use it for speech recognition?" = "Allow “%@” to capture your audio and use it for speech recognition?";
@@ -183,9 +189,6 @@
 
 /* Label for the book with Apple Pay button. */
 "Book with Apple Pay" = "Book with Apple Pay";
-
-/* File Upload alert sheet button string for choosing an existing file from the file brower */
-"Browse (file upload action sheet)" = "Browse";
 
 /* Option in segmented control for inserting a bulleted list in text editing */
 "Bulleted list" = "Bulleted list";
@@ -328,8 +331,11 @@
 /* Label for the donate with Apple Pay button. */
 "Donate with Apple Pay" = "Donate with Apple Pay";
 
-/* Title of the Done button for zoomed form controls. */
+/* Title of the Done button for form controls. */
 "Done" = "Done";
+
+/* Disallow button title in geolocation prompt */
+"Don’t Allow (geolocation)" = "Don’t Allow";
 
 /* Disallow button title in speech recognition prompt */
 "Don’t Allow (speechrecognition)" = "Don’t Allow";
@@ -580,9 +586,6 @@
 /* Option in segmented control for inserting a numbered list in text editing */
 "Numbered list" = "Numbered list";
 
-/* Title of the OK button in date/time form controls. */
-"OK (OK button title in date/time picker)" = "OK";
-
 /* Title of the OK button for the number pad in zoomed form controls. */
 "OK (OK button title in extra zoomed number pad)" = "OK";
 
@@ -654,6 +657,9 @@
 
 /* File Upload alert sheet button string for choosing an existing media item from the Photo Library */
 "Photo Library (file upload action sheet)" = "Photo Library";
+
+/* Picture in Picture media controls context menu title */
+"Picture in Picture (Media Controls Menu)" = "Picture in Picture";
 
 /* Media Play context menu item */
 "Play" = "Play";

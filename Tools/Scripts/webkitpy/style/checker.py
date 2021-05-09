@@ -162,6 +162,12 @@ _PATH_RULES_SPECIFIER = [
     ["-readability/parameter_name"]),
 
     ([
+     # The WPE QT wrapper lib is not part of Webkit and therefore don't need to statically
+     # link the WTF framework. Instead it uses the standard alloc mechanism.
+     os.path.join('Source', 'WebKit', 'UIProcess', 'API', 'wpe', 'qt')],
+     ["-runtime/wtf_make_unique"]),
+
+    ([
       # The GTK+ and WPE APIs use upper case, underscore separated, words in
       # certain types of enums (e.g. signals, properties).
       os.path.join('Source', 'JavaScriptCore', 'API', 'glib'),
@@ -229,6 +235,7 @@ _PATH_RULES_SPECIFIER = [
       os.path.join('Source', 'WebCore', 'platform', 'graphics', 'gstreamer', 'WebKitWebSourceGStreamer.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'graphics', 'gstreamer', 'WebKitAudioSinkGStreamer.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'graphics', 'gstreamer', 'WebKitAudioSinkGStreamer.h'),
+      os.path.join('Source', 'WebCore', 'platform', 'graphics', 'gstreamer', 'mse', 'WebKitMediaSourceGStreamer.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'audio', 'gstreamer', 'WebKitWebAudioSourceGStreamer.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'gstreamer', 'GStreamerMediaStreamSource.h'),
       os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'gstreamer', 'GStreamerMediaStreamSource.cpp'),
@@ -324,7 +331,6 @@ _TEXT_FILE_EXTENSIONS = [
     'html',
     'idl',
     'in',
-    'php',
     'pl',
     'pm',
     'pri',
@@ -362,6 +368,7 @@ _NEVER_SKIPPED_JS_FILES = [
 
 _NEVER_SKIPPED_FILES = _NEVER_SKIPPED_JS_FILES + [
     'TestExpectations',
+    '.py'
 ]
 
 # Files to skip that are less obvious.
@@ -418,6 +425,10 @@ _CARRIAGE_RETURN_ALLOWED_FILE_EXTENSIONS = [
     'vcproj',
     'vsprops',
     ]
+
+_INVALID_FILES = [
+    re.compile('LayoutTests/.*php'),
+]
 
 # The maximum number of errors to report per file, per category.
 # If a category is not a key, then it has no maximum.
@@ -634,12 +645,19 @@ class CheckerDispatcher(object):
         basename = os.path.basename(file_path)
         if basename.startswith('ChangeLog'):
             return False
-        elif basename in _NEVER_SKIPPED_FILES:
-            return False
+        for suffix in _NEVER_SKIPPED_FILES:
+            if basename.endswith(suffix):
+                return False
         for skipped_file in _SKIPPED_FILES_WITHOUT_WARNING:
             if self._should_skip_file_path(file_path, skipped_file):
                 return True
         return False
+
+    def is_valid_file(self, file_path):
+        for regex in _INVALID_FILES:
+            if regex.match(file_path):
+                return False
+        return True
 
     def should_check_and_strip_carriage_returns(self, file_path):
         return self._file_extension(file_path) not in _CARRIAGE_RETURN_ALLOWED_FILE_EXTENSIONS
@@ -965,6 +983,16 @@ class StyleProcessor(ProcessorBase):
 
     def should_process(self, file_path):
         """Return whether the file should be checked for style."""
+        if not self._dispatcher.is_valid_file(file_path):
+            self.error_count += 1
+            self._configuration.write_style_error(
+                category='policy/language',
+                confidence_in_error=5,
+                file_path=file_path,
+                line_number='-',
+                message='File type is unsupported by the WebKit project',
+            )
+            return False
         if self._dispatcher.should_skip_without_warning(file_path):
             return False
         if self._dispatcher.should_skip_with_warning(file_path):

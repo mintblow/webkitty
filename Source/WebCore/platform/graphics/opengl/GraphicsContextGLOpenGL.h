@@ -34,8 +34,10 @@
 #include <wtf/ListHashSet.h>
 #include <wtf/RetainPtr.h>
 #include <wtf/UniqueArray.h>
+#include <wtf/UniqueRef.h>
 
 #if PLATFORM(COCOA)
+#include "GraphicsContextGLANGLEEGLUtilities.h"
 #include "IOSurface.h"
 #endif
 
@@ -93,8 +95,6 @@ class TextureMapperGCGLPlatformLayer;
 
 typedef WTF::HashMap<CString, uint64_t> ShaderNameHash;
 
-class GraphicsContextGLOpenGLPrivate;
-
 class WEBCORE_EXPORT GraphicsContextGLOpenGL final : public GraphicsContextGL
 {
 public:
@@ -111,6 +111,7 @@ public:
     static GCGLenum drawingBufferTextureTargetQuery();
     static GCGLint EGLDrawingBufferTextureTarget();
 #else
+    static Ref<GraphicsContextGLOpenGL> createForGPUProcess(const GraphicsContextGLAttributes&);
     PlatformLayer* platformLayer() const final;
 #endif
 #if USE(ANGLE)
@@ -123,6 +124,9 @@ public:
         ReleaseThreadResources
     };
     static bool releaseCurrentContext(ReleaseBehavior);
+#endif
+#if PLATFORM(COCOA)
+    static void releaseAllResourcesIfUnused();
 #endif
 
     // With multisampling on, blit from multisampleFBO to regular FBO.
@@ -465,7 +469,9 @@ public:
     RefPtr<ImageData> readRenderingResultsForPainting();
     RefPtr<ImageData> readCompositedResultsForPainting();
 
+#if ENABLE(VIDEO)
     bool copyTextureFromMedia(MediaPlayer&, PlatformGLObject texture, GCGLenum target, GCGLint level, GCGLenum internalFormat, GCGLenum format, GCGLenum type, bool premultiplyAlpha, bool flipY) final;
+#endif
 
 #if USE(OPENGL) && ENABLE(WEBGL2)
     void primitiveRestartIndex(GCGLuint);
@@ -532,6 +538,7 @@ private:
     // Called once by all the public entry points that eventually call OpenGL.
     // Called once by all the public entry points of ExtensionsGL that eventually call OpenGL.
     bool makeContextCurrent() WARN_UNUSED_RETURN;
+    void clearCurrentContext();
 
     // Take into account the user's requested context creation attributes,
     // in particular stencil and antialias, and determine which could or
@@ -565,8 +572,8 @@ private:
     GraphicsContextGLIOSurfaceSwapChain* m_swapChain { nullptr };
     // TODO: this should be removed once the context draws to a image buffer. See https://bugs.webkit.org/show_bug.cgi?id=218179 .
     RetainPtr<WebGLLayer> m_webGLLayer;
+    ScopedEGLDefaultDisplay m_displayObj;
     PlatformGraphicsContextGL m_contextObj { nullptr };
-    PlatformGraphicsContextGLDisplay m_displayObj { nullptr };
     PlatformGraphicsContextGLConfig m_configObj { nullptr };
 #endif // PLATFORM(COCOA)
 
@@ -575,7 +582,7 @@ private:
 #endif
 
 #if !USE(ANGLE)
-    typedef HashMap<String, sh::ShaderVariable> ShaderSymbolMap;
+    typedef HashMap<String, UniqueRef<sh::ShaderVariable>> ShaderSymbolMap;
 
     struct ShaderSourceEntry {
         GCGLenum type;
@@ -747,9 +754,6 @@ private:
 #elif USE(TEXTURE_MAPPER)
     friend class TextureMapperGCGLPlatformLayer;
     std::unique_ptr<TextureMapperGCGLPlatformLayer> m_texmapLayer;
-#elif PLATFORM(WIN) && USE(CA)
-    friend class GraphicsContextGLOpenGLPrivate;
-    std::unique_ptr<GraphicsContextGLOpenGLPrivate> m_private;
 #endif
 
     bool m_isForWebGL2 { false };

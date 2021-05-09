@@ -43,8 +43,8 @@ class StatusBubble(View):
     # These queue names are from shortname in https://trac.webkit.org/browser/webkit/trunk/Tools/CISupport/ews-build/config.json
     # FIXME: Auto-generate this list https://bugs.webkit.org/show_bug.cgi?id=195640
     # Note: This list is sorted in the order of which bubbles appear in bugzilla.
-    ALL_QUEUES = ['style', 'ios', 'ios-sim', 'mac', 'mac-debug', 'mac-AS', 'tv', 'tv-sim', 'watch', 'watch-sim', 'gtk', 'wpe', 'wincairo', 'win',
-                  'ios-wk2', 'mac-wk1', 'mac-wk2', 'mac-debug-wk1', 'api-ios', 'api-mac', 'api-gtk',
+    ALL_QUEUES = ['style', 'ios', 'ios-sim', 'mac', 'mac-debug', 'mac-AS-debug', 'tv', 'tv-sim', 'watch', 'watch-sim', 'gtk', 'wpe', 'wincairo', 'win',
+                  'ios-wk2', 'mac-wk1', 'mac-wk2', 'mac-wk2-stress', 'mac-debug-wk1', 'mac-AS-debug-wk2', 'api-ios', 'api-mac', 'api-gtk',
                   'bindings', 'jsc', 'jsc-armv7', 'jsc-armv7-tests', 'jsc-mips', 'jsc-mips-tests', 'jsc-i386', 'webkitperl', 'webkitpy', 'services']
     # FIXME: Auto-generate the queue's trigger relationship
     QUEUE_TRIGGERS = {
@@ -53,7 +53,9 @@ class StatusBubble(View):
         'api-mac': 'mac',
         'mac-wk1': 'mac',
         'mac-wk2': 'mac',
+        'mac-wk2-stress': 'mac',
         'mac-debug-wk1': 'mac-debug',
+        'mac-AS-debug-wk2': 'mac-AS-debug',
         'api-gtk': 'gtk',
         'jsc-mips-tests': 'jsc-mips',
         'jsc-armv7-tests': 'jsc-armv7',
@@ -68,10 +70,11 @@ class StatusBubble(View):
                      '^Printed configuration$', '^Patch contains relevant changes$', '^Deleted .git/index.lock$',
                      '^triggered.*$', '^Found modified ChangeLogs$', '^Created local git commit$', '^Set build summary$',
                      '^Validated commiter$', '^Validated commiter and reviewer$', '^Validated ChangeLog and Reviewer$',
-                     '^Removed flags on bugzilla patch$', '^Checked patch status on other queues$', '^Identifier:.*$']
+                     '^Removed flags on bugzilla patch$', '^Checked patch status on other queues$', '^Identifier:.*$',
+                     '^Updated branch information$', '^worker .* ready$']
     DAYS_TO_CHECK = 1
     BUILDER_ICON = u'\U0001f6e0'
-    TESTER_ICON = u'\U0001f52c'
+    TESTER_ICON = u'\U0001f9ea'
     BUILD_RETRY_MSG = 'retrying build'
 
     def _build_bubble(self, patch, queue, hide_icons=False):
@@ -119,7 +122,11 @@ class StatusBubble(View):
             bubble['details_message'] = 'Build is in-progress. Recent messages:' + self._steps_messages_from_multiple_builds(builds)
         elif build.retried:
             bubble['state'] = 'started'
-            bubble['details_message'] = 'Waiting for available bot to retry the build.\n\nRecent messages:' + self._steps_messages_from_multiple_builds(builds)
+            bubble['details_message'] = 'Waiting for available bot to retry the build.'
+            bubble['url'] = None
+            queue_full_name = Buildbot.queue_name_by_shortname_mapping.get(queue)
+            if queue_full_name:
+                bubble['url'] = 'https://{}/#/builders/{}'.format(config.BUILDBOT_SERVER_HOST, queue_full_name)
         elif build.result == Buildbot.SUCCESS:
             if is_parent_build:
                 if patch.created < (timezone.now() - datetime.timedelta(days=StatusBubble.DAYS_TO_CHECK)):

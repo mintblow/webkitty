@@ -51,7 +51,7 @@
 #import "RuntimeApplicationChecks.h"
 #import "SVGNames.h"
 #import "SVGElement.h"
-#import "SelectionRect.h"
+#import "SelectionGeometry.h"
 #import "TextIterator.h"
 #import "WAKScrollView.h"
 #import "WAKWindow.h"
@@ -1866,6 +1866,32 @@ static void appendStringToResult(NSMutableString *result, NSString *string)
     }).autorelease();
 }
 
+static NSArray *accessibleElementsForObjects(const AXCoreObject::AccessibilityChildrenVector& objects)
+{
+    AXCoreObject::AccessibilityChildrenVector accessibleElements;
+    for (const auto& object : objects) {
+        if (!object)
+            continue;
+
+        Accessibility::enumerateDescendants<AXCoreObject>(*object, true, [&accessibleElements] (AXCoreObject& descendant) {
+            if (descendant.wrapper().isAccessibilityElement)
+                accessibleElements.append(&descendant);
+        });
+    }
+
+    return convertToNSArray(accessibleElements);
+}
+
+- (NSArray *)accessibilityDetailsElements
+{
+    if (![self _prepareAccessibilityCall])
+        return nil;
+
+    AXCoreObject::AccessibilityChildrenVector detailsElements;
+    self.axBackingObject->ariaDetailsElements(detailsElements);
+    return accessibleElementsForObjects(detailsElements);
+}
+
 - (NSArray *)accessibilityErrorMessageElements
 {
     if (![self _prepareAccessibilityCall])
@@ -1873,17 +1899,7 @@ static void appendStringToResult(NSMutableString *result, NSString *string)
 
     AXCoreObject::AccessibilityChildrenVector errorElements;
     self.axBackingObject->ariaErrorMessageElements(errorElements);
-
-    AXCoreObject::AccessibilityChildrenVector accessibleElements;
-    for (const auto& element : errorElements) {
-        ASSERT(element);
-        Accessibility::enumerateDescendants<AXCoreObject>(*element, true, [&accessibleElements] (AXCoreObject& descendant) {
-            if (descendant.wrapper().isAccessibilityElement)
-                accessibleElements.append(&descendant);
-        });
-    }
-
-    return convertToNSArray(accessibleElements);
+    return accessibleElementsForObjects(errorElements);
 }
 
 - (id)accessibilityLinkedElement
@@ -2786,11 +2802,11 @@ static void AXAttributedStringAppendText(NSMutableAttributedString* attrString, 
     if (!range || range->collapsed())
         return nil;
 
-    auto rects = RenderObject::collectSelectionRectsWithoutUnionInteriorLines(*range);
-    if (rects.isEmpty())
+    auto geometries = RenderObject::collectSelectionGeometriesWithoutUnionInteriorLines(*range);
+    if (geometries.isEmpty())
         return nil;
-    return createNSArray(rects, [&] (auto& rect) {
-        return [NSValue valueWithRect:[self convertRectToSpace:FloatRect(rect.rect()) space:AccessibilityConversionSpace::Screen]];
+    return createNSArray(geometries, [&] (auto& geometry) {
+        return [NSValue valueWithRect:[self convertRectToSpace:FloatRect(geometry.rect()) space:AccessibilityConversionSpace::Screen]];
     }).autorelease();
 }
 

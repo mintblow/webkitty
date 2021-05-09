@@ -23,6 +23,7 @@
 
 (version 1)
 (deny default (with partial-symbolication))
+(deny nvram*)
 (allow system-audit file-read-metadata)
 
 ;;;
@@ -458,12 +459,15 @@
 (deny mach-lookup (xpc-service-name-prefix ""))
 (allow mach-lookup
     (xpc-service-name "com.apple.PerformanceAnalysis.animationperfd")
-    (xpc-service-name "com.apple.accessibility.mediaaccessibilityd")
     (xpc-service-name "com.apple.audio.SandboxHelper")
     (xpc-service-name "com.apple.coremedia.videodecoder")
     (xpc-service-name "com.apple.coremedia.videoencoder")
     (xpc-service-name "com.apple.hiservices-xpcservice")
     (xpc-service-name "com.apple.print.normalizerd")
+)
+
+(allow mach-lookup
+    (global-name "com.apple.accessibility.mediaaccessibilityd")
 )
 
 ;; Utility functions for home directory relative path filters
@@ -572,6 +576,42 @@
         "pbs" ;; Needed for NSAttributedString <rdar://problem/10844321>
 ))
 
+#if ENABLE(CFPREFS_DIRECT_MODE)
+(allow file-read*
+    (literal "/Library/Preferences/.GlobalPreferences.plist")
+    (home-subpath "/Library/Preferences/.GlobalPreferences.plist")
+    (home-subpath "/Library/Preferences/.GlobalPreferences_m.plist")
+    (home-subpath "/Library/Preferences/com.apple.security.plist")
+    (home-subpath "/Library/Preferences/com.apple.Accessibility.plist")
+    (home-subpath "/Library/Preferences/com.apple.ATS.plist")
+    (home-subpath "/Library/Preferences/com.apple.CoreGraphics.plist")
+    (home-subpath "/Library/Preferences/com.apple.DownloadAssessment.plist")
+    (home-subpath "/Library/Preferences/com.apple.HIToolbox.plist")
+    (home-subpath "/Library/Preferences/com.apple.LaunchServices.plist")
+    (home-subpath "/Library/Preferences/com.apple.MultitouchSupport.plist")
+    (home-subpath "/Library/Preferences/com.apple.ServicesMenu.Services.plist")
+    (home-subpath "/Library/Preferences/com.apple.ViewBridge.plist")
+    (home-subpath "/Library/Preferences/com.apple.WebKit.plist")
+    (home-subpath "/Library/Preferences/com.apple.WebFoundation.plist")
+    (home-subpath "/Library/Preferences/com.apple.avfoundation.plist")
+    (home-subpath "/Library/Preferences/com.apple.avfoundation.frecents.plist")
+    (home-subpath "/Library/Preferences/com.apple.avfoundation.videoperformancehud.plist")
+    (home-subpath "/Library/Preferences/com.apple.coremedia.plist")
+    (home-subpath "/Library/Preferences/com.apple.crypto.plist")
+    (home-subpath "/Library/Preferences/com.apple.driver.AppleBluetoothMultitouch.mouse.plist")
+    (home-subpath "/Library/Preferences/com.apple.driver.AppleBluetoothMultitouch.trackpad.plist")
+    (home-subpath "/Library/Preferences/com.apple.driver.AppleHIDMouse.plist")
+    (home-subpath "/Library/Preferences/com.apple.lookup.shared.plist")
+    (home-subpath "/Library/Preferences/com.apple.mediaaccessibility.plist")
+    (home-subpath "/Library/Preferences/com.apple.networkConnect.plist")
+    (home-subpath "/Library/Preferences/com.apple.speech.voice.prefs.plist")
+    (home-subpath "/Library/Preferences/com.apple.systemsound.plist")
+    (home-subpath "/Library/Preferences/com.apple.universalaccess.plist")
+    (home-subpath "/Library/Preferences/edu.mit.Kerberos.plist")
+    (home-subpath "/Library/Preferences/pbs.plist")
+)
+#endif
+
 ; (Temporary) backward compatibility with non-CFPreferences readers.
 (allow file-read*
     (literal "/Library/Preferences/com.apple.ViewBridge.plist"))
@@ -643,7 +683,9 @@
 #endif
     (global-name "com.apple.audio.AudioComponentRegistrar")
     (global-name "com.apple.awdd")
+#if !ENABLE(CFPREFS_DIRECT_MODE)
     (global-name "com.apple.cfprefsd.agent")
+#endif
     (global-name "com.apple.cookied")
     (global-name "com.apple.iconservices")
     (global-name "com.apple.iconservices.store")
@@ -667,7 +709,9 @@
        (global-name "com.apple.audio.toolbox.reporting.service")
        (global-name "com.apple.audio.SystemSoundServer-OSX")
        (global-name "com.apple.audio.audiohald")
+#if !ENABLE(CFPREFS_DIRECT_MODE)
        (global-name "com.apple.cfprefsd.daemon")
+#endif
        (global-name "com.apple.coreservices.launchservicesd")
        (global-name "com.apple.fonts")
        (global-name "com.apple.mediaremoted.xpc")
@@ -889,7 +933,14 @@
         (require-all
             (extension "com.apple.webkit.extension.mach")
             (global-name "com.apple.applecamerad")
-        ))
+        )
+#if HAVE(ADDITIONAL_APPLE_CAMERA_SERVICE)
+        (require-all
+            (extension "com.apple.webkit.extension.mach")
+            (global-name "com.apple.appleh13camerad")
+        )
+#endif
+        )
     (allow iokit-open
         ;; QuickTimeUSBVDCDigitizer
         (iokit-user-client-class "IOUSBDeviceUserClientV2")
@@ -903,4 +954,10 @@
 
 (allow iokit-open
     (iokit-user-client-class "AppleAVDUserClient")
+)
+
+(when (equal? (param "CPU") "arm64")
+    (allow iokit-open
+        (iokit-user-client-class "IOMobileFramebufferUserClient")
+    )
 )

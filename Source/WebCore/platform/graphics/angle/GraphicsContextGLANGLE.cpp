@@ -90,14 +90,14 @@ RefPtr<ImageData> GraphicsContextGLOpenGL::readPixelsForPaintResults()
     ScopedPixelStorageMode packSkipPixels(GL_PACK_SKIP_PIXELS, 0, m_isForWebGL2);
     ScopedBufferBinding scopedPixelPackBufferReset(GL_PIXEL_PACK_BUFFER, 0, m_isForWebGL2);
 
-    gl::ReadnPixelsRobustANGLE(0, 0, imageData->width(), imageData->height(), GL_RGBA, GL_UNSIGNED_BYTE, imageData->data()->byteLength(), nullptr, nullptr, nullptr, imageData->data()->data());
+    gl::ReadnPixelsRobustANGLE(0, 0, imageData->width(), imageData->height(), GL_RGBA, GL_UNSIGNED_BYTE, imageData->data().byteLength(), nullptr, nullptr, nullptr, imageData->data().data());
     // FIXME: Rendering to GL_RGB textures with a IOSurface bound to the texture image leaves
     // the alpha in the IOSurface in incorrect state. Also ANGLE gl::ReadPixels will in some
     // cases expose the non-255 values.
     // https://bugs.webkit.org/show_bug.cgi?id=215804
 #if PLATFORM(MAC) || PLATFORM(IOS_FAMILY)
     if (!contextAttributes().alpha)
-        wipeAlphaChannelFromPixels(imageData->width(), imageData->height(), imageData->data()->data());
+        wipeAlphaChannelFromPixels(imageData->width(), imageData->height(), imageData->data().data());
 #endif
     return imageData;
 }
@@ -1711,7 +1711,10 @@ PlatformGLObject GraphicsContextGLOpenGL::createVertexArray()
         return 0;
 
     GLuint array = 0;
-    gl::GenVertexArrays(1, &array);
+    if (m_isForWebGL2)
+        gl::GenVertexArrays(1, &array);
+    else
+        gl::GenVertexArraysOES(1, &array);
     return array;
 }
 
@@ -1721,8 +1724,10 @@ void GraphicsContextGLOpenGL::deleteVertexArray(PlatformGLObject array)
         return;
     if (!makeContextCurrent())
         return;
-
-    gl::DeleteVertexArrays(1, &array);
+    if (m_isForWebGL2)
+        gl::DeleteVertexArrays(1, &array);
+    else
+        gl::DeleteVertexArraysOES(1, &array);
 }
 
 GCGLboolean GraphicsContextGLOpenGL::isVertexArray(PlatformGLObject array)
@@ -1732,15 +1737,19 @@ GCGLboolean GraphicsContextGLOpenGL::isVertexArray(PlatformGLObject array)
     if (!makeContextCurrent())
         return GL_FALSE;
 
-    return gl::IsVertexArray(array);
+    if (m_isForWebGL2)
+        return gl::IsVertexArray(array);
+    return gl::IsVertexArrayOES(array);
 }
 
 void GraphicsContextGLOpenGL::bindVertexArray(PlatformGLObject array)
 {
     if (!makeContextCurrent())
         return;
-
-    gl::BindVertexArray(array);
+    if (m_isForWebGL2)
+        gl::BindVertexArray(array);
+    else
+        gl::BindVertexArrayOES(array);
 }
 
 void GraphicsContextGLOpenGL::getBooleanv(GCGLenum pname, GCGLSpan<GCGLboolean> value)
@@ -2835,6 +2844,7 @@ GraphicsContextGLCV* GraphicsContextGLOpenGL::asCV()
     return m_cv.get();
 }
 #endif
+
 }
 
 #endif // ENABLE(WEBGL) && USE(ANGLE)

@@ -26,12 +26,16 @@
 #import "config.h"
 #import "DefaultWebBrowserChecks.h"
 
+#import "AuxiliaryProcess.h"
+#import "Connection.h"
+#import "Logging.h"
 #import "TCCSPI.h"
 #import <WebCore/RegistrableDomain.h>
 #import <WebCore/RuntimeApplicationChecks.h>
 #import <WebCore/VersionChecks.h>
 #import <wtf/HashMap.h>
 #import <wtf/NeverDestroyed.h>
+#import <wtf/RobinHoodHashMap.h>
 #import <wtf/RunLoop.h>
 #import <wtf/SoftLinking.h>
 #import <wtf/WorkQueue.h>
@@ -58,7 +62,7 @@ Optional<Vector<WebCore::RegistrableDomain>> getAppBoundDomainsTesting(const Str
     if (bundleID.isNull())
         return WTF::nullopt;
 
-    static auto appBoundDomainList = makeNeverDestroyed(HashMap<String, Vector<WebCore::RegistrableDomain>> {
+    static auto appBoundDomainList = makeNeverDestroyed(MemoryCompactLookupOnlyRobinHoodHashMap<String, Vector<WebCore::RegistrableDomain>> {
         {"inAppBrowserPrivacyTestIdentifier"_s, Vector<WebCore::RegistrableDomain> { WebCore::RegistrableDomain::uncheckedCreateFromRegistrableDomainString("127.0.0.1") }},
     });
 
@@ -154,20 +158,38 @@ bool doesAppHaveITPEnabled()
     return currentITPState == ITPState::Enabled;
 }
 
-bool doesParentProcessHaveITPEnabled(Optional<audit_token_t> auditToken, bool hasRequestedCrossWebsiteTrackingPermissionValue)
+bool doesParentProcessHaveITPEnabled(AuxiliaryProcess& auxiliaryProcess, bool hasRequestedCrossWebsiteTrackingPermission)
 {
     ASSERT(isInWebKitChildProcess());
     ASSERT(RunLoop::isMain());
 
-    if (!isParentProcessAFullWebBrowser(auditToken) && !hasRequestedCrossWebsiteTrackingPermissionValue)
+    if (!isParentProcessAFullWebBrowser(auxiliaryProcess) && !hasRequestedCrossWebsiteTrackingPermission)
         return true;
 
-    TCCAccessPreflightResult result = kTCCAccessPreflightDenied;
+    static bool itpEnabled { true };
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+
+        TCCAccessPreflightResult result = kTCCAccessPreflightDenied;
 #if (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 140000) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000)
-    if (auditToken)
+        RefPtr<IPC::Connection> connection = auxiliaryProcess.parentProcessConnection();
+        if (!connection) {
+            ASSERT_NOT_REACHED();
+            RELEASE_LOG_ERROR(IPC, "Unable to get parent process connection");
+            return;
+        }
+
+        auto auditToken = connection->getAuditToken();
+        if (!auditToken) {
+            ASSERT_NOT_REACHED();
+            RELEASE_LOG_ERROR(IPC, "Unable to get parent process audit token");
+            return;
+        }
         result = TCCAccessPreflightWithAuditToken(getkTCCServiceWebKitIntelligentTrackingPrevention(), auditToken.value(), nullptr);
 #endif
-    return result != kTCCAccessPreflightDenied;
+        itpEnabled = result != kTCCAccessPreflightDenied;
+    });
+    return itpEnabled;
 }
 
 static std::atomic<bool> hasCheckedUsageStrings = false;
@@ -206,17 +228,28 @@ bool hasProhibitedUsageStrings()
     return hasProhibitedUsageStrings;
 }
 
-bool isParentProcessAFullWebBrowser(Optional<audit_token_t> auditToken)
+bool isParentProcessAFullWebBrowser(AuxiliaryProcess& auxiliaryProcess)
 {
     ASSERT(isInWebKitChildProcess());
-    if (!auditToken)
-        return false;
 
-    static bool fullWebBrowser;
-
+    static bool fullWebBrowser { false };
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        fullWebBrowser = WTF::hasEntitlement(auditToken.value(), "com.apple.developer.web-browser");
+        RefPtr<IPC::Connection> connection = auxiliaryProcess.parentProcessConnection();
+        if (!connection) {
+            ASSERT_NOT_REACHED();
+            RELEASE_LOG_ERROR(IPC, "Unable to get parent process connection");
+            return;
+        }
+
+        auto auditToken = connection->getAuditToken();
+        if (!auditToken) {
+            ASSERT_NOT_REACHED();
+            RELEASE_LOG_ERROR(IPC, "Unable to get parent process audit token");
+            return;
+        }
+
+        fullWebBrowser = WTF::hasEntitlement(*auditToken, "com.apple.developer.web-browser");
     });
 
     return fullWebBrowser || isRunningTest(WebCore::applicationBundleIdentifier());

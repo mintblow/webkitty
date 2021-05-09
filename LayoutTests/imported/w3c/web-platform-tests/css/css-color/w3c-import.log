@@ -54,6 +54,7 @@ List of files:
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-003.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-function-parsing.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-initial-canvastext.html
+/LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-mix-basic-001.tentative.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-resolving-hsl.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-resolving-hwb.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/color-resolving-keywords.html
@@ -174,10 +175,6 @@ List of files:
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-012.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-013-expected.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-013.html
-/LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-014-expected.html
-/LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-014.html
-/LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-015-expected.html
-/LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-015.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-016-expected.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/predefined-016.html
 /LayoutTests/imported/w3c/web-platform-tests/css/css-color/prophoto-rgb-001-expected.html

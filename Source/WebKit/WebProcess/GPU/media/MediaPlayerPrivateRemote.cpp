@@ -203,6 +203,9 @@ void MediaPlayerPrivateRemote::play()
 void MediaPlayerPrivateRemote::pause()
 {
     m_cachedState.paused = true;
+    auto now = MonotonicTime::now();
+    m_cachedMediaTime += MediaTime::createWithDouble(m_rate * (now - m_cachedMediaTimeQueryTime).value());
+    m_cachedMediaTimeQueryTime = now;
     connection().send(Messages::RemoteMediaPlayerProxy::Pause(), m_id);
 }
 
@@ -236,9 +239,22 @@ void MediaPlayerPrivateRemote::setPrivateBrowsingMode(bool privateMode)
     connection().send(Messages::RemoteMediaPlayerProxy::SetPrivateBrowsingMode(privateMode), m_id);
 }
 
+MediaTime MediaPlayerPrivateRemote::durationMediaTime() const
+{
+#if ENABLE(MEDIA_SOURCE)
+    if (m_mediaSourcePrivate)
+        return m_mediaSourcePrivate->duration();
+#endif
+
+    return m_cachedState.duration;
+}
+
 MediaTime MediaPlayerPrivateRemote::currentMediaTime() const
 {
-    return m_cachedState.currentTime;
+    if (m_cachedState.paused || !m_cachedMediaTime)
+        return m_cachedMediaTime;
+
+    return m_cachedMediaTime + MediaTime::createWithDouble(m_rate * (MonotonicTime::now() - m_cachedMediaTimeQueryTime).seconds());
 }
 
 void MediaPlayerPrivateRemote::seek(const MediaTime& time)
@@ -255,7 +271,9 @@ void MediaPlayerPrivateRemote::seekWithTolerance(const MediaTime& time, const Me
 
 bool MediaPlayerPrivateRemote::didLoadingProgress() const
 {
-    return m_cachedState.loadingProgressed;
+    bool flag = false;
+    connection().sendSync(Messages::RemoteMediaPlayerProxy::DidLoadingProgress(), Messages::RemoteMediaPlayerProxy::DidLoadingProgress::Reply(flag), m_id);
+    return flag;
 }
 
 bool MediaPlayerPrivateRemote::hasVideo() const
@@ -285,6 +303,12 @@ void MediaPlayerPrivateRemote::networkStateChanged(RemoteMediaPlayerState&& stat
 {
     updateCachedState(WTFMove(state));
     m_player->networkStateChanged();
+}
+
+void MediaPlayerPrivateRemote::setReadyState(MediaPlayer::ReadyState readyState)
+{
+    m_cachedState.readyState = readyState;
+    m_player->readyStateChanged();
 }
 
 void MediaPlayerPrivateRemote::readyStateChanged(RemoteMediaPlayerState&& state)
@@ -324,9 +348,11 @@ void MediaPlayerPrivateRemote::rateChanged(double rate)
     m_player->rateChanged();
 }
 
-void MediaPlayerPrivateRemote::playbackStateChanged(bool paused)
+void MediaPlayerPrivateRemote::playbackStateChanged(bool paused, MediaTime&& mediaTime, MonotonicTime&& wallTime)
 {
     m_cachedState.paused = paused;
+    m_cachedMediaTime = mediaTime;
+    m_cachedMediaTimeQueryTime = wallTime;
     m_player->playbackStateChanged();
 }
 
@@ -346,6 +372,12 @@ void MediaPlayerPrivateRemote::sizeChanged(WebCore::FloatSize naturalSize)
 {
     m_cachedState.naturalSize = naturalSize;
     m_player->sizeChanged();
+}
+
+void MediaPlayerPrivateRemote::currentTimeChanged(const MediaTime& mediaTime, const MonotonicTime& queryTime)
+{
+    m_cachedMediaTime = mediaTime;
+    m_cachedMediaTimeQueryTime = queryTime;
 }
 
 void MediaPlayerPrivateRemote::firstVideoFrameAvailable()
@@ -399,14 +431,14 @@ bool MediaPlayerPrivateRemote::canPlayToWirelessPlaybackTarget() const
 
 void MediaPlayerPrivateRemote::updateCachedState(RemoteMediaPlayerState&& state)
 {
-    m_cachedState.currentTime = state.currentTime;
+    const Seconds playbackQualityMetricsTimeout = 30_s;
+
     m_cachedState.duration = state.duration;
     m_cachedState.minTimeSeekable = state.minTimeSeekable;
     m_cachedState.maxTimeSeekable = state.maxTimeSeekable;
     m_cachedState.networkState = state.networkState;
     m_cachedState.readyState = state.readyState;
     m_cachedState.paused = state.paused;
-    m_cachedState.loadingProgressed = state.loadingProgressed;
     m_cachedState.naturalSize = state.naturalSize;
     m_cachedState.movieLoadType = state.movieLoadType;
     m_cachedState.wirelessPlaybackTargetType = state.wirelessPlaybackTargetType;
@@ -422,6 +454,12 @@ void MediaPlayerPrivateRemote::updateCachedState(RemoteMediaPlayerState&& state)
     m_cachedState.canSaveMediaData = state.canSaveMediaData;
     m_cachedState.hasAudio = state.hasAudio;
     m_cachedState.hasVideo = state.hasVideo;
+
+    if (state.videoMetrics)
+        m_cachedState.videoMetrics = state.videoMetrics;
+    if (m_videoPlaybackMetricsUpdateInterval && (MonotonicTime::now() - m_lastPlaybackQualityMetricsQueryTime) > playbackQualityMetricsTimeout)
+        updateVideoPlaybackMetricsUpdateInterval(0_s);
+
     m_cachedState.hasClosedCaptions = state.hasClosedCaptions;
     m_cachedState.hasAvailableVideoFrame = state.hasAvailableVideoFrame;
     m_cachedState.wirelessVideoPlaybackDisabled = state.wirelessVideoPlaybackDisabled;
@@ -833,7 +871,7 @@ unsigned long long MediaPlayerPrivateRemote::totalBytes() const
 }
 
 #if PLATFORM(COCOA)
-void MediaPlayerPrivateRemote::setVideoInlineSizeFenced(const IntSize& size, const WTF::MachSendRight& machSendRight)
+void MediaPlayerPrivateRemote::setVideoInlineSizeFenced(const FloatSize& size, const WTF::MachSendRight& machSendRight)
 {
     connection().send(Messages::RemoteMediaPlayerProxy::SetVideoInlineSizeFenced(size, machSendRight), m_id);
 }
@@ -1016,7 +1054,7 @@ void MediaPlayerPrivateRemote::setCDM(LegacyCDM* cdm)
     if (!cdm)
         return;
 
-    auto remoteCDM = m_manager.gpuProcessConnection().legacyCDMFactory().findCDM(cdm->cdmPrivate());
+    auto remoteCDM = WebProcess::singleton().legacyCDMFactory().findCDM(cdm->cdmPrivate());
     if (!remoteCDM)
         return;
 
@@ -1026,7 +1064,7 @@ void MediaPlayerPrivateRemote::setCDM(LegacyCDM* cdm)
 void MediaPlayerPrivateRemote::setCDMSession(LegacyCDMSession* session)
 {
     if (!session || session->type() != CDMSessionTypeRemote) {
-        connection().send(Messages::RemoteMediaPlayerProxy::SetLegacyCDMSession({ }), m_id);
+        connection().send(Messages::RemoteMediaPlayerProxy::SetLegacyCDMSession(WTF::nullopt), m_id);
         return;
     }
 
@@ -1064,8 +1102,9 @@ void MediaPlayerPrivateRemote::attemptToDecryptWithInstance(CDMInstance& instanc
         connection().send(Messages::RemoteMediaPlayerProxy::AttemptToDecryptWithInstance(downcast<RemoteCDMInstance>(instance).identifier()), m_id);
 }
 
-void MediaPlayerPrivateRemote::waitingForKeyChanged()
+void MediaPlayerPrivateRemote::waitingForKeyChanged(bool waitingForKey)
 {
+    m_waitingForKey = waitingForKey;
     m_player->waitingForKeyChanged();
 }
 
@@ -1077,8 +1116,7 @@ void MediaPlayerPrivateRemote::initializationDataEncountered(const String& initD
 
 bool MediaPlayerPrivateRemote::waitingForKey() const
 {
-    notImplemented();
-    return false;
+    return m_waitingForKey;
 }
 #endif
 
@@ -1139,12 +1177,24 @@ size_t MediaPlayerPrivateRemote::extraMemoryCost() const
     return 0;
 }
 
+void MediaPlayerPrivateRemote::updateVideoPlaybackMetricsUpdateInterval(const Seconds& interval)
+{
+    m_videoPlaybackMetricsUpdateInterval = interval;
+    connection().send(Messages::RemoteMediaPlayerProxy::SetVideoPlaybackMetricsUpdateInterval(m_videoPlaybackMetricsUpdateInterval.value()), m_id);
+}
+
 Optional<VideoPlaybackQualityMetrics> MediaPlayerPrivateRemote::videoPlaybackQualityMetrics()
 {
-    if (!m_wantPlaybackQualityMetrics) {
-        m_wantPlaybackQualityMetrics = true;
-        connection().send(Messages::RemoteMediaPlayerProxy::SetShouldUpdatePlaybackMetrics(true), m_id);
-    }
+    const Seconds maximumPlaybackQualityMetricsSampleTimeDelta = 0.25_s;
+
+    auto now = MonotonicTime::now();
+    auto timeSinceLastQuery = now - m_lastPlaybackQualityMetricsQueryTime;
+    if (!m_videoPlaybackMetricsUpdateInterval)
+        updateVideoPlaybackMetricsUpdateInterval(1_s);
+    else if (std::abs((timeSinceLastQuery - m_videoPlaybackMetricsUpdateInterval).value()) > maximumPlaybackQualityMetricsSampleTimeDelta.value())
+        updateVideoPlaybackMetricsUpdateInterval(timeSinceLastQuery);
+
+    m_lastPlaybackQualityMetricsQueryTime = now;
 
     return m_cachedState.videoMetrics;
 }
@@ -1162,6 +1212,17 @@ void MediaPlayerPrivateRemote::notifyActiveSourceBuffersChanged()
     connection().send(Messages::RemoteMediaPlayerProxy::NotifyActiveSourceBuffersChanged(), m_id);
 }
 
+#if PLATFORM(COCOA)
+bool MediaPlayerPrivateRemote::inVideoFullscreenOrPictureInPicture() const
+{
+#if ENABLE(VIDEO_PRESENTATION_MODE)
+    return !!m_videoLayerManager->videoFullscreenLayer();
+#else
+    return false;
+#endif
+}
+#endif
+
 void MediaPlayerPrivateRemote::applicationWillResignActive()
 {
     connection().send(Messages::RemoteMediaPlayerProxy::ApplicationWillResignActive(), m_id);
@@ -1174,15 +1235,16 @@ void MediaPlayerPrivateRemote::applicationDidBecomeActive()
 
 bool MediaPlayerPrivateRemote::performTaskAtMediaTime(WTF::Function<void()>&& completionHandler, const MediaTime& mediaTime)
 {
-    auto asyncReplyHandler = [weakThis = makeWeakPtr(*this), this, completionHandler = WTFMove(completionHandler)](Optional<MediaTime> currentTime) mutable {
-        if (!weakThis || !currentTime)
+    auto asyncReplyHandler = [weakThis = makeWeakPtr(*this), this, completionHandler = WTFMove(completionHandler)](Optional<MediaTime> currentTime, Optional<MonotonicTime> queryTime) mutable {
+        if (!weakThis || !currentTime || !queryTime)
             return;
 
-        m_cachedState.currentTime = *currentTime;
+        m_cachedMediaTime = *currentTime;
+        m_cachedMediaTimeQueryTime = *queryTime;
         completionHandler();
     };
 
-    connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::PerformTaskAtMediaTime(mediaTime, WallTime::now()), WTFMove(asyncReplyHandler), m_id);
+    connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::PerformTaskAtMediaTime(mediaTime, MonotonicTime::now()), WTFMove(asyncReplyHandler), m_id);
 
     return true;
 }
