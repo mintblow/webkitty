@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 Google Inc. All rights reserved.
- * Copyright (C) 2013-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -103,6 +103,13 @@ enum TreeType {
     "ContextChange",
     "GPUStatusFailure",
     "Timeout"
+};
+
+enum AutoplayPolicy {
+    "Default",
+    "Allow",
+    "AllowWithoutSound",
+    "Deny"
 };
 
 [
@@ -259,6 +266,7 @@ enum TreeType {
     required DOMPointReadOnly topRight;
     required DOMPointReadOnly bottomRight;
     required DOMPointReadOnly bottomLeft;
+    boolean hasLeadingWhitespace = true;
 };
 
 [
@@ -280,6 +288,7 @@ enum TreeType {
     boolean nodeNeedsStyleRecalc(Node node);
     DOMString styleChangeType(Node node);
     DOMString description(any value);
+    undefined log(DOMString value);
 
     // Animated image pausing testing.
     boolean hasPausedImageAnimations(Element element);
@@ -348,6 +357,8 @@ enum TreeType {
     undefined selectColorInColorChooser(HTMLInputElement element, DOMString colorValue);
     sequence<DOMString> formControlStateOfPreviousHistoryItem();
     undefined setFormControlStateOfPreviousHistoryItem(sequence<DOMString> values);
+
+    DOMRect absoluteLineRectFromPoint(long x, long y);
 
     DOMRect absoluteCaretBounds();
     boolean isCaretBlinkingSuspended();
@@ -522,7 +533,7 @@ enum TreeType {
 
     DOMString scrollingStateTreeAsText();
     DOMString scrollingTreeAsText();
-    DOMString mainThreadScrollingReasons(); // FIXME: rename to synchronousScrollingReasons().
+    DOMString synchronousScrollingReasons();
     DOMRectList nonFastScrollableRects();
 
     DOMString repaintRectsAsText();
@@ -688,6 +699,7 @@ enum TreeType {
     [Conditional=VIDEO] DOMString elementBufferingPolicy(HTMLMediaElement media);
     [Conditional=VIDEO] double privatePlayerVolume(HTMLMediaElement media);
     [Conditional=VIDEO] boolean privatePlayerMuted(HTMLMediaElement media);
+    [Conditional=VIDEO] boolean isMediaElementHidden(HTMLMediaElement media);
     [Conditional=VIDEO] undefined setOverridePreferredDynamicRangeMode(HTMLMediaElement media, DOMString mode);
 
     undefined setIsPlayingToBluetoothOverride(optional boolean? isPlaying = null);
@@ -737,7 +749,7 @@ enum TreeType {
     [Conditional=VIDEO] undefined setMediaSessionRestrictions(DOMString mediaType, DOMString restrictions);
     [Conditional=VIDEO] DOMString mediaSessionRestrictions(DOMString mediaType);
     [Conditional=VIDEO] undefined setMediaElementRestrictions(HTMLMediaElement element, DOMString restrictions);
-    [Conditional=WEB_AUDIO] undefined setAudioContextRestrictions((AudioContext or WebKitAudioContext) context, DOMString restrictions);
+    [Conditional=WEB_AUDIO] undefined setAudioContextRestrictions(AudioContext context, DOMString restrictions);
     [Conditional=VIDEO] undefined postRemoteControlCommand(DOMString command, optional unrestricted float argument = 0);
     [Conditional=VIDEO] undefined activeAudioRouteDidChange(boolean shouldPause);
 
@@ -776,16 +788,18 @@ enum TreeType {
 
     [Conditional=CONTENT_FILTERING] readonly attribute MockContentFilterSettings mockContentFilterSettings;
 
-    [Conditional=CSS_SCROLL_SNAP] DOMString scrollSnapOffsets(Element element);
-    [Conditional=CSS_SCROLL_SNAP] boolean isScrollSnapInProgress(Element element);
-    [Conditional=CSS_SCROLL_SNAP] undefined setPlatformMomentumScrollingPredictionEnabled(boolean enabled);
+    DOMString scrollSnapOffsets(Element element);
+    boolean isScrollSnapInProgress(Element element);
+    undefined setPlatformMomentumScrollingPredictionEnabled(boolean enabled);
 
     DOMString pathStringWithShrinkWrappedRects(sequence<double> rectComponents, double radius);
 
     [Conditional=VIDEO] DOMString getCurrentMediaControlsStatusForElement(HTMLMediaElement element);
     [Conditional=VIDEO] undefined setMediaControlsMaximumRightContainerButtonCountOverride(HTMLMediaElement element, unsigned long count);
+    [Conditional=VIDEO] undefined setMediaControlsHidePlaybackRates(HTMLMediaElement element, boolean hidePlaybackRates);
 
     DOMString userVisibleString(DOMURL url);
+    undefined setPageMediaVolume(float volume);
 
     undefined setShowAllPlugins(boolean showAll);
 
@@ -871,6 +885,7 @@ enum TreeType {
     readonly attribute unsigned long long storageAreaMapCount;
 
     unsigned long long elementIdentifier(Element element);
+    [CallWith=Document] boolean isElementAlive(unsigned long long documentIdentifier);
     unsigned long long frameIdentifier(Document document);
     unsigned long long pageIdentifier(Document document);
 
@@ -893,6 +908,7 @@ enum TreeType {
     readonly attribute boolean supportsAudioSession;
     DOMString audioSessionCategory();
     double preferredAudioBufferSize();
+    double currentAudioBufferSize();
     boolean audioSessionActive();
 
     [Conditional=SERVICE_WORKER] Promise<boolean> hasServiceWorkerRegistration(DOMString scopeURL);
@@ -927,6 +943,7 @@ enum TreeType {
 
     [Conditional=VIDEO] MediaUsageState mediaUsageState(HTMLMediaElement element);
     [Conditional=VIDEO] boolean elementShouldDisplayPosterImage(HTMLVideoElement element);
+    [Conditional=VIDEO] readonly attribute unsigned long mediaElementCount;
 
     DOMString ongoingLoadsDescriptions();
     undefined setCaptureExtraNetworkLoadMetricsEnabled(boolean value);
@@ -1029,4 +1046,6 @@ enum TreeType {
     undefined systemBeep();
 
     DOMString dumpStyleResolvers();
+
+    undefined setDocumentAutoplayPolicy(Document document, AutoplayPolicy policy);
 };

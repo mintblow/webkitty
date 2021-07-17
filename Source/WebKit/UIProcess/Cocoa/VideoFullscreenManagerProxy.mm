@@ -625,6 +625,9 @@ void VideoFullscreenManagerProxy::exitFullscreen(PlaybackSessionContextIdentifie
 #if !PLATFORM(IOS_FAMILY)
     IntRect finalWindowRect;
     m_page->rootViewToWindow(enclosingIntRect(finalRect), finalWindowRect);
+#else
+    if (hasMode(WebCore::HTMLMediaElementEnums::VideoFullscreenModeStandard))
+        m_page->fullscreenMayReturnToInline();
 #endif
 
     if (m_mockVideoPresentationModeEnabled) {
@@ -808,7 +811,7 @@ void VideoFullscreenManagerProxy::didExitFullscreen(PlaybackSessionContextIdenti
 
 void VideoFullscreenManagerProxy::didEnterFullscreen(PlaybackSessionContextIdentifier contextId, const WebCore::FloatSize& size)
 {
-    Optional<FloatSize> optionalSize;
+    std::optional<FloatSize> optionalSize;
     if (!size.isEmpty())
         optionalSize = size;
 

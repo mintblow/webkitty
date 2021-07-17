@@ -44,6 +44,7 @@
 #import "WebArchive.h"
 #import "WebBackForwardListInternal.h"
 #import "WebBaseNetscapePluginView.h"
+#import "WebBroadcastChannelRegistry.h"
 #import "WebCache.h"
 #import "WebChromeClient.h"
 #import "WebDOMOperationsPrivate.h"
@@ -133,6 +134,7 @@
 #import <WebCore/ApplicationCacheStorage.h>
 #import <WebCore/BackForwardCache.h>
 #import <WebCore/BackForwardController.h>
+#import <WebCore/BroadcastChannelRegistry.h>
 #import <WebCore/CacheStorageProvider.h>
 #import <WebCore/Chrome.h>
 #import <WebCore/ColorMac.h>
@@ -642,7 +644,7 @@ OptionSet<WebCore::DragOperation> coreDragOperationMask(CocoaDragOperation opera
 }
 
 #if USE(APPKIT)
-static NSDragOperation kit(Optional<WebCore::DragOperation> dragOperation)
+static NSDragOperation kit(std::optional<WebCore::DragOperation> dragOperation)
 {
     if (!dragOperation)
         return NSDragOperationNone;
@@ -666,7 +668,7 @@ static NSDragOperation kit(Optional<WebCore::DragOperation> dragOperation)
     return NSDragOperationNone;
 }
 #else
-static _UIDragOperation kit(Optional<WebCore::DragOperation> dragOperation)
+static _UIDragOperation kit(std::optional<WebCore::DragOperation> dragOperation)
 {
     if (!dragOperation)
         return _UIDragOperationNone;
@@ -691,7 +693,7 @@ static _UIDragOperation kit(Optional<WebCore::DragOperation> dragOperation)
 }
 #endif // USE(APPKIT)
 
-WebDragSourceAction kit(Optional<WebCore::DragSourceAction> action)
+WebDragSourceAction kit(std::optional<WebCore::DragSourceAction> action)
 {
     if (!action)
         return WebDragSourceActionNone;
@@ -1336,7 +1338,7 @@ static RetainPtr<CFMutableSetRef>& allWebViewsSet()
     JSC::JSLockHolder lock(globalObject);
 
     // Make sure the context has a DOMWindow global object, otherwise this context didn't originate from a WebView.
-    if (!WebCore::toJSDOMWindow(globalObject->vm(), globalObject))
+    if (!globalObject->inherits<WebCore::JSDOMWindow>(globalObject->vm()))
         return;
 
     WebCore::reportException(globalObject, toJS(globalObject, exception));
@@ -1535,7 +1537,8 @@ static void WebKitInitializeGamepadProviderIfNecessary()
         makeUniqueRef<WebProgressTrackerClient>(self),
         makeUniqueRef<WebFrameLoaderClient>(),
         makeUniqueRef<WebCore::DummySpeechRecognitionProvider>(),
-        makeUniqueRef<WebCore::MediaRecorderProvider>()
+        makeUniqueRef<WebCore::MediaRecorderProvider>(),
+        WebBroadcastChannelRegistry::getOrCreate([[self preferences] privateBrowsingEnabled])
     );
 #if !PLATFORM(IOS_FAMILY)
     pageConfiguration.chromeClient = new WebChromeClient(self);
@@ -1812,7 +1815,8 @@ static void WebKitInitializeGamepadProviderIfNecessary()
         makeUniqueRef<WebProgressTrackerClient>(self),
         makeUniqueRef<WebFrameLoaderClient>(),
         makeUniqueRef<WebCore::DummySpeechRecognitionProvider>(),
-        makeUniqueRef<WebCore::MediaRecorderProvider>()
+        makeUniqueRef<WebCore::MediaRecorderProvider>(),
+        WebBroadcastChannelRegistry::getOrCreate([[self preferences] privateBrowsingEnabled])
     );
     pageConfiguration.chromeClient = new WebChromeClientIOS(self);
 #if ENABLE(DRAG_SUPPORT)
@@ -2933,10 +2937,11 @@ static bool needsSelfRetainWhileLoadingQuirk()
     settings.setVideoPlaybackRequiresUserGesture(mediaPlaybackRequiresUserGesture || [preferences videoPlaybackRequiresUserGesture]);
     settings.setAudioPlaybackRequiresUserGesture(mediaPlaybackRequiresUserGesture || [preferences audioPlaybackRequiresUserGesture]);
 
-    RuntimeEnabledFeatures::sharedFeatures().setWebSQLDisabled(![preferences webSQLEnabled]);
+    RuntimeEnabledFeatures::sharedFeatures().setWebSQLEnabled([preferences webSQLEnabled]);
     DatabaseManager::singleton().setIsAvailable([preferences databasesEnabled]);
     settings.setLocalStorageDatabasePath([preferences _localStorageDatabasePath]);
     _private->page->setSessionID([preferences privateBrowsingEnabled] ? PAL::SessionID::legacyPrivateSessionID() : PAL::SessionID::defaultSessionID());
+    _private->page->setBroadcastChannelRegistry(WebBroadcastChannelRegistry::getOrCreate([preferences privateBrowsingEnabled]));
     _private->group->storageNamespaceProvider().setSessionIDForTesting([preferences privateBrowsingEnabled] ? PAL::SessionID::legacyPrivateSessionID() : PAL::SessionID::defaultSessionID());
 
 #if PLATFORM(MAC)
@@ -3957,7 +3962,7 @@ IGNORE_WARNINGS_END
 
     WebCore::IntRect newRect;
     {
-        LockHolder locker(_private->pendingFixedPositionLayoutRectMutex);
+        Locker locker { _private->pendingFixedPositionLayoutRectMutex };
         if (CGRectIsNull(_private->pendingFixedPositionLayoutRect))
             return;
         newRect = WebCore::enclosingIntRect(_private->pendingFixedPositionLayoutRect);
@@ -3971,7 +3976,7 @@ IGNORE_WARNINGS_END
 - (void)_setCustomFixedPositionLayoutRectInWebThread:(CGRect)rect synchronize:(BOOL)synchronize
 {
     {
-        LockHolder locker(_private->pendingFixedPositionLayoutRectMutex);
+        Locker locker { _private->pendingFixedPositionLayoutRectMutex };
         _private->pendingFixedPositionLayoutRect = rect;
     }
     if (!synchronize)
@@ -3985,7 +3990,7 @@ IGNORE_WARNINGS_END
 {
     ASSERT(WebThreadIsLocked());
     {
-        LockHolder locker(_private->pendingFixedPositionLayoutRectMutex);
+        Locker locker { _private->pendingFixedPositionLayoutRectMutex };
         _private->pendingFixedPositionLayoutRect = rect;
     }
     [self _synchronizeCustomFixedPositionLayoutRect];
@@ -3993,7 +3998,7 @@ IGNORE_WARNINGS_END
 
 - (BOOL)_fetchCustomFixedPositionLayoutRect:(NSRect*)rect
 {
-    LockHolder locker(_private->pendingFixedPositionLayoutRectMutex);
+    Locker locker { _private->pendingFixedPositionLayoutRectMutex };
     if (CGRectIsNull(_private->pendingFixedPositionLayoutRect))
         return false;
 
@@ -5682,7 +5687,7 @@ static NSString * const backingPropertyOldScaleFactorKey = @"NSBackingPropertyOl
 - (void)doWindowDidChangeScreen
 {
     if (_private && _private->page)
-        _private->page->chrome().windowScreenDidChange(WebCore::displayID(self.window.screen), WTF::nullopt);
+        _private->page->chrome().windowScreenDidChange(WebCore::displayID(self.window.screen), std::nullopt);
 }
 
 - (void)_windowChangedKeyState
@@ -9100,11 +9105,11 @@ bool LayerFlushController::flushLayers()
     [self _prepareForDictionaryLookup];
 
     return WebCore::DictionaryLookup::animationControllerForPopup(dictionaryPopupInfo, self, [self](WebCore::TextIndicator& textIndicator) {
-        [self _setTextIndicator:textIndicator withLifetime:WebCore::TextIndicatorWindowLifetime::Permanent];
+        [self _setTextIndicator:textIndicator withLifetime:WebCore::TextIndicatorLifetime::Permanent];
     }, [self](WebCore::FloatRect rectInRootViewCoordinates) {
         return [self _convertRectFromRootView:rectInRootViewCoordinates];
     }, [self]() {
-        [self _clearTextIndicatorWithAnimation:WebCore::TextIndicatorWindowDismissalAnimation::FadeOut];
+        [self _clearTextIndicatorWithAnimation:WebCore::TextIndicatorDismissalAnimation::FadeOut];
     });
 }
 
@@ -9120,10 +9125,10 @@ bool LayerFlushController::flushLayers()
 
 - (void)_setTextIndicator:(WebCore::TextIndicator&)textIndicator
 {
-    [self _setTextIndicator:textIndicator withLifetime:WebCore::TextIndicatorWindowLifetime::Permanent];
+    [self _setTextIndicator:textIndicator withLifetime:WebCore::TextIndicatorLifetime::Permanent];
 }
 
-- (void)_setTextIndicator:(WebCore::TextIndicator&)textIndicator withLifetime:(WebCore::TextIndicatorWindowLifetime)lifetime
+- (void)_setTextIndicator:(WebCore::TextIndicator&)textIndicator withLifetime:(WebCore::TextIndicatorLifetime)lifetime
 {
     if (!_private->textIndicatorWindow)
         _private->textIndicatorWindow = makeUnique<WebCore::TextIndicatorWindow>(self);
@@ -9133,10 +9138,10 @@ bool LayerFlushController::flushLayers()
     _private->textIndicatorWindow->setTextIndicator(textIndicator, NSRectToCGRect(textBoundingRectInScreenCoordinates), lifetime);
 }
 
-- (void)_clearTextIndicatorWithAnimation:(WebCore::TextIndicatorWindowDismissalAnimation)animation
+- (void)_clearTextIndicatorWithAnimation:(WebCore::TextIndicatorDismissalAnimation)animation
 {
     if (_private->textIndicatorWindow)
-        _private->textIndicatorWindow->clearTextIndicator(WebCore::TextIndicatorWindowDismissalAnimation::FadeOut);
+        _private->textIndicatorWindow->clearTextIndicator(WebCore::TextIndicatorDismissalAnimation::FadeOut);
     _private->textIndicatorWindow = nullptr;
 }
 
@@ -9168,18 +9173,18 @@ bool LayerFlushController::flushLayers()
     [self _prepareForDictionaryLookup];
 
     WebCore::DictionaryLookup::showPopup(dictionaryPopupInfo, self, [self](WebCore::TextIndicator& textIndicator) {
-        [self _setTextIndicator:textIndicator withLifetime:WebCore::TextIndicatorWindowLifetime::Permanent];
+        [self _setTextIndicator:textIndicator withLifetime:WebCore::TextIndicatorLifetime::Permanent];
     }, [self](WebCore::FloatRect rectInRootViewCoordinates) {
         return [self _convertRectFromRootView:rectInRootViewCoordinates];
     }, [weakSelf = WeakObjCPtr<WebView>(self)]() {
-        [weakSelf.get() _clearTextIndicatorWithAnimation:WebCore::TextIndicatorWindowDismissalAnimation::FadeOut];
+        [weakSelf.get() _clearTextIndicatorWithAnimation:WebCore::TextIndicatorDismissalAnimation::FadeOut];
     });
 }
 
 #if !ENABLE(REVEAL)
 - (void)_dictionaryLookupPopoverWillClose:(NSNotification *)notification
 {
-    [self _clearTextIndicatorWithAnimation:WebCore::TextIndicatorWindowDismissalAnimation::FadeOut];
+    [self _clearTextIndicatorWithAnimation:WebCore::TextIndicatorDismissalAnimation::FadeOut];
 }
 #endif // ENABLE(REVEAL)
 

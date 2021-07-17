@@ -28,7 +28,6 @@
 #if PLATFORM(COCOA)
 
 #include "AudioHardwareListener.h"
-#include "GenericTaskQueue.h"
 #include "NowPlayingManager.h"
 #include "PlatformMediaSessionManager.h"
 #include "RemoteCommandListener.h"
@@ -63,6 +62,8 @@ public:
 
     static WEBCORE_EXPORT void updateMediaUsage(PlatformMediaSession&);
 
+    static void ensureCodecsRegistered();
+
 protected:
     void scheduleSessionStatusUpdate() final;
     void updateNowPlayingInfo();
@@ -80,8 +81,6 @@ protected:
     virtual void providePresentingApplicationPIDIfNecessary() { }
 
     PlatformMediaSession* nowPlayingEligibleSession();
-
-    GenericTaskQueue<Timer>& taskQueue() { return m_taskQueue; }
 
     void addSupportedCommand(PlatformMediaSession::RemoteControlCommandType) final;
     void removeSupportedCommand(PlatformMediaSession::RemoteControlCommandType) final;
@@ -111,10 +110,11 @@ private:
     double m_lastUpdatedNowPlayingElapsedTime { NAN };
     MediaUniqueIdentifier m_lastUpdatedNowPlayingInfoUniqueIdentifier;
 
-    GenericTaskQueue<Timer> m_taskQueue;
-
     const std::unique_ptr<NowPlayingManager> m_nowPlayingManager;
     RefPtr<AudioHardwareListener> m_audioHardwareListener;
+
+    AudioHardwareListener::BufferSizeRange m_supportedAudioHardwareBufferSizes;
+    size_t m_defaultBufferSize;
 };
 
 }

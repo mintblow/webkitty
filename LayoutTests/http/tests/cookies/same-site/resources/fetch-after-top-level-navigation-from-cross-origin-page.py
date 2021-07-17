@@ -5,7 +5,7 @@ import os
 import sys
 
 file = __file__.split(':/cygwin')[-1]
-http_root = '/'.join(os.path.dirname(os.path.dirname(os.path.abspath(os.path.dirname(file)))).split('/')[:-1])
+http_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(os.path.dirname(file)))))
 sys.path.insert(0, http_root)
 
 from resources.portabilityLayer import get_cookies
@@ -36,7 +36,7 @@ async function checkResult()
     await shouldHaveCookieWithValue("lax", "5");
 
     debug("<br>Cookies visible in DOM:");
-    shouldNotHaveDOMCookie("strict");
+    shouldHaveDOMCookieWithValue("strict", "5");
     shouldHaveDOMCookieWithValue("implicit-strict", "5");
     shouldHaveDOMCookieWithValue("strict-because-invalid-SameSite-value", "5");
     shouldHaveDOMCookieWithValue("lax", "5");

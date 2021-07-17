@@ -64,7 +64,7 @@ RemoteLayerTreeDrawingArea::RemoteLayerTreeDrawingArea(WebPage& webPage, const W
     , m_updateRenderingTimer(*this, &RemoteLayerTreeDrawingArea::updateRendering)
 {
     webPage.corePage()->settings().setForceCompositingMode(true);
-    m_rootLayer->setName("drawing area root");
+    m_rootLayer->setName(MAKE_STATIC_STRING_IMPL("drawing area root"));
 
     m_commitQueue = adoptOSObject(dispatch_queue_create("com.apple.WebKit.WebContent.RemoteLayerTreeDrawingArea.CommitQueue", nullptr));
 
@@ -231,7 +231,7 @@ void RemoteLayerTreeDrawingArea::acceleratedAnimationDidEnd(uint64_t layerID, co
     m_remoteLayerTreeContext->animationDidEnd(layerID, key);
 }
 
-void RemoteLayerTreeDrawingArea::setViewExposedRect(Optional<WebCore::FloatRect> viewExposedRect)
+void RemoteLayerTreeDrawingArea::setViewExposedRect(std::optional<WebCore::FloatRect> viewExposedRect)
 {
     m_viewExposedRect = viewExposedRect;
 
@@ -387,10 +387,8 @@ void RemoteLayerTreeDrawingArea::updateRendering()
     for (auto& layer : layerTransaction.changedLayers()) {
         if (layer->properties().changedProperties & RemoteLayerTreeTransaction::BackingStoreChanged) {
             hadAnyChangedBackingStore = true;
-            if (layer->properties().backingStore) {
-                if (auto pendingFlusher = layer->properties().backingStore->takePendingFlusher())
-                    flushers.append(WTFMove(pendingFlusher));
-            }
+            if (layer->properties().backingStore)
+                flushers.appendVector(layer->properties().backingStore->takePendingFlushers());
         }
 
         layer->didCommit();

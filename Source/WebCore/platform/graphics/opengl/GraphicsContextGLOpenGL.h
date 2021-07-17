@@ -45,9 +45,15 @@
 #include "PlatformCALayer.h"
 #endif
 
-#if !USE(ANGLE)
+#if USE(ANGLE)
+#include "GraphicsContextGLANGLEUtilities.h"
+#else
 #include "ANGLEWebKitBridge.h"
 #include "ExtensionsGLOpenGLCommon.h"
+#endif
+
+#if PLATFORM(MAC)
+#include "ScopedHighPerformanceGPURequest.h"
 #endif
 
 // FIXME: Find a better way to avoid the name confliction for NO_ERROR.
@@ -72,10 +78,6 @@ class GCGLLayer;
 }
 #endif
 
-#if PLATFORM(MAC)
-#include "ScopedHighPerformanceGPURequest.h"
-#endif
-
 namespace WebCore {
 class ExtensionsGL;
 #if USE(ANGLE)
@@ -87,8 +89,8 @@ class ExtensionsGLOpenGL;
 #endif
 class HostWindow;
 class ImageBuffer;
-class ImageData;
 class MediaPlayer;
+class PixelBuffer;
 #if USE(TEXTURE_MAPPER)
 class TextureMapperGCGLPlatformLayer;
 #endif
@@ -138,10 +140,10 @@ public:
     // Compile a shader without going through ANGLE.
     void compileShaderDirect(PlatformGLObject);
 
-#if !USE(ANGLE)
     // Equivalent to ::glTexImage2D(). Allows pixels==0 with no allocation.
     void texImage2DDirect(GCGLenum target, GCGLint level, GCGLenum internalformat, GCGLsizei width, GCGLsizei height, GCGLint border, GCGLenum format, GCGLenum type, const void* pixels);
 
+#if !USE(ANGLE)
     // Helper to texImage2D with pixel==0 case: pixels are initialized to 0.
     // Return true if no GL error is synthesized.
     // By default, alignment is 4, the OpenGL default setting.
@@ -463,11 +465,11 @@ public:
     void dispatchContextChangedNotification();
 
     void paintRenderingResultsToCanvas(ImageBuffer&) final;
-    RefPtr<ImageData> paintRenderingResultsToImageData() final;
+    std::optional<PixelBuffer> paintRenderingResultsToPixelBuffer() final;
     void paintCompositedResultsToCanvas(ImageBuffer&) final;
 
-    RefPtr<ImageData> readRenderingResultsForPainting();
-    RefPtr<ImageData> readCompositedResultsForPainting();
+    std::optional<PixelBuffer> readRenderingResultsForPainting();
+    std::optional<PixelBuffer> readCompositedResultsForPainting();
 
 #if ENABLE(VIDEO)
     bool copyTextureFromMedia(MediaPlayer&, PlatformGLObject texture, GCGLenum target, GCGLint level, GCGLenum internalFormat, GCGLenum format, GCGLenum type, bool premultiplyAlpha, bool flipY) final;
@@ -526,7 +528,19 @@ public:
     static bool possibleFormatAndTypeForInternalFormat(GCGLenum internalFormat, GCGLenum& format, GCGLenum& type);
 #endif // !USE(ANGLE)
 
-    static void paintToCanvas(const GraphicsContextGLAttributes&, Ref<ImageData>&&, const IntSize& canvasSize, GraphicsContext&);
+    static void paintToCanvas(const GraphicsContextGLAttributes&, PixelBuffer&&, const IntSize& canvasSize, GraphicsContext&);
+
+#if PLATFORM(COCOA)
+    enum class PbufferAttachmentUsage { Read, Write, ReadWrite };
+    // Returns a handle which, if non-null, must be released via the
+    // detach call below.
+    void* createPbufferAndAttachIOSurface(GCGLenum target, PbufferAttachmentUsage, GCGLenum internalFormat, GCGLsizei width, GCGLsizei height, GCGLenum type, IOSurfaceRef, GCGLuint plane);
+    void destroyPbufferAndDetachIOSurface(void* handle);
+#if !PLATFORM(IOS_FAMILY_SIMULATOR)
+    void* attachIOSurfaceToSharedTexture(GCGLenum target, IOSurface*);
+    void detachIOSurfaceFromSharedTexture(void* handle);
+#endif
+#endif
 
 private:
 #if PLATFORM(COCOA)
@@ -552,10 +566,9 @@ private:
     // Did the most recent drawing operation leave the GPU in an acceptable state?
     void checkGPUStatus();
 
-
-    RefPtr<ImageData> readRenderingResults();
-    RefPtr<ImageData> readCompositedResults();
-    RefPtr<ImageData> readPixelsForPaintResults();
+    std::optional<PixelBuffer> readRenderingResults();
+    std::optional<PixelBuffer> readCompositedResults();
+    std::optional<PixelBuffer> readPixelsForPaintResults();
 
     bool reshapeFBOs(const IntSize&);
     void prepareTextureImpl();
@@ -566,6 +579,10 @@ private:
     bool reshapeDisplayBufferBacking();
     bool allocateAndBindDisplayBufferBacking();
     bool bindDisplayBufferBacking(std::unique_ptr<IOSurface> backing, void* pbuffer);
+#endif
+#if USE(ANGLE)
+    // Returns false if context should be lost due to timeout.
+    bool waitAndUpdateOldestFrame() WARN_UNUSED_RETURN;
 #endif
 
 #if PLATFORM(COCOA)
@@ -644,8 +661,8 @@ private:
     String mappedSymbolName(PlatformGLObject program, ANGLEShaderSymbolType, const String& name);
     String mappedSymbolName(PlatformGLObject shaders[2], size_t count, const String& name);
     String originalSymbolName(PlatformGLObject program, ANGLEShaderSymbolType, const String& name);
-    Optional<String> mappedSymbolInShaderSourceMap(PlatformGLObject shader, ANGLEShaderSymbolType, const String& name);
-    Optional<String> originalSymbolInShaderSourceMap(PlatformGLObject shader, ANGLEShaderSymbolType, const String& name);
+    std::optional<String> mappedSymbolInShaderSourceMap(PlatformGLObject shader, ANGLEShaderSymbolType, const String& name);
+    std::optional<String> originalSymbolInShaderSourceMap(PlatformGLObject shader, ANGLEShaderSymbolType, const String& name);
 
     std::unique_ptr<ShaderNameHash> nameHashMapForShaders;
 #endif // !USE(ANGLE)
@@ -779,6 +796,11 @@ private:
 #endif
 #if ENABLE(VIDEO) && USE(AVFOUNDATION)
     std::unique_ptr<GraphicsContextGLCV> m_cv;
+#endif
+#if USE(ANGLE)
+    static constexpr size_t maxPendingFrames = 3;
+    size_t m_oldestFrameCompletionFence { 0 };
+    ScopedGLFence m_frameCompletionFences[maxPendingFrames];
 #endif
 };
 

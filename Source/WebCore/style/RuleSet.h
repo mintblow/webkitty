@@ -67,22 +67,15 @@ public:
 
     ~RuleSet();
 
-    typedef Vector<RuleData, 1> RuleDataVector;
+    typedef Vector<RuleData, 1, CrashOnOverflow, 16, RuleMalloc> RuleDataVector;
     typedef HashMap<AtomString, std::unique_ptr<RuleDataVector>> AtomRuleMap;
 
     struct DynamicMediaQueryRules {
         Vector<Ref<const MediaQuerySet>> mediaQuerySets;
         Vector<size_t> affectedRulePositions;
-        Vector<RuleFeature> ruleFeatures;
+        RuleFeatureVector ruleFeatures;
         bool requiresFullReset { false };
         bool result { true };
-        
-        void shrinkToFit()
-        {
-            mediaQuerySets.shrinkToFit();
-            affectedRulePositions.shrinkToFit();
-            ruleFeatures.shrinkToFit();
-        }
     };
 
     struct MediaQueryCollector {
@@ -94,7 +87,7 @@ public:
         struct DynamicContext {
             Ref<const MediaQuerySet> set;
             Vector<size_t> affectedRulePositions { };
-            Vector<RuleFeature> ruleFeatures { };
+            RuleFeatureVector ruleFeatures { };
         };
         Vector<DynamicContext> dynamicContextStack { };
 
@@ -120,7 +113,7 @@ public:
 
     bool hasViewportDependentMediaQueries() const { return m_hasViewportDependentMediaQueries; }
 
-    Optional<DynamicMediaQueryEvaluationChanges> evaluateDynamicMediaQueryRules(const MediaQueryEvaluator&);
+    std::optional<DynamicMediaQueryEvaluationChanges> evaluateDynamicMediaQueryRules(const MediaQueryEvaluator&);
 
     const RuleFeatureSet& features() const { return m_features; }
 
@@ -154,11 +147,12 @@ private:
     struct CollectedMediaQueryChanges {
         bool requiredFullReset { false };
         Vector<size_t> changedQueryIndexes { };
-        Vector<const Vector<RuleFeature>*> ruleFeatures { };
+        Vector<RuleFeatureVector*> ruleFeatures { };
     };
     CollectedMediaQueryChanges evaluateDynamicMediaQueryRules(const MediaQueryEvaluator&, size_t startIndex);
 
     template<typename Function> void traverseRuleDatas(Function&&);
+
 
     AtomRuleMap m_idRules;
     AtomRuleMap m_classRules;
@@ -175,13 +169,13 @@ private:
     RuleDataVector m_focusPseudoClassRules;
     RuleDataVector m_universalRules;
     Vector<StyleRulePage*> m_pageRules;
-    RuleFeatureSet m_features;
-    Vector<DynamicMediaQueryRules> m_dynamicMediaQueryRules;
-    HashMap<Vector<size_t>, Ref<const RuleSet>> m_mediaQueryInvalidationRuleSetCache;
     unsigned m_ruleCount { 0 };
     bool m_hasHostPseudoClassRulesMatchingInShadowTree { false };
     bool m_autoShrinkToFitEnabled { true };
+    RuleFeatureSet m_features;
     bool m_hasViewportDependentMediaQueries { false };
+    Vector<DynamicMediaQueryRules> m_dynamicMediaQueryRules;
+    HashMap<Vector<size_t>, Ref<const RuleSet>> m_mediaQueryInvalidationRuleSetCache;
 };
 
 inline const RuleSet::RuleDataVector* RuleSet::tagRules(const AtomString& key, bool isHTMLName) const

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2019-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -413,6 +413,7 @@ private:
     TypedTmp g64() { return { newTmp(B3::GP), Types::I64 }; }
     TypedTmp gExternref() { return { newTmp(B3::GP), Types::Externref }; }
     TypedTmp gFuncref() { return { newTmp(B3::GP), Types::Funcref }; }
+    TypedTmp gTypeIdx(Type type) { return { newTmp(B3::GP), type }; }
     TypedTmp f32() { return { newTmp(B3::FP), Types::F32 }; }
     TypedTmp f64() { return { newTmp(B3::FP), Types::F64 }; }
 
@@ -425,6 +426,8 @@ private:
             return g64();
         case TypeKind::Funcref:
             return gFuncref();
+        case TypeKind::TypeIdx:
+            return gTypeIdx(type);
         case TypeKind::Externref:
             return gExternref();
         case TypeKind::F32:
@@ -601,6 +604,7 @@ private:
             case TypeKind::I64:
             case TypeKind::Externref:
             case TypeKind::Funcref:
+            case TypeKind::TypeIdx:
                 resultType = B3::Int64;
                 break;
             case TypeKind::F32:
@@ -650,6 +654,7 @@ private:
         case TypeKind::I64:
         case TypeKind::Externref:
         case TypeKind::Funcref:
+        case TypeKind::TypeIdx:
             return Move;
         case TypeKind::F32:
             return MoveFloat;
@@ -850,11 +855,11 @@ AirIRGenerator::AirIRGenerator(const ModuleInformation& info, B3::Procedure& pro
                 // This allows us to elide stack checks in the Wasm -> Embedder call IC stub. Since these will
                 // spill all arguments to the stack, we ensure that a stack check here covers the
                 // stack that such a stub would use.
-                (Checked<uint32_t>(m_maxNumJSCallArguments) * sizeof(Register) + jsCallingConvention().headerSizeInBytes).unsafeGet()
+                Checked<uint32_t>(m_maxNumJSCallArguments) * sizeof(Register) + jsCallingConvention().headerSizeInBytes
             ));
-            const int32_t checkSize = m_makesCalls ? (wasmFrameSize + extraFrameSize).unsafeGet() : wasmFrameSize.unsafeGet();
+            const int32_t checkSize = m_makesCalls ? (wasmFrameSize + extraFrameSize).value() : wasmFrameSize.value();
             bool needUnderflowCheck = static_cast<unsigned>(checkSize) > Options::reservedZoneSize();
-            bool needsOverflowCheck = m_makesCalls || wasmFrameSize >= minimumParentCheckSize || needUnderflowCheck;
+            bool needsOverflowCheck = m_makesCalls || wasmFrameSize >= static_cast<int32_t>(minimumParentCheckSize) || needUnderflowCheck;
 
             // This allows leaf functions to not do stack checks if their frame size is within
             // certain limits since their caller would have already done the check.
@@ -907,6 +912,7 @@ AirIRGenerator::AirIRGenerator(const ModuleInformation& info, B3::Procedure& pro
         case TypeKind::I64:
         case TypeKind::Externref:
         case TypeKind::Funcref:
+        case TypeKind::TypeIdx:
             append(Move, arg, m_locals[i]);
             break;
         case TypeKind::F32:
@@ -1009,6 +1015,7 @@ auto AirIRGenerator::addLocal(Type type, uint32_t count) -> PartialResult
         switch (type.kind) {
         case TypeKind::Externref:
         case TypeKind::Funcref:
+        case TypeKind::TypeIdx:
             append(Move, Arg::imm(JSValue::encode(jsNull())), local);
             break;
         case TypeKind::I32:
@@ -1044,6 +1051,7 @@ auto AirIRGenerator::addConstant(BasicBlock* block, Type type, uint64_t value) -
     case TypeKind::I64:
     case TypeKind::Externref:
     case TypeKind::Funcref:
+    case TypeKind::TypeIdx:
         append(block, Move, Arg::bigImm(value), result);
         break;
     case TypeKind::F32:
@@ -1088,7 +1096,11 @@ auto AirIRGenerator::addRefIsNull(ExpressionType value, ExpressionType& result) 
 auto AirIRGenerator::addRefFunc(uint32_t index, ExpressionType& result) -> PartialResult
 {
     // FIXME: Emit this inline <https://bugs.webkit.org/show_bug.cgi?id=198506>.
-    result = tmpForType(Types::Funcref);
+    if (Options::useWebAssemblyTypedFunctionReferences()) {
+        SignatureIndex signatureIndex = m_info.signatureIndexFromFunctionIndexSpace(index);
+        result = tmpForType(Type { TypeKind::TypeIdx, Nullable::No, signatureIndex });
+    } else
+        result = tmpForType(Types::Funcref);
     emitCCall(&operationWasmRefFunc, result, instanceValue(), addConstant(Types::I32, index));
 
     return { };
@@ -2163,7 +2175,7 @@ inline TypedTmp AirIRGenerator::emitAtomicLoadOp(ExtAtomicOpType op, Type valueT
         });
     }
 
-    Optional<B3::Air::Opcode> opcode;
+    std::optional<B3::Air::Opcode> opcode;
     if (isX86() || isARM64E())
         opcode = OPCODE_FOR_WIDTH(AtomicXchgAdd, accessWidth(op));
     B3::Air::Opcode nonAtomicOpcode = OPCODE_FOR_CANONICAL_WIDTH(Add, accessWidth(op));
@@ -2235,7 +2247,7 @@ inline void AirIRGenerator::emitAtomicStoreOp(ExtAtomicOpType op, Type valueType
         });
     }
 
-    Optional<B3::Air::Opcode> opcode;
+    std::optional<B3::Air::Opcode> opcode;
     if (isX86() || isARM64E())
         opcode = OPCODE_FOR_WIDTH(AtomicXchg, accessWidth(op));
     B3::Air::Opcode nonAtomicOpcode = B3::Air::Nop;
@@ -2289,7 +2301,7 @@ TypedTmp AirIRGenerator::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueTyp
         });
     }
 
-    Optional<B3::Air::Opcode> opcode;
+    std::optional<B3::Air::Opcode> opcode;
     B3::Air::Opcode nonAtomicOpcode = B3::Air::Nop;
     B3::Commutativity commutativity = B3::NotCommutative;
     switch (op) {
@@ -2486,7 +2498,7 @@ TypedTmp AirIRGenerator::emitAtomicCompareExchange(ExtAtomicOpType op, Type valu
 
     m_currentBlock = failureCase;
     ([&] {
-        Optional<B3::Air::Opcode> opcode;
+        std::optional<B3::Air::Opcode> opcode;
         if (isX86() || isARM64E())
             opcode = OPCODE_FOR_WIDTH(AtomicXchgAdd, accessWidth);
         B3::Air::Opcode nonAtomicOpcode = OPCODE_FOR_CANONICAL_WIDTH(Add, accessWidth);
@@ -2796,8 +2808,7 @@ void AirIRGenerator::emitEntryTierUpCheck()
         return;
 
     auto countdownPtr = g64();
-
-    append(Move, Arg::bigImm(reinterpret_cast<uint64_t>(&m_tierUp->m_counter)), countdownPtr);
+    append(Move, Arg::bigImm(bitwise_cast<uintptr_t>(&m_tierUp->m_counter)), countdownPtr);
 
     auto* patch = addPatchpoint(B3::Void);
     B3::Effects effects = B3::Effects::none();
@@ -2848,8 +2859,7 @@ void AirIRGenerator::emitLoopTierUpCheck(uint32_t loopIndex, const Stack& enclos
     m_tierUp->outerLoops().append(outerLoopIndex);
 
     auto countdownPtr = g64();
-
-    append(Move, Arg::bigImm(reinterpret_cast<uint64_t>(&m_tierUp->m_counter)), countdownPtr);
+    append(Move, Arg::bigImm(bitwise_cast<uintptr_t>(&m_tierUp->m_counter)), countdownPtr);
 
     auto* patch = addPatchpoint(B3::Void);
     B3::Effects effects = B3::Effects::none();
@@ -2981,10 +2991,7 @@ auto AirIRGenerator::addReturn(const ControlData& data, const Stack& returnValue
     B3::PatchpointValue* patch = addPatchpoint(B3::Void);
     patch->setGenerator([] (CCallHelpers& jit, const B3::StackmapGenerationParams& params) {
         auto calleeSaves = params.code().calleeSaveRegisterAtOffsetList();
-
-        for (RegisterAtOffset calleeSave : calleeSaves)
-            jit.load64ToReg(CCallHelpers::Address(GPRInfo::callFrameRegister, calleeSave.offset()), calleeSave.reg());
-
+        jit.emitRestore(calleeSaves);
         jit.emitFunctionEpilogue();
         jit.ret();
     });
@@ -3155,7 +3162,7 @@ B3::PatchpointValue* AirIRGenerator::emitCallPatchpoint(BasicBlock* block, const
     Checked<size_t> newSize = checkedSum<size_t>(patchArgs.size(), args.size());
     RELEASE_ASSERT(!newSize.hasOverflowed());
 
-    patchArgs.grow(newSize.unsafeGet());
+    patchArgs.grow(newSize);
     for (unsigned i = 0; i < args.size(); ++i)
         patchArgs[i + offset] = ConstrainedTmp(args[i], locations.params[i]);
 

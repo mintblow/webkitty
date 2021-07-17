@@ -45,6 +45,7 @@
 #import <pal/spi/cf/CFNetworkSPI.h>
 #import <wtf/BlockPtr.h>
 #import <wtf/CallbackAggregator.h>
+#import <wtf/FileSystem.h>
 #import <wtf/ProcessPrivilege.h>
 #import <wtf/RetainPtr.h>
 #import <wtf/cocoa/RuntimeApplicationChecksCocoa.h>
@@ -90,6 +91,9 @@ void NetworkProcess::platformInitializeNetworkProcessCocoa(const NetworkProcessC
     setSharedHTTPCookieStorage(parameters.uiProcessCookieStorageIdentifier);
 #endif
 
+    // Allow the network process to materialize files stored in the cloud so that loading/reading such files actually succeeds.
+    FileSystem::setAllowsMaterializingDatalessFiles(true, FileSystem::PolicyScope::Process);
+
     // FIXME: Most of what this function does for cache size gets immediately overridden by setCacheModel().
     // - memory cache size passed from UI process is always ignored;
     // - disk cache size passed from UI process is effectively a minimum size.
@@ -108,7 +112,7 @@ RetainPtr<CFDataRef> NetworkProcess::sourceApplicationAuditData() const
     ASSERT(parentProcessConnection());
     if (!parentProcessConnection())
         return nullptr;
-    Optional<audit_token_t> auditToken = parentProcessConnection()->getAuditToken();
+    std::optional<audit_token_t> auditToken = parentProcessConnection()->getAuditToken();
     if (!auditToken)
         return nullptr;
     return adoptCF(CFDataCreate(nullptr, (const UInt8*)&*auditToken, sizeof(*auditToken)));
@@ -208,7 +212,7 @@ void NetworkProcess::setSharedHTTPCookieStorage(const Vector<uint8_t>& identifie
 }
 #endif
 
-void NetworkProcess::flushCookies(const PAL::SessionID& sessionID, CompletionHandler<void()>&& completionHandler)
+void NetworkProcess::flushCookies(PAL::SessionID sessionID, CompletionHandler<void()>&& completionHandler)
 {
     platformFlushCookies(sessionID, WTFMove(completionHandler));
 }
@@ -223,7 +227,7 @@ void saveCookies(NSHTTPCookieStorage *cookieStorage, CompletionHandler<void()>&&
     }).get()];
 }
 
-void NetworkProcess::platformFlushCookies(const PAL::SessionID& sessionID, CompletionHandler<void()>&& completionHandler)
+void NetworkProcess::platformFlushCookies(PAL::SessionID sessionID, CompletionHandler<void()>&& completionHandler)
 {
     ASSERT(hasProcessPrivilege(ProcessPrivilege::CanAccessRawCookies));
     if (auto* networkStorageSession = storageSession(sessionID))

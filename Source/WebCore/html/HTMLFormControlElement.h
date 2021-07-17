@@ -126,6 +126,10 @@ public:
 
     WEBCORE_EXPORT AutofillData autofillData() const;
 
+    virtual bool isSubmitButton() const { return false; }
+
+    virtual String resultForDialogSubmit() const { return attributeWithoutSynchronization(HTMLNames::valueAttr); }
+
     using Node::ref;
     using Node::deref;
 

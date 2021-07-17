@@ -30,7 +30,6 @@
 #include "PlatformCALayer.h"
 #include "PlatformCALayerClient.h"
 #include <wtf/HashMap.h>
-#include <wtf/Optional.h>
 #include <wtf/RetainPtr.h>
 #include <wtf/text/StringHash.h>
 
@@ -96,7 +95,10 @@ public:
     WEBCORE_EXPORT void setUsesDisplayListDrawing(bool) override;
     WEBCORE_EXPORT void setUserInteractionEnabled(bool) override;
 #if HAVE(CORE_ANIMATION_SEPARATED_LAYERS)
-    WEBCORE_EXPORT void setSeparated(bool) override;
+    WEBCORE_EXPORT void setIsSeparated(bool) override;
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+    WEBCORE_EXPORT void setIsSeparatedPortal(bool) override;
+#endif
 #endif
 
     WEBCORE_EXPORT void setBackgroundColor(const Color&) override;
@@ -151,6 +153,7 @@ public:
     WEBCORE_EXPORT void setContentsToSolidColor(const Color&) override;
 #if ENABLE(MODEL_ELEMENT)
     WEBCORE_EXPORT void setContentsToModel(RefPtr<Model>&&) override;
+    WEBCORE_EXPORT PlatformLayerID contentsLayerIDForModel() const override;
 #endif
 
     bool usesContentsLayer() const override { return m_contentsLayerPurpose != ContentsLayerPurpose::None; }
@@ -228,6 +231,10 @@ private:
 
     WEBCORE_EXPORT void setIsTrackingDisplayListReplay(bool) override;
     WEBCORE_EXPORT String replayDisplayListAsText(DisplayList::AsTextFlags) const override;
+
+#if HAVE(CORE_ANIMATION_SEPARATED_LAYERS) && HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+    WEBCORE_EXPORT void setIsDescendentOfSeparatedPortal(bool) override;
+#endif
 
     WEBCORE_EXPORT double backingStoreMemoryEstimate() const override;
 
@@ -450,7 +457,11 @@ private:
     void updateWindRule();
 
 #if HAVE(CORE_ANIMATION_SEPARATED_LAYERS)
-    void updateSeparated();
+    void updateIsSeparated();
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+    void updateIsSeparatedPortal();
+    void updateIsDescendentOfSeparatedPortal();
+#endif
 #endif
 
     enum StructuralLayerPurpose {
@@ -476,11 +487,11 @@ private:
         { }
 
         String animationIdentifier() const { return makeString(m_name, '_', static_cast<unsigned>(m_property), '_', m_index, '_', m_subIndex); }
-        Optional<Seconds> computedBeginTime() const
+        std::optional<Seconds> computedBeginTime() const
         {
             if (m_beginTime)
                 return *m_beginTime - m_timeOffset;
-            return WTF::nullopt;
+            return std::nullopt;
         }
 
         RefPtr<PlatformCAAnimation> m_animation;
@@ -489,7 +500,7 @@ private:
         int m_index;
         int m_subIndex;
         Seconds m_timeOffset { 0_s };
-        Optional<Seconds> m_beginTime;
+        std::optional<Seconds> m_beginTime;
         PlayState m_playState { PlayState::PlayPending };
         bool m_pendingRemoval { false };
     };
@@ -498,8 +509,10 @@ private:
     bool removeCAAnimationFromLayer(LayerPropertyAnimation&);
     void pauseCAAnimationOnLayer(LayerPropertyAnimation&);
 
+    static void dumpAnimations(WTF::TextStream&, const char* category, const Vector<LayerPropertyAnimation>&);
+
     enum MoveOrCopy { Move, Copy };
-    static void moveOrCopyLayerAnimation(MoveOrCopy, const String& animationIdentifier, PlatformCALayer *fromLayer, PlatformCALayer *toLayer);
+    static void moveOrCopyLayerAnimation(MoveOrCopy, const String& animationIdentifier, std::optional<Seconds> beginTime, PlatformCALayer *fromLayer, PlatformCALayer *toLayer);
     void moveOrCopyAnimations(MoveOrCopy, PlatformCALayer* fromLayer, PlatformCALayer* toLayer);
 
     void moveAnimations(PlatformCALayer* fromLayer, PlatformCALayer* toLayer)
@@ -547,23 +560,28 @@ private:
         BackdropFiltersChanged                  = 1LLU << 29,
         BackdropFiltersRectChanged              = 1LLU << 30,
         TilingAreaChanged                       = 1LLU << 31,
-        TilesAdded                              = 1LLU << 32,
-        DebugIndicatorsChanged                  = 1LLU << 33,
-        CustomAppearanceChanged                 = 1LLU << 34,
-        BlendModeChanged                        = 1LLU << 35,
-        ShapeChanged                            = 1LLU << 36,
-        WindRuleChanged                         = 1LLU << 37,
-        UserInteractionEnabledChanged           = 1LLU << 38,
-        NeedsComputeVisibleAndCoverageRect      = 1LLU << 39,
-        EventRegionChanged                      = 1LLU << 40,
+        DebugIndicatorsChanged                  = 1LLU << 32,
+        CustomAppearanceChanged                 = 1LLU << 33,
+        BlendModeChanged                        = 1LLU << 34,
+        ShapeChanged                            = 1LLU << 35,
+        WindRuleChanged                         = 1LLU << 36,
+        UserInteractionEnabledChanged           = 1LLU << 37,
+        NeedsComputeVisibleAndCoverageRect      = 1LLU << 38,
+        EventRegionChanged                      = 1LLU << 39,
 #if ENABLE(SCROLLING_THREAD)
-        ScrollingNodeChanged                    = 1LLU << 41,
+        ScrollingNodeChanged                    = 1LLU << 40,
 #endif
 #if HAVE(CORE_ANIMATION_SEPARATED_LAYERS)
-        SeparatedChanged                        = 1LLU << 42,
+        SeparatedChanged                        = 1LLU << 41,
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+        SeparatedPortalChanged                  = 1LLU << 42,
+        DescendentOfSeparatedPortalChanged      = 1LLU << 43,
+#endif
 #endif
     };
     typedef uint64_t LayerChangeFlags;
+    static const char* layerChangeAsString(LayerChange);
+    static void dumpLayerChangeFlags(TextStream&, LayerChangeFlags);
     void addUncommittedChanges(LayerChangeFlags);
     bool hasDescendantsWithUncommittedChanges() const { return m_hasDescendantsWithUncommittedChanges; }
     void setHasDescendantsWithUncommittedChanges(bool);

@@ -36,7 +36,9 @@
 #include "WebPreferencesStore.h"
 #include <WebCore/ActivityState.h>
 #include <WebCore/Color.h>
+#include <WebCore/DestinationColorSpace.h>
 #include <WebCore/FloatSize.h>
+#include <WebCore/HighlightVisibility.h>
 #include <WebCore/IntSize.h>
 #include <WebCore/LayoutMilestone.h>
 #include <WebCore/MediaProducer.h>
@@ -48,10 +50,6 @@
 #include <WebCore/ViewportArguments.h>
 #include <wtf/HashMap.h>
 #include <wtf/text/WTFString.h>
-
-#if PLATFORM(MAC)
-#include "ColorSpaceData.h"
-#endif
 
 #if ENABLE(APPLICATION_MANIFEST)
 #include <WebCore/ApplicationManifest.h>
@@ -66,7 +64,7 @@ namespace WebKit {
 
 struct WebPageCreationParameters {
     void encode(IPC::Encoder&) const;
-    static Optional<WebPageCreationParameters> decode(IPC::Decoder&);
+    static std::optional<WebPageCreationParameters> decode(IPC::Decoder&);
 
     WebCore::IntSize viewSize;
 
@@ -85,7 +83,7 @@ struct WebPageCreationParameters {
     bool useFixedLayout;
     WebCore::IntSize fixedLayoutSize;
 
-    Optional<WebCore::FloatRect> viewExposedRect;
+    std::optional<WebCore::FloatRect> viewExposedRect;
 
     bool alwaysShowsHorizontalScroller;
     bool alwaysShowsVerticalScroller;
@@ -123,13 +121,13 @@ struct WebPageCreationParameters {
     WebCore::IntSize minimumSizeForAutoLayout;
     WebCore::IntSize sizeToContentAutoSizeMaximumSize;
     bool autoSizingShouldExpandToViewHeight;
-    Optional<WebCore::IntSize> viewportSizeForCSSViewportUnits;
+    std::optional<WebCore::IntSize> viewportSizeForCSSViewportUnits;
     
     WebCore::ScrollPinningBehavior scrollPinningBehavior;
 
-    // FIXME: This should be Optional<WebCore::ScrollbarOverlayStyle>, but we would need to
+    // FIXME: This should be std::optional<WebCore::ScrollbarOverlayStyle>, but we would need to
     // correctly handle enums inside Optionals when encoding and decoding. 
-    Optional<uint32_t> scrollbarOverlayStyle;
+    std::optional<uint32_t> scrollbarOverlayStyle;
 
     bool backgroundExtendsBeyondPage;
 
@@ -146,7 +144,7 @@ struct WebPageCreationParameters {
     bool useElevatedUserInterfaceLevel { false };
 
 #if PLATFORM(MAC)
-    ColorSpaceData colorSpace;
+    std::optional<WebCore::DestinationColorSpace> colorSpace;
     bool useSystemAppearance;
 #endif
 #if ENABLE(META_VIEWPORT)
@@ -155,10 +153,10 @@ struct WebPageCreationParameters {
     double viewportConfigurationLayoutSizeScaleFactor;
     double viewportConfigurationMinimumEffectiveDeviceWidth;
     WebCore::FloatSize viewportConfigurationViewSize;
-    Optional<WebCore::ViewportArguments> overrideViewportArguments;
+    std::optional<WebCore::ViewportArguments> overrideViewportArguments;
 #endif
 #if ENABLE(ATTACHMENT_ELEMENT)
-    Optional<SandboxExtension::HandleArray> attachmentElementExtensionHandles;
+    std::optional<SandboxExtension::HandleArray> attachmentElementExtensionHandles;
 #endif
 #if PLATFORM(IOS_FAMILY)
     WebCore::FloatSize screenSize;
@@ -180,7 +178,7 @@ struct WebPageCreationParameters {
     SandboxExtension::HandleArray gpuMachExtensionHandles;
 #endif
 #if HAVE(STATIC_FONT_REGISTRY)
-    Optional<SandboxExtension::Handle> fontMachExtensionHandle;
+    std::optional<SandboxExtension::Handle> fontMachExtensionHandle;
 #endif
 #if HAVE(APP_ACCENT_COLORS)
     WebCore::Color accentColor;
@@ -197,13 +195,13 @@ struct WebPageCreationParameters {
     OptionSet<WebCore::LayoutMilestone> observedLayoutMilestones;
 
     String overrideContentSecurityPolicy;
-    Optional<double> cpuLimit;
+    std::optional<double> cpuLimit;
 
     HashMap<String, uint64_t> urlSchemeHandlers;
     Vector<String> urlSchemesWithLegacyCustomProtocolHandlers;
 
 #if ENABLE(APPLICATION_MANIFEST)
-    Optional<WebCore::ApplicationManifest> applicationManifest;
+    std::optional<WebCore::ApplicationManifest> applicationManifest;
 #endif
 
     bool needsFontAttributes { false };
@@ -214,15 +212,15 @@ struct WebPageCreationParameters {
 
     UserContentControllerParameters userContentControllerParameters;
 
-    Optional<WebCore::Color> backgroundColor;
+    std::optional<WebCore::Color> backgroundColor;
 
-    Optional<WebCore::PageIdentifier> oldPageID;
+    std::optional<WebCore::PageIdentifier> oldPageID;
 
     String overriddenMediaType;
     Vector<String> corsDisablingPatterns;
     bool userScriptsShouldWaitUntilNotification { true };
     bool loadsSubresources { true };
-    bool loadsFromNetwork { true };
+    std::optional<HashSet<String>> allowedNetworkHosts;
 
     bool crossOriginAccessControlCheckEnabled { true };
     String processDisplayName;
@@ -244,7 +242,7 @@ struct WebPageCreationParameters {
 #if ENABLE(APP_BOUND_DOMAINS)
     bool limitsNavigationsToAppBoundDomains { false };
 #endif
-    bool lastNavigationWasAppBound { false };
+    bool lastNavigationWasAppInitiated { true };
     bool canUseCredentialStorage { true };
 
     WebCore::ShouldRelaxThirdPartyCookieBlocking shouldRelaxThirdPartyCookieBlocking { WebCore::ShouldRelaxThirdPartyCookieBlocking::No };
@@ -258,6 +256,11 @@ struct WebPageCreationParameters {
 #if PLATFORM(IOS)
     bool allowsDeprecatedSynchronousXMLHttpRequestDuringUnload { false };
 #endif
+    
+#if ENABLE(APP_HIGHLIGHTS)
+    WebCore::HighlightVisibility appHighlightsVisible { WebCore::HighlightVisibility::Hidden };
+#endif
+    
 };
 
 } // namespace WebKit

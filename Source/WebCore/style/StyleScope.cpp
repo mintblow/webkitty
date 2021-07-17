@@ -39,6 +39,7 @@
 #include "HTMLSlotElement.h"
 #include "HTMLStyleElement.h"
 #include "InspectorInstrumentation.h"
+#include "Logging.h"
 #include "ProcessingInstruction.h"
 #include "SVGStyleElement.h"
 #include "Settings.h"
@@ -222,6 +223,9 @@ void Scope::addPendingSheet(const Element& element)
     ASSERT(!hasPendingSheet(element));
 
     bool isInHead = ancestorsOfType<HTMLHeadElement>(element).first();
+
+    LOG_WITH_STREAM(StyleSheets, stream << "Scope " << this << " addPendingSheet() " << element << " isInHead " << isInHead);
+
     if (isInHead)
         m_elementsInHeadWithPendingSheets.add(&element);
     else
@@ -310,7 +314,9 @@ void Scope::addStyleSheetCandidateNode(Node& node, bool createdByParser)
         }
         followingNode = n;
     } while (it != begin);
-    
+
+    LOG_WITH_STREAM(StyleSheets, stream << "Scope " << this << " addStyleSheetCandidateNode() " << node);
+
     m_styleSheetCandidateNodes.insertBefore(followingNode, &node);
 }
 
@@ -338,6 +344,8 @@ void Scope::collectActiveStyleSheets(Vector<RefPtr<StyleSheet>>& sheets)
     if (!m_document.settings().authorAndUserStylesEnabled())
         return;
 
+    LOG_WITH_STREAM(StyleSheets, stream << "Scope " << this << " collectActiveStyleSheets()");
+
     for (auto& node : m_styleSheetCandidateNodes) {
         RefPtr<StyleSheet> sheet;
         if (is<ProcessingInstruction>(*node)) {
@@ -345,6 +353,7 @@ void Scope::collectActiveStyleSheets(Vector<RefPtr<StyleSheet>>& sheets)
                 continue;
             // We don't support linking to embedded CSS stylesheets, see <https://bugs.webkit.org/show_bug.cgi?id=49281> for discussion.
             sheet = downcast<ProcessingInstruction>(*node).sheet();
+            LOG_WITH_STREAM(StyleSheets, stream << " adding sheet " << sheet << " from ProcessingInstruction node " << *node);
         } else if (is<HTMLLinkElement>(*node) || is<HTMLStyleElement>(*node) || is<SVGStyleElement>(*node)) {
             Element& element = downcast<Element>(*node);
             AtomString title = element.isInShadowTree() ? nullAtom() : element.attributeWithoutSynchronization(titleAttr);
@@ -374,6 +383,7 @@ void Scope::collectActiveStyleSheets(Vector<RefPtr<StyleSheet>>& sheets)
                 sheet = downcast<HTMLLinkElement>(element).sheet();
             else
                 sheet = downcast<HTMLStyleElement>(element).sheet();
+
             // Check to see if this sheet belongs to a styleset
             // (thus making it PREFERRED or ALTERNATE rather than
             // PERSISTENT).
@@ -394,6 +404,9 @@ void Scope::collectActiveStyleSheets(Vector<RefPtr<StyleSheet>>& sheets)
 
             if (rel.contains("alternate") && title.isEmpty())
                 sheet = nullptr;
+
+            if (sheet)
+                LOG_WITH_STREAM(StyleSheets, stream << " adding sheet " << sheet << " from " << *node);
         }
         if (sheet)
             sheets.append(WTFMove(sheet));
@@ -484,6 +497,8 @@ void Scope::updateActiveStyleSheets(UpdateType updateType)
     }
 
     filterEnabledNonemptyCSSStyleSheets(activeCSSStyleSheets, activeStyleSheets);
+
+    LOG_WITH_STREAM(StyleSheets, stream << "Scope::updateActiveStyleSheets for document " << m_document << " sheets " << activeCSSStyleSheets);
 
     auto styleSheetChange = StyleSheetChange { ResolverUpdateType::Reconstruct };
     if (updateType == UpdateType::ActiveSet)
@@ -652,33 +667,55 @@ void Scope::evaluateMediaQueriesForAppearanceChange()
     });
 }
 
+auto Scope::collectResolverScopes() -> ResolverScopes
+{
+    ASSERT(!m_shadowRoot);
+
+    if (!resolverIfExists())
+        return { };
+
+    ResolverScopes resolverScopes;
+
+    resolverScopes.add(makeRef(*resolverIfExists()), Vector<CheckedPtr<Scope>> { this });
+
+    for (auto* shadowRoot : m_document.inDocumentShadowRoots()) {
+        auto& scope = shadowRoot->styleScope();
+        auto* resolver = scope.resolverIfExists();
+        if (!resolver)
+            continue;
+        resolverScopes.add(makeRef(*resolver), Vector<CheckedPtr<Scope>> { }).iterator->value.append(&scope);
+    }
+    return resolverScopes;
+}
+
 template <typename TestFunction>
 void Scope::evaluateMediaQueries(TestFunction&& testFunction)
 {
-    auto* resolver = resolverIfExists();
-    if (!resolver)
-        return;
+    bool hadChanges = false;
 
-    auto evaluationChanges = testFunction(*resolver);
-    if (evaluationChanges) {
-        switch (evaluationChanges->type) {
-        case DynamicMediaQueryEvaluationChanges::Type::InvalidateStyle: {
-            Invalidator invalidator(evaluationChanges->invalidationRuleSets);
-            invalidator.invalidateStyle(*this);
-            break;
-        }
-        case DynamicMediaQueryEvaluationChanges::Type::ResetStyle:
-            scheduleUpdate(UpdateType::ContentsOrInterpretation);
-            break;
-        }
+    auto resolverScopes = collectResolverScopes();
+    for (auto& [resolver, scopes] : resolverScopes) {
+        auto evaluationChanges = testFunction(resolver.get());
+        if (!evaluationChanges)
+            continue;
+        hadChanges = true;
 
+        for (auto& scope : scopes) {
+            switch (evaluationChanges->type) {
+            case DynamicMediaQueryEvaluationChanges::Type::InvalidateStyle: {
+                Invalidator invalidator(evaluationChanges->invalidationRuleSets);
+                invalidator.invalidateStyle(*scope);
+                break;
+            }
+            case DynamicMediaQueryEvaluationChanges::Type::ResetStyle:
+                scope->scheduleUpdate(UpdateType::ContentsOrInterpretation);
+                break;
+            }
+        }
+    }
+
+    if (hadChanges)
         InspectorInstrumentation::mediaQueryResultChanged(m_document);
-    }
-
-    if (!m_shadowRoot) {
-        for (auto* descendantShadowRoot : m_document.inDocumentShadowRoots())
-            descendantShadowRoot->styleScope().evaluateMediaQueries(testFunction);
-    }
 }
 
 void Scope::didChangeActiveStyleSheetCandidates()

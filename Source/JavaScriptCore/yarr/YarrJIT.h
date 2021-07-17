@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2018 Apple Inc. All rights reserved.
+ * Copyright (C) 2009-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,6 +42,7 @@ class ExecutablePool;
 
 namespace Yarr {
 
+class MatchingContextHolder;
 class YarrCodeBlock;
 
 enum class JITFailureReason : uint8_t {
@@ -53,27 +54,6 @@ enum class JITFailureReason : uint8_t {
     FixedCountParenthesizedSubpattern,
     ParenthesisNestedTooDeep,
     ExecutableMemoryAllocationFailure,
-};
-
-class MatchingContextHolder {
-    WTF_FORBID_HEAP_ALLOCATION;
-public:
-    MatchingContextHolder(VM&, YarrCodeBlock*, MatchFrom matchFrom = MatchFrom::VMThread);
-    ~MatchingContextHolder();
-
-    static ptrdiff_t offsetOfStackLimit() { return OBJECT_OFFSETOF(MatchingContextHolder, m_stackLimit); }
-#if ENABLE(YARR_JIT_ALL_PARENS_EXPRESSIONS)
-    static ptrdiff_t offsetOfPatternContextBuffer() { return OBJECT_OFFSETOF(MatchingContextHolder, m_patternContextBuffer); }
-    static ptrdiff_t offsetOfPatternContextBufferSize() { return OBJECT_OFFSETOF(MatchingContextHolder, m_patternContextBufferSize); }
-#endif
-
-private:
-    VM& m_vm;
-    void* m_stackLimit;
-#if ENABLE(YARR_JIT_ALL_PARENS_EXPRESSIONS)
-    void* m_patternContextBuffer { nullptr };
-    unsigned m_patternContextBufferSize { 0 };
-#endif
 };
 
 #if CPU(ARM64E)
@@ -94,7 +74,7 @@ public:
     YarrCodeBlock() = default;
 
     void setFallBackWithFailureReason(JITFailureReason failureReason) { m_failureReason = failureReason; }
-    Optional<JITFailureReason> failureReason() { return m_failureReason; }
+    std::optional<JITFailureReason> failureReason() { return m_failureReason; }
 
     bool has8BitCode() { return m_ref8.size(); }
     bool has16BitCode() { return m_ref16.size(); }
@@ -196,7 +176,7 @@ public:
         m_ref16 = MacroAssemblerCodeRef<Yarr16BitPtrTag>();
         m_matchOnly8 = MacroAssemblerCodeRef<YarrMatchOnly8BitPtrTag>();
         m_matchOnly16 = MacroAssemblerCodeRef<YarrMatchOnly16BitPtrTag>();
-        m_failureReason = WTF::nullopt;
+        m_failureReason = std::nullopt;
     }
 
 private:
@@ -205,7 +185,7 @@ private:
     MacroAssemblerCodeRef<YarrMatchOnly8BitPtrTag> m_matchOnly8;
     MacroAssemblerCodeRef<YarrMatchOnly16BitPtrTag> m_matchOnly16;
     bool m_usesPatternContextBuffer { false };
-    Optional<JITFailureReason> m_failureReason;
+    std::optional<JITFailureReason> m_failureReason;
 };
 
 enum YarrJITCompileMode {

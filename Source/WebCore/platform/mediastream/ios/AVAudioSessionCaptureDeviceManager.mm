@@ -122,17 +122,17 @@ const Vector<CaptureDevice>& AVAudioSessionCaptureDeviceManager::captureDevices(
     return m_devices.value();
 }
 
-Optional<CaptureDevice> AVAudioSessionCaptureDeviceManager::captureDeviceWithPersistentID(CaptureDevice::DeviceType type, const String& deviceID)
+std::optional<CaptureDevice> AVAudioSessionCaptureDeviceManager::captureDeviceWithPersistentID(CaptureDevice::DeviceType type, const String& deviceID)
 {
     ASSERT_UNUSED(type, type == CaptureDevice::DeviceType::Microphone);
     for (auto& device : captureDevices()) {
         if (device.persistentId() == deviceID)
             return device;
     }
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
-Optional<AVAudioSessionCaptureDevice> AVAudioSessionCaptureDeviceManager::audioSessionDeviceWithUID(const String& deviceID)
+std::optional<AVAudioSessionCaptureDevice> AVAudioSessionCaptureDeviceManager::audioSessionDeviceWithUID(const String& deviceID)
 {
     if (!m_audioSessionCaptureDevices)
         refreshAudioCaptureDevices();
@@ -141,12 +141,12 @@ Optional<AVAudioSessionCaptureDevice> AVAudioSessionCaptureDeviceManager::audioS
         if (device.persistentId() == deviceID)
             return device;
     }
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 void AVAudioSessionCaptureDeviceManager::scheduleUpdateCaptureDevices()
 {
-    getCaptureDevices([] (auto) { });
+    computeCaptureDevices([] { });
 }
 
 void AVAudioSessionCaptureDeviceManager::refreshAudioCaptureDevices()
@@ -166,7 +166,7 @@ void AVAudioSessionCaptureDeviceManager::refreshAudioCaptureDevices()
     setAudioCaptureDevices(WTFMove(newAudioDevices).isolatedCopy());
 }
 
-void AVAudioSessionCaptureDeviceManager::getCaptureDevices(CompletionHandler<void(Vector<CaptureDevice>&&)>&& completion)
+void AVAudioSessionCaptureDeviceManager::computeCaptureDevices(CompletionHandler<void()>&& completion)
 {
     if (m_audioSessionState == AudioSessionState::Inactive) {
         m_audioSessionState = AudioSessionState::Active;
@@ -180,7 +180,7 @@ void AVAudioSessionCaptureDeviceManager::getCaptureDevices(CompletionHandler<voi
         auto newAudioDevices = retrieveAudioSessionCaptureDevices();
         callOnWebThreadOrDispatchAsyncOnMainThread(makeBlockPtr([this, completion = WTFMove(completion), newAudioDevices = WTFMove(newAudioDevices).isolatedCopy()] () mutable {
             setAudioCaptureDevices(WTFMove(newAudioDevices));
-            completion(copyToVector(*m_devices));
+            completion();
         }).get());
     });
 }

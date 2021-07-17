@@ -11,14 +11,19 @@ list(APPEND PAL_PUBLIC_HEADERS
 
     cocoa/AppSSOSoftLink.h
     cocoa/AVFoundationSoftLink.h
-    cocoa/CryptoKitCBridgingSoftLink.h
+    cocoa/CryptoKitPrivateSoftLink.h
+    cocoa/DataDetectorsCoreSoftLink.h
     cocoa/MediaToolboxSoftLink.h
     cocoa/OpenGLSoftLinkCocoa.h
     cocoa/PassKitSoftLink.h
+    cocoa/RevealSoftLink.h
     cocoa/SpeechSoftLink.h
     cocoa/UsageTrackingSoftLink.h
+    cocoa/VisionKitCoreSoftLink.h
 
+    mac/DataDetectorsSoftLink.h
     mac/LookupSoftLink.h
+    mac/QuickLookUISoftLink.h
 
     spi/cf/CFLocaleSPI.h
     spi/cf/CFNetworkConnectionCacheSPI.h
@@ -82,6 +87,7 @@ list(APPEND PAL_PUBLIC_HEADERS
     spi/cocoa/ServersSPI.h
     spi/cocoa/SpeechSPI.h
     spi/cocoa/URLFormattingSPI.h
+    spi/cocoa/VisionKitCoreSPI.h
     spi/cocoa/WebFilterEvaluatorSPI.h
     spi/cocoa/pthreadSPI.h
 
@@ -148,17 +154,22 @@ list(APPEND PAL_SOURCES
     cocoa/AppSSOSoftLink.mm
     cocoa/AVFoundationSoftLink.mm
     cocoa/CryptoKitCBridgingSoftLink.mm
+    cocoa/DataDetectorsCoreSoftLink.mm
     cocoa/FileSizeFormatterCocoa.mm
     cocoa/Gunzip.cpp
     cocoa/MediaToolboxSoftLink.cpp
     cocoa/OpenGLSoftLinkCocoa.mm
     cocoa/PassKitSoftLink.mm
+    cocoa/RevealSoftLink.mm
     cocoa/SpeechSoftLink.mm
     cocoa/UsageTrackingSoftLink.mm
+    cocoa/VisionKitCoreSoftLink.mm
 
     crypto/commoncrypto/CryptoDigestCommonCrypto.cpp
 
+    mac/DataDetectorsSoftLink.mm
     mac/LookupSoftLink.mm
+    mac/QuickLookUISoftLink.mm
 
     spi/cocoa/AccessibilitySupportSoftLink.cpp
 

@@ -177,8 +177,9 @@ Sub32 U:G:32, UZD:G:32
     x86: Tmp, Addr
     x86: Tmp, Index
 
-arm64: Sub32 U:G:32, U:G:32, D:G:32
+arm64: Sub32 U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp
+    Tmp, Imm, Tmp
 
 64: Sub64 U:G:64, UD:G:64
     Tmp, Tmp
@@ -192,6 +193,7 @@ arm64: Sub32 U:G:32, U:G:32, D:G:32
 
 arm64: Sub64 U:G:64, U:G:64, D:G:64
     Tmp, Tmp, Tmp
+    Tmp, Imm, Tmp
 
 SubDouble U:F:64, U:F:64, D:F:64
     arm64: Tmp, Tmp, Tmp
@@ -249,10 +251,22 @@ arm64: MultiplyAdd32 U:G:32, U:G:32, U:G:32, ZD:G:32
 arm64: MultiplyAdd64 U:G:64, U:G:64, U:G:64, D:G:64
     Tmp, Tmp, Tmp, Tmp
 
+arm64: MultiplyAddSignExtend32 U:G:32, U:G:32, U:G:64, D:G:64
+    Tmp, Tmp, Tmp, Tmp
+
+arm64: MultiplyAddZeroExtend32 U:G:32, U:G:32, U:G:64, D:G:64
+    Tmp, Tmp, Tmp, Tmp
+
 arm64: MultiplySub32 U:G:32, U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp, Tmp
 
 arm64: MultiplySub64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Tmp, Tmp
+
+arm64: MultiplySubSignExtend32 U:G:32, U:G:32, U:G:64, D:G:64
+    Tmp, Tmp, Tmp, Tmp
+
+arm64: MultiplySubZeroExtend32 U:G:32, U:G:32, U:G:64, D:G:64
     Tmp, Tmp, Tmp, Tmp
 
 arm64: MultiplyNeg32 U:G:32, U:G:32, ZD:G:32
@@ -261,7 +275,13 @@ arm64: MultiplyNeg32 U:G:32, U:G:32, ZD:G:32
 arm64: MultiplyNeg64 U:G:64, U:G:64, ZD:G:64
     Tmp, Tmp, Tmp
 
-arm64: MultiplySignExtend32 U:G:32, U:G:32, ZD:G:64
+arm64: MultiplyNegSignExtend32 U:G:32, U:G:32, D:G:64
+    Tmp, Tmp, Tmp
+
+arm64: MultiplyNegZeroExtend32 U:G:32, U:G:32, D:G:64
+    Tmp, Tmp, Tmp
+
+arm64: MultiplySignExtend32 U:G:32, U:G:32, D:G:64
     Tmp, Tmp, Tmp
 
 arm64: Div32 U:G:32, U:G:32, ZD:G:32
@@ -655,14 +675,13 @@ Move32 U:G:32, ZD:G:32
 Move32 U:G:32, ZD:G:32, S:G:32
     Addr, Addr, Tmp
 
-# FIXME: StoreZero32 and StoreZero64 are hacks on ARM64, we can do better: https://bugs.webkit.org/show_bug.cgi?id=174821
-StoreZero32 D:G:32
-    Addr
-    Index
+arm64: Store32 U:G:32, ZD:G:32
+    ZeroReg, Addr
+    ZeroReg, Index
 
-64: StoreZero64 D:G:64
-    Addr
-    Index
+arm64: Store64 U:G:64, D:G:64
+    ZeroReg, Addr
+    ZeroReg, Index
 
 SignExtend32ToPtr U:G:32, D:G:Ptr
     Tmp, Tmp
@@ -803,6 +822,102 @@ x86: Xchg32 UD:G:32, UD:G:32 /effects
 x86_64: Xchg64 UD:G:64, UD:G:64 /effects
     Tmp, Addr
     Tmp, Index
+
+arm64: ExtractUnsignedBitfield32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Imm, Imm, Tmp
+
+arm64: ExtractUnsignedBitfield64 U:G:64, U:G:32, U:G:32, D:G:64
+    Tmp, Imm, Imm, Tmp
+
+arm64: InsertUnsignedBitfieldInZero32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Imm, Imm, Tmp
+
+arm64: InsertUnsignedBitfieldInZero64 U:G:64, U:G:32, U:G:32, D:G:64
+    Tmp, Imm, Imm, Tmp
+
+arm64: InsertBitField32 U:G:32, U:G:32, U:G:32, UZD:G:32
+    Tmp, Imm, Imm, Tmp
+
+arm64: InsertBitField64 U:G:64, U:G:32, U:G:32, UD:G:64
+    Tmp, Imm, Imm, Tmp
+
+arm64: ClearBitField32 U:G:32, U:G:32, ZD:G:32
+    Imm, Imm, Tmp
+
+arm64: ClearBitField64 U:G:32, U:G:32, D:G:64
+    Imm, Imm, Tmp
+
+arm64: ClearBitsWithMask32 U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Tmp
+
+arm64: ClearBitsWithMask64 U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Tmp
+
+arm64: OrNot32 U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Tmp
+
+arm64: OrNot64 U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Tmp
+
+arm64: ExtractInsertBitfieldAtLowEnd32 U:G:32, U:G:32, U:G:32, UZD:G:32
+    Tmp, Imm, Imm, Tmp
+
+arm64: ExtractInsertBitfieldAtLowEnd64 U:G:64, U:G:32, U:G:32, UD:G:64
+    Tmp, Imm, Imm, Tmp
+
+arm64: InsertSignedBitfieldInZero32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Imm, Imm, Tmp
+
+arm64: InsertSignedBitfieldInZero64 U:G:64, U:G:32, U:G:32, D:G:64
+    Tmp, Imm, Imm, Tmp
+
+arm64: ExtractSignedBitfield32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Imm, Imm, Tmp
+
+arm64: ExtractSignedBitfield64 U:G:64, U:G:32, U:G:32, D:G:64
+    Tmp, Imm, Imm, Tmp
+
+arm64: ExtractRegister32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: ExtractRegister64 U:G:64, U:G:32, U:G:32, D:G:64
+    Tmp, Tmp, Imm, Tmp
+
+arm64: AddLeftShift32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: AddRightShift32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: AddUnsignedRightShift32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: AddLeftShift64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Imm, Tmp
+
+arm64: AddRightShift64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Imm, Tmp
+
+arm64: AddUnsignedRightShift64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Imm, Tmp
+
+arm64: SubLeftShift32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: SubRightShift32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: SubUnsignedRightShift32 U:G:32, U:G:32, U:G:32, ZD:G:32
+    Tmp, Tmp, Imm, Tmp
+
+arm64: SubLeftShift64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Imm, Tmp
+
+arm64: SubRightShift64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Imm, Tmp
+
+arm64: SubUnsignedRightShift64 U:G:64, U:G:64, U:G:64, D:G:64
+    Tmp, Tmp, Imm, Tmp
 
 # The first operand is rax.
 # FIXME: This formulation means that the boolean result cannot be put in eax, even though all users

@@ -29,7 +29,6 @@ set(TestWTF_SOURCES
     Tests/WTF/BumpPointerAllocator.cpp
     Tests/WTF/CString.cpp
     Tests/WTF/CheckedArithmeticOperations.cpp
-    Tests/WTF/CheckedLockTest.cpp
     Tests/WTF/CompactRefPtrTuple.cpp
     Tests/WTF/CompactUniquePtrTuple.cpp
     Tests/WTF/ConcurrentPtrHashSet.cpp
@@ -67,7 +66,6 @@ set(TestWTF_SOURCES
     Tests/WTF/NakedPtr.cpp
     Tests/WTF/NeverDestroyed.cpp
     Tests/WTF/OptionSet.cpp
-    Tests/WTF/Optional.cpp
     Tests/WTF/Packed.cpp
     Tests/WTF/PackedRef.cpp
     Tests/WTF/PackedRefPtr.cpp
@@ -86,6 +84,7 @@ set(TestWTF_SOURCES
     Tests/WTF/Scope.cpp
     Tests/WTF/ScopedLambda.cpp
     Tests/WTF/SetForScope.cpp
+    Tests/WTF/Span.cpp
     Tests/WTF/StdLibExtras.cpp
     Tests/WTF/StringBuilder.cpp
     Tests/WTF/StringConcatenate.cpp
@@ -93,6 +92,7 @@ set(TestWTF_SOURCES
     Tests/WTF/StringImpl.cpp
     Tests/WTF/StringOperators.cpp
     Tests/WTF/StringParsingBuffer.cpp
+    Tests/WTF/StringToIntegerConversion.cpp
     Tests/WTF/StringView.cpp
     Tests/WTF/SynchronizedFixedQueue.cpp
     Tests/WTF/TextBreakIterator.cpp

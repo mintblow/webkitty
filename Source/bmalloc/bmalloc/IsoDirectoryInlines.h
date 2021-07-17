@@ -51,7 +51,6 @@ EligibilityResult<Config> IsoDirectory<Config, passedNumPages>::takeFirstEligibl
         return EligibilityKind::Full;
 
     Scavenger& scavenger = *Scavenger::get();
-    scavenger.didStartGrowing();
     
     IsoPage<Config>* page = m_pages[pageIndex].get();
     

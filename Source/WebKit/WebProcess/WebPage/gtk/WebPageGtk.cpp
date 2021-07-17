@@ -140,7 +140,7 @@ bool WebPage::hoverSupportedByAnyAvailablePointingDevice() const
 #endif
 }
 
-Optional<PointerCharacteristics> WebPage::pointerCharacteristicsOfPrimaryPointingDevice() const
+std::optional<PointerCharacteristics> WebPage::pointerCharacteristicsOfPrimaryPointingDevice() const
 {
 #if ENABLE(TOUCH_EVENTS)
     if (screenIsTouchPrimaryInputDevice())
@@ -156,14 +156,6 @@ OptionSet<PointerCharacteristics> WebPage::pointerCharacteristicsOfAllAvailableP
         return PointerCharacteristics::Coarse;
 #endif
     return PointerCharacteristics::Fine;
-}
-
-void WebPage::getCenterForZoomGesture(const IntPoint& centerInViewCoordinates, CompletionHandler<void(WebCore::IntPoint&&)>&& completionHandler)
-{
-    IntPoint result = mainFrameView()->rootViewToContents(centerInViewCoordinates);
-    double scale = m_page->pageScaleFactor();
-    result.scale(1 / scale, 1 / scale);
-    completionHandler(WTFMove(result));
 }
 
 void WebPage::collapseSelectionInFrame(FrameIdentifier frameID)

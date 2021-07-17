@@ -180,7 +180,7 @@ static NSArray *keyCommandsPlaceholderHackForEvernote(id self, SEL _cmd)
     // FIXME: While using the high end of the range of DisplayIDs makes a collision with real, non-RemoteLayerTreeDrawingArea
     // DisplayIDs less likely, it is not entirely safe to have a RemoteLayerTreeDrawingArea and TiledCoreAnimationDrawingArea
     // coeexist in the same process.
-    _page->windowScreenDidChange(std::numeric_limits<uint32_t>::max() - _page->webPageID().toUInt64(), WTF::nullopt);
+    _page->windowScreenDidChange(std::numeric_limits<uint32_t>::max() - _page->webPageID().toUInt64(), std::nullopt);
 
 #if ENABLE(FULLSCREEN_API)
     _page->setFullscreenClient(makeUnique<WebKit::FullscreenClient>(self.webView));
@@ -326,6 +326,11 @@ static NSArray *keyCommandsPlaceholderHackForEvernote(id self, SEL _cmd)
     return _webView.getAutoreleased();
 }
 
+- (UIView *)rootContentView
+{
+    return _rootContentView.get();
+}
+
 - (void)willMoveToWindow:(UIWindow *)newWindow
 {
     [super willMoveToWindow:newWindow];
@@ -349,6 +354,8 @@ static NSArray *keyCommandsPlaceholderHackForEvernote(id self, SEL _cmd)
 
     if (self.window)
         [self setUpInteraction];
+    else
+        [self cleanUpInteractionPreviewContainers];
 }
 
 ALLOW_DEPRECATED_DECLARATIONS_BEGIN
@@ -555,8 +562,12 @@ static WebCore::FloatBoxExtent floatBoxExtent(UIEdgeInsets insets)
 
 - (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator
 {
-    if (context.nextFocusedView == self)
-        [self _becomeFirstResponderWithSelectionMovingForward:context.focusHeading == UIFocusHeadingNext completionHandler:nil];
+    if (context.nextFocusedView == self) {
+        if (context.focusHeading & UIFocusHeadingNext)
+            [self _becomeFirstResponderWithSelectionMovingForward:YES completionHandler:nil];
+        else if (context.focusHeading & UIFocusHeadingPrevious)
+            [self _becomeFirstResponderWithSelectionMovingForward:NO completionHandler:nil];
+    }
 }
 
 #pragma mark Internal

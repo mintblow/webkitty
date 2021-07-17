@@ -36,6 +36,7 @@
 #include "IDLTypes.h"
 #include "JSWebXRSession.h"
 #include "JSXRReferenceSpaceType.h"
+#include "Navigator.h"
 #include "Page.h"
 #include "PlatformXR.h"
 #include "RequestAnimationFrameCallback.h"
@@ -53,20 +54,26 @@ namespace WebCore {
 
 WTF_MAKE_ISO_ALLOCATED_IMPL(WebXRSystem);
 
-Ref<WebXRSystem> WebXRSystem::create(ScriptExecutionContext& scriptExecutionContext)
+Ref<WebXRSystem> WebXRSystem::create(Navigator& navigator)
 {
-    return adoptRef(*new WebXRSystem(scriptExecutionContext));
+    return adoptRef(*new WebXRSystem(navigator));
 }
 
-WebXRSystem::WebXRSystem(ScriptExecutionContext& scriptExecutionContext)
-    : ActiveDOMObject(&scriptExecutionContext)
-    , m_defaultInlineDevice(scriptExecutionContext)
+WebXRSystem::WebXRSystem(Navigator& navigator)
+    : ActiveDOMObject(navigator.scriptExecutionContext())
+    , m_navigator(makeWeakPtr(navigator))
+    , m_defaultInlineDevice(*navigator.scriptExecutionContext())
 {
     m_inlineXRDevice = makeWeakPtr(m_defaultInlineDevice);
     suspendIfNeeded();
 }
 
 WebXRSystem::~WebXRSystem() = default;
+
+Navigator* WebXRSystem::navigator()
+{
+    return m_navigator.get();
+}
 
 // https://immersive-web.github.io/webxr/#ensures-an-immersive-xr-device-is-selected
 void WebXRSystem::ensureImmersiveXRDeviceIsSelected(CompletionHandler<void()>&& callback)
@@ -249,7 +256,7 @@ struct WebXRSystem::ResolvedRequestedFeatures {
 }
 
 // https://immersive-web.github.io/webxr/#resolve-the-requested-features
-Optional<WebXRSystem::ResolvedRequestedFeatures> WebXRSystem::resolveRequestedFeatures(XRSessionMode mode, const XRSessionInit& init, PlatformXR::Device* device, JSC::JSGlobalObject& globalObject) const
+std::optional<WebXRSystem::ResolvedRequestedFeatures> WebXRSystem::resolveRequestedFeatures(XRSessionMode mode, const XRSessionInit& init, PlatformXR::Device* device, JSC::JSGlobalObject& globalObject) const
 {
     // 1. Let consentRequired be an empty list of DOMString.
     // 2. Let consentOptional be an empty list of DOMString.
@@ -318,14 +325,14 @@ Optional<WebXRSystem::ResolvedRequestedFeatures> WebXRSystem::resolveRequestedFe
     };
 
     if (!parseFeatures(requiredFeaturesWithDefaultFeatures, ParsingMode::Strict))
-        return WTF::nullopt;
+        return std::nullopt;
 
     parseFeatures(init.optionalFeatures, ParsingMode::Loose);
     return resolvedFeatures;
 }
 
 // https://immersive-web.github.io/webxr/#request-the-xr-permission
-Optional<WebXRSystem::FeatureList> WebXRSystem::resolveFeaturePermissions(XRSessionMode mode, const XRSessionInit& init, PlatformXR::Device* device, JSC::JSGlobalObject& globalObject) const
+std::optional<WebXRSystem::FeatureList> WebXRSystem::resolveFeaturePermissions(XRSessionMode mode, const XRSessionInit& init, PlatformXR::Device* device, JSC::JSGlobalObject& globalObject) const
 {
     // 1. Set status's granted to an empty FrozenArray.
     // 2. Let requiredFeatures be descriptor's requiredFeatures.
@@ -339,7 +346,7 @@ Optional<WebXRSystem::FeatureList> WebXRSystem::resolveFeaturePermissions(XRSess
     //  6.1. Set status's state to "denied".
     //  6.2. Abort these steps.
     if (!resolvedFeatures)
-        return WTF::nullopt;
+        return std::nullopt;
 
     // 7. Let (consentRequired, consentOptional, granted) be the fields of result.
     // 8. The user agent MAY at this point ask the user's permission for the calling algorithm to use any of the features

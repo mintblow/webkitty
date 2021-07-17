@@ -592,7 +592,7 @@ const GlobalProperty = constexpr GlobalProperty
 const GlobalVar = constexpr GlobalVar
 const GlobalLexicalVar = constexpr GlobalLexicalVar
 const ClosureVar = constexpr ClosureVar
-const LocalClosureVar = constexpr LocalClosureVar
+const ResolvedClosureVar = constexpr ResolvedClosureVar
 const ModuleVar = constexpr ModuleVar
 const GlobalPropertyWithVarInjectionChecks = constexpr GlobalPropertyWithVarInjectionChecks
 const GlobalVarWithVarInjectionChecks = constexpr GlobalVarWithVarInjectionChecks
@@ -1994,13 +1994,10 @@ slowPathOp(define_accessor_property)
 slowPathOp(define_data_property)
 slowPathOp(enumerator_generic_pname)
 slowPathOp(enumerator_structure_pname)
-slowPathOp(get_by_id_with_this)
 slowPathOp(get_by_val_with_this)
 slowPathOp(get_direct_pname)
 slowPathOp(get_enumerable_length)
 slowPathOp(get_property_enumerator)
-slowPathOp(greater)
-slowPathOp(greatereq)
 slowPathOp(has_enumerable_indexed_property)
 slowPathOp(has_enumerable_property)
 
@@ -2011,12 +2008,8 @@ if not JSVALUE64
     slowPathOp(get_prototype_of)
 end
 
-slowPathOp(in_by_id)
-slowPathOp(in_by_val)
 slowPathOp(is_callable)
 slowPathOp(is_constructor)
-slowPathOp(less)
-slowPathOp(lesseq)
 slowPathOp(mod)
 slowPathOp(new_array_buffer)
 slowPathOp(new_array_with_spread)
@@ -2043,6 +2036,10 @@ macro llintSlowPathOp(opcodeName)
     end)
 end
 
+llintSlowPathOp(in_by_id)
+llintSlowPathOp(in_by_val)
+llintSlowPathOp(has_private_name)
+llintSlowPathOp(has_private_brand)
 llintSlowPathOp(del_by_id)
 llintSlowPathOp(del_by_val)
 llintSlowPathOp(instanceof)
@@ -2069,6 +2066,7 @@ llintSlowPathOp(super_sampler_begin)
 llintSlowPathOp(super_sampler_end)
 llintSlowPathOp(throw)
 llintSlowPathOp(try_get_by_id)
+llintSlowPathOp(get_by_id_with_this)
 
 llintOp(op_switch_string, unused, macro (unused, unused, unused)
     callSlowPath(_llint_slow_path_switch_string)
@@ -2110,6 +2108,21 @@ llintJumpTrueOrFalseOp(jfalse, OpJfalse,
     # Truthy Cell
     macro (dispatch) dispatch() end)
 
+compareOp(greater, OpGreater,
+    macro (left, right, result) cigt left, right, result end,
+    macro (left, right, result) cdgt left, right, result end)
+
+compareOp(greatereq, OpGreatereq,
+    macro (left, right, result) cigteq left, right, result end,
+    macro (left, right, result) cdgteq left, right, result end)
+
+compareOp(less, OpLess,
+    macro (left, right, result) cilt left, right, result end,
+    macro (left, right, result) cdlt left, right, result end)
+
+compareOp(lesseq, OpLesseq,
+    macro (left, right, result) cilteq left, right, result end,
+    macro (left, right, result) cdlteq left, right, result end)
 
 compareJumpOp(
     jless, OpJless,

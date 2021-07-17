@@ -88,6 +88,7 @@ uint32_t GetDeviceVendorId(id<MTLDevice> metalDevice);
 AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
                                                 const std::string &source,
                                                 NSDictionary<NSString *, NSObject *> * substitutionDictionary,
+                                                bool enableFastMath,
                                                 AutoObjCPtr<NSError *> *error);
 
 AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
@@ -98,12 +99,12 @@ AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
                                                 const char *source,
                                                 size_t sourceLen,
                                                 NSDictionary<NSString *, NSObject *> * substitutionDictionary,
+                                                bool enableFastMath,
                                                 AutoObjCPtr<NSError *> *error);
 
 AutoObjCPtr<id<MTLLibrary>> CreateShaderLibraryFromBinary(id<MTLDevice> metalDevice,
                                                           const uint8_t *binarySource,
                                                           size_t binarySourceLen,
-                                                          NSDictionary<NSString *, NSObject *> * substitutionDictionary,
                                                           AutoObjCPtr<NSError *> *error);
 
 bool SupportsIOSGPUFamily(id<MTLDevice> device, uint8_t iOSFamily);
@@ -181,6 +182,18 @@ angle::Result TriangleFanBoundCheck(ContextMtl *context, size_t numTris);
 angle::Result GetTriangleFanIndicesCount(ContextMtl *context,
                                          GLsizei vetexCount,
                                          uint32_t *numElemsOut);
+
+angle::Result CreateMslShader(Context *context,
+                              id<MTLLibrary> shaderLib,
+                              NSString * shaderName,
+                              MTLFunctionConstantValues *funcConstants,
+                              AutoObjCPtr<id<MTLFunction>> *shaderOut);
+
+angle::Result CreateMslShader(Context * _Nonnull context,
+                              id<MTLLibrary> shaderLib,
+                              NSString * _Nonnull shaderName,
+                              MTLFunctionConstantValues * _Nullable funcConstants,
+                              id<MTLFunction> _Nullable  * _Nonnull  shaderOut);
 
 NS_ASSUME_NONNULL_END
 }  // namespace mtl

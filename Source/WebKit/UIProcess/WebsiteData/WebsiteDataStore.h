@@ -253,6 +253,9 @@ public:
     const String& resolvedServiceWorkerRegistrationDirectory() const { return m_resolvedConfiguration->serviceWorkerRegistrationDirectory(); }
     const String& resolvedResourceLoadStatisticsDirectory() const { return m_resolvedConfiguration->resourceLoadStatisticsDirectory(); }
     const String& resolvedHSTSStorageDirectory() const { return m_resolvedConfiguration->hstsStorageDirectory(); }
+#if HAVE(ARKIT_INLINE_PREVIEW)
+    const String& resolvedModelElementCacheDirectory() const { return m_resolvedConfiguration->modelElementCacheDirectory(); }
+#endif
 
     void allowSpecificHTTPSCertificateForHost(const WebCertificateInfo*, const String& host);
 
@@ -329,6 +332,9 @@ public:
 #if USE(GLIB)
     static WTF::String defaultHSTSDirectory();
 #endif
+#if HAVE(ARKIT_INLINE_PREVIEW)
+    static WTF::String defaultModelElementCacheDirectory();
+#endif
     static WTF::String defaultIndexedDBDatabaseDirectory();
     static WTF::String defaultCacheStorageDirectory();
     static WTF::String defaultMediaCacheDirectory();
@@ -351,7 +357,9 @@ public:
 #endif
     void updateBundleIdentifierInNetworkProcess(const String&, CompletionHandler<void()>&&);
     void clearBundleIdentifierInNetworkProcess(CompletionHandler<void()>&&);
-    
+
+    void countNonDefaultSessionSets(CompletionHandler<void(size_t)>&&);
+
 private:
     enum class ForceReinitialization : bool { No, Yes };
 #if ENABLE(APP_BOUND_DOMAINS)
@@ -390,7 +398,7 @@ private:
     void registerWithSessionIDMap();
 
 #if ENABLE(APP_BOUND_DOMAINS)
-    static Optional<HashSet<WebCore::RegistrableDomain>> appBoundDomainsIfInitialized();
+    static std::optional<HashSet<WebCore::RegistrableDomain>> appBoundDomainsIfInitialized();
     constexpr static const std::atomic<bool> isAppBoundITPRelaxationEnabled = false;
     static void forwardAppBoundDomainsToITPIfInitialized(CompletionHandler<void()>&&);
     void setAppBoundDomainsForITP(const HashSet<WebCore::RegistrableDomain>&, CompletionHandler<void()>&&);
@@ -452,7 +460,7 @@ private:
     UniqueRef<SOAuthorizationCoordinator> m_soAuthorizationCoordinator;
 #endif
 #if ENABLE(RESOURCE_LOAD_STATISTICS)
-    mutable Optional<WebCore::ThirdPartyCookieBlockingMode> m_thirdPartyCookieBlockingMode; // Lazily computed.
+    mutable std::optional<WebCore::ThirdPartyCookieBlockingMode> m_thirdPartyCookieBlockingMode; // Lazily computed.
 #endif
 };
 

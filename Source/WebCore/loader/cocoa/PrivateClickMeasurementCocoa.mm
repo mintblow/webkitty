@@ -26,66 +26,72 @@
 #import "config.h"
 #import "PrivateClickMeasurement.h"
 
-#import <pal/cocoa/CryptoKitCBridgingSoftLink.h>
+#import <pal/cocoa/CryptoKitPrivateSoftLink.h>
 
 namespace WebCore {
 
-bool PrivateClickMeasurement::calculateAndUpdateSourceUnlinkableToken(const String& serverPublicKeyBase64URL)
+std::optional<String> PrivateClickMeasurement::calculateAndUpdateSourceUnlinkableToken(const String& serverPublicKeyBase64URL)
 {
 #if HAVE(RSA_BSSA)
     {
-        Vector<uint8_t> serverPublicKeyData;
-        if (!base64URLDecode(serverPublicKeyBase64URL, serverPublicKeyData))
-            return false;
-        auto serverPublicKey = adoptNS([[NSData alloc] initWithBytes:serverPublicKeyData.data() length:serverPublicKeyData.size()]);
+        auto serverPublicKeyData = base64URLDecode(serverPublicKeyBase64URL);
+        if (!serverPublicKeyData)
+            return "Could not decode the source's public key data."_s;
+        auto serverPublicKey = adoptNS([[NSData alloc] initWithBytes:serverPublicKeyData->data() length:serverPublicKeyData->size()]);
 
-        // FIXME(222018): Check error.
-        m_sourceUnlinkableToken.blinder = adoptNS([PAL::allocRSABSSATokenBlinderInstance() initWithPublicKey:serverPublicKey.get() error:nullptr]);
+        NSError* nsError = 0;
+        m_sourceUnlinkableToken.blinder = adoptNS([PAL::allocRSABSSATokenBlinderInstance() initWithPublicKey:serverPublicKey.get() error:&nsError]);
+        if (nsError)
+            return nsError.localizedDescription;
         if (!m_sourceUnlinkableToken.blinder)
-            return false;
+            return "Did not get a source unlinkable token blinder."_s;
     }
 
-    // FIXME(222018): Check error.
-    m_sourceUnlinkableToken.waitingToken = [m_sourceUnlinkableToken.blinder tokenWaitingActivationWithContent:nullptr error:nullptr];
+    NSError* nsError = 0;
+    m_sourceUnlinkableToken.waitingToken = [m_sourceUnlinkableToken.blinder tokenWaitingActivationWithContent:nullptr error:&nsError];
+    if (nsError)
+        return nsError.localizedDescription;
     if (!m_sourceUnlinkableToken.waitingToken)
-        return false;
+        return "Did not get a source unlinkable token waiting token."_s;
 
-    m_sourceUnlinkableToken.valueBase64URL = WTF::base64URLEncode([m_sourceUnlinkableToken.waitingToken blindedMessage].bytes, [m_sourceUnlinkableToken.waitingToken blindedMessage].length);
-    return true;
+    m_sourceUnlinkableToken.valueBase64URL = base64URLEncodeToString([m_sourceUnlinkableToken.waitingToken blindedMessage].bytes, [m_sourceUnlinkableToken.waitingToken blindedMessage].length);
+    return std::nullopt;
 #else
     UNUSED_PARAM(serverPublicKeyBase64URL);
-    return false;
+    return "Unlinkable tokens are not supported by this platform."_s;
 #endif // HAVE(RSA_BSSA)
 }
 
-bool PrivateClickMeasurement::calculateAndUpdateSourceSecretToken(const String& serverResponseBase64URL)
+std::optional<String> PrivateClickMeasurement::calculateAndUpdateSourceSecretToken(const String& serverResponseBase64URL)
 {
 #if HAVE(RSA_BSSA)
     if (!m_sourceUnlinkableToken.waitingToken)
-        return false;
+        return "Did not find a source unlinkable token waiting token."_s;
 
     {
-        Vector<uint8_t> serverResponseData;
-        if (!base64URLDecode(serverResponseBase64URL, serverResponseData))
-            return false;
-        auto serverResponse = adoptNS([[NSData alloc] initWithBytes:serverResponseData.data() length:serverResponseData.size()]);
+        auto serverResponseData = base64URLDecode(serverResponseBase64URL);
+        if (!serverResponseData)
+            return "Could not decode source response data."_s;
+        auto serverResponse = adoptNS([[NSData alloc] initWithBytes:serverResponseData->data() length:serverResponseData->size()]);
 
-        // FIXME(222018): Check error.
-        m_sourceUnlinkableToken.readyToken = [m_sourceUnlinkableToken.waitingToken activateTokenWithServerResponse:serverResponse.get() error:nullptr];
+        NSError* nsError = 0;
+        m_sourceUnlinkableToken.readyToken = [m_sourceUnlinkableToken.waitingToken activateTokenWithServerResponse:serverResponse.get() error:&nsError];
+        if (nsError)
+            return nsError.localizedDescription;
         if (!m_sourceUnlinkableToken.readyToken)
-            return false;
+            return "Did not get a source unlinkable token ready token."_s;
     }
 
     SourceSecretToken token;
-    token.tokenBase64URL = WTF::base64URLEncode([m_sourceUnlinkableToken.readyToken tokenContent].bytes, [m_sourceUnlinkableToken.readyToken tokenContent].length);
-    token.keyIDBase64URL = WTF::base64URLEncode([m_sourceUnlinkableToken.readyToken keyId].bytes, [m_sourceUnlinkableToken.readyToken keyId].length);
-    token.signatureBase64URL = WTF::base64URLEncode([m_sourceUnlinkableToken.readyToken signature].bytes, [m_sourceUnlinkableToken.readyToken signature].length);
+    token.tokenBase64URL = base64URLEncodeToString([m_sourceUnlinkableToken.readyToken tokenContent].bytes, [m_sourceUnlinkableToken.readyToken tokenContent].length);
+    token.keyIDBase64URL = base64URLEncodeToString([m_sourceUnlinkableToken.readyToken keyId].bytes, [m_sourceUnlinkableToken.readyToken keyId].length);
+    token.signatureBase64URL = base64URLEncodeToString([m_sourceUnlinkableToken.readyToken signature].bytes, [m_sourceUnlinkableToken.readyToken signature].length);
 
     m_sourceSecretToken = WTFMove(token);
-    return true;
+    return std::nullopt;
 #else
     UNUSED_PARAM(serverResponseBase64URL);
-    return false;
+    return "Unlinkable tokens are not supported by this platform."_s;
 #endif // HAVE(RSA_BSSA)
 }
 

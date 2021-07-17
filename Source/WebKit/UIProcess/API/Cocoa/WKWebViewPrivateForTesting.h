@@ -34,9 +34,9 @@ typedef enum {
     WKWebViewAudioRoutingArbitrationStatusActive,
 } WKWebViewAudioRoutingArbitrationStatus;
 
-struct WKAppBoundNavigationTestingData {
-    BOOL hasLoadedAppBoundRequestTesting;
-    BOOL hasLoadedNonAppBoundRequestTesting;
+struct WKAppPrivacyReportTestingData {
+    BOOL hasLoadedAppInitiatedRequestTesting;
+    BOOL hasLoadedNonAppInitiatedRequestTesting;
     BOOL didPerformSoftUpdate;
 };
 
@@ -58,7 +58,7 @@ struct WKAppBoundNavigationTestingData {
 - (void)_disableBackForwardSnapshotVolatilityForTesting;
 
 - (void)_denyNextUserMediaRequest;
-@property (nonatomic, setter=_setMediaCaptureReportingDelayForTesting:) double _mediaCaptureReportingDelayForTesting WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+@property (nonatomic, setter=_setMediaCaptureReportingDelayForTesting:) double _mediaCaptureReportingDelayForTesting WK_API_AVAILABLE(macos(12.0), ios(15.0));
 @property (nonatomic, readonly) BOOL _wirelessVideoPlaybackDisabled;
 
 - (BOOL)_beginBackSwipeForTesting;
@@ -95,16 +95,16 @@ struct WKAppBoundNavigationTestingData {
 
 - (void)_doAfterActivityStateUpdate:(void (^)(void))completionHandler;
 
-- (NSNumber *)_suspendMediaPlaybackCounter WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+- (NSNumber *)_suspendMediaPlaybackCounter WK_API_AVAILABLE(macos(12.0), ios(15.0));
 
-- (void)_setPrivateClickMeasurementOverrideTimerForTesting:(BOOL)overrideTimer completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-- (void)_setPrivateClickMeasurementAttributionReportURLsForTesting:(NSURL *)sourceURL destinationURL:(NSURL *)destinationURL completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-- (void)_setPrivateClickMeasurementAttributionTokenPublicKeyURLForTesting:(NSURL *)url completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
-- (void)_setPrivateClickMeasurementAttributionTokenSignatureURLForTesting:(NSURL *)url completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(WK_MAC_TBA), ios(WK_IOS_TBA));
+- (void)_setPrivateClickMeasurementOverrideTimerForTesting:(BOOL)overrideTimer completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(12.0), ios(15.0));
+- (void)_setPrivateClickMeasurementAttributionReportURLsForTesting:(NSURL *)sourceURL destinationURL:(NSURL *)destinationURL completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(12.0), ios(15.0));
+- (void)_setPrivateClickMeasurementAttributionTokenPublicKeyURLForTesting:(NSURL *)url completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(12.0), ios(15.0));
+- (void)_setPrivateClickMeasurementAttributionTokenSignatureURLForTesting:(NSURL *)url completionHandler:(void(^)(void))completionHandler WK_API_AVAILABLE(macos(12.0), ios(15.0));
 
-- (void)_lastNavigationWasAppBound:(void(^)(BOOL))completionHandler;
-- (void)_appBoundNavigationData:(void(^)(struct WKAppBoundNavigationTestingData data))completionHandler;
-- (void)_clearAppBoundNavigationData:(void(^)(void))completionHandler;
+- (void)_lastNavigationWasAppInitiated:(void(^)(BOOL))completionHandler;
+- (void)_appPrivacyReportTestingData:(void(^)(struct WKAppPrivacyReportTestingData data))completionHandler;
+- (void)_clearAppPrivacyReportTestingData:(void(^)(void))completionHandler;
 
 - (void)_createMediaSessionCoordinatorForTesting:(id <_WKMediaSessionCoordinator>)privateCoordinator completionHandler:(void(^)(BOOL))completionHandler;
 
@@ -141,6 +141,7 @@ struct _WKMediaPositionState {
 - (void)playSessionWithCompletion:(void(^)(BOOL))completionHandler;
 - (void)pauseSessionWithCompletion:(void(^)(BOOL))completionHandler;
 - (void)setSessionTrack:(NSString*)trackIdentifier withCompletion:(void(^)(BOOL))completionHandler;
+- (void)coordinatorStateChanged:(_WKMediaSessionCoordinatorState)state;
 @end
 
 @protocol _WKMediaSessionCoordinator <NSObject>
@@ -155,7 +156,7 @@ struct _WKMediaPositionState {
 - (void)positionStateChanged:(struct _WKMediaPositionState * _Nullable)state;
 - (void)readyStateChanged:(_WKMediaSessionReadyState)state;
 - (void)playbackStateChanged:(_WKMediaSessionPlaybackState)state;
-- (void)coordinatorStateChanged:(_WKMediaSessionCoordinatorState)state;
+- (void)trackIdentifierChanged:(NSString *)trackIdentifier;
 @end
 
 NS_ASSUME_NONNULL_END

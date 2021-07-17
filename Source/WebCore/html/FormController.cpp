@@ -25,6 +25,7 @@
 #include "HTMLInputElement.h"
 #include "ScriptDisallowedScope.h"
 #include <wtf/NeverDestroyed.h>
+#include <wtf/WeakHashMap.h>
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/StringConcatenateNumbers.h>
 #include <wtf/text/StringToIntegerConversion.h>
@@ -62,13 +63,13 @@ static inline void serializeFormControlStateTo(const FormControlState& formContr
         stateVector.append(value.isNull() ? emptyString() : value);
 }
 
-static inline Optional<FormControlState> deserializeFormControlState(const Vector<String>& stateVector, size_t& index)
+static inline std::optional<FormControlState> deserializeFormControlState(const Vector<String>& stateVector, size_t& index)
 {
     if (index >= stateVector.size())
-        return WTF::nullopt;
-    auto size = parseIntegerAllowingTrailingJunk<size_t>(stateVector[index++]).valueOr(0);
+        return std::nullopt;
+    auto size = parseIntegerAllowingTrailingJunk<size_t>(stateVector[index++]).value_or(0);
     if (index + size > stateVector.size())
-        return WTF::nullopt;
+        return std::nullopt;
     Vector<String> subvector;
     subvector.reserveInitialCapacity(size);
     for (size_t i = 0; i < size; ++i)
@@ -197,7 +198,7 @@ std::unique_ptr<SavedFormState> SavedFormState::deserialize(const Vector<String>
 {
     if (index >= stateVector.size())
         return nullptr;
-    auto itemCount = parseIntegerAllowingTrailingJunk<size_t>(stateVector[index++]).valueOr(0);
+    auto itemCount = parseIntegerAllowingTrailingJunk<size_t>(stateVector[index++]).value_or(0);
     if (!itemCount)
         return nullptr;
     auto savedFormState = makeUnique<SavedFormState>();
@@ -272,10 +273,8 @@ public:
     void willDeleteForm(HTMLFormElement*);
 
 private:
-    typedef HashMap<HTMLFormElement*, AtomString> FormToKeyMap;
-    typedef HashMap<String, unsigned> FormSignatureToNextIndexMap;
-    FormToKeyMap m_formToKeyMap;
-    FormSignatureToNextIndexMap m_formSignatureToNextIndexMap;
+    WeakHashMap<HTMLFormElement, AtomString> m_formToKeyMap;
+    HashMap<String, unsigned> m_formSignatureToNextIndexMap;
 };
 
 static inline void recordFormStructure(const HTMLFormElement& form, StringBuilder& builder)
@@ -284,7 +283,7 @@ static inline void recordFormStructure(const HTMLFormElement& form, StringBuilde
     // 2 is enough to distinguish forms in webkit.org/b/91209#c0
     const size_t namedControlsToBeRecorded = 2;
     auto& controls = form.unsafeAssociatedElements();
-    builder.appendLiteral(" [");
+    builder.append(" [");
     for (size_t i = 0, namedControls = 0; i < controls.size() && namedControls < namedControlsToBeRecorded; ++i) {
         auto* formAssociatedElement = controls[i]->asFormAssociatedElement();
         if (!formAssociatedElement->isFormControlElementWithState())
@@ -296,8 +295,7 @@ static inline void recordFormStructure(const HTMLFormElement& form, StringBuilde
         if (name.isEmpty())
             continue;
         namedControls++;
-        builder.append(name);
-        builder.append(' ');
+        builder.append(name, ' ');
     }
     builder.append(']');
 }
@@ -324,7 +322,7 @@ AtomString FormKeyGenerator::formKey(const HTMLFormControlElementWithState& cont
         return formKeyForNoOwner;
     }
 
-    return m_formToKeyMap.ensure(form.get(), [this, &form] {
+    return m_formToKeyMap.ensure(*form, [this, &form] {
         auto signature = formSignature(*form);
         auto nextIndex = m_formSignatureToNextIndexMap.add(signature, 0).iterator->value++;
         // FIXME: Would be nice to have makeAtomString to use to optimize the case where the string already exists.
@@ -334,8 +332,8 @@ AtomString FormKeyGenerator::formKey(const HTMLFormControlElementWithState& cont
 
 void FormKeyGenerator::willDeleteForm(HTMLFormElement* form)
 {
-    ASSERT(form);
-    m_formToKeyMap.remove(form);
+    RELEASE_ASSERT(form);
+    m_formToKeyMap.remove(*form);
 }
 
 // ----------------------------------------------------------------------------

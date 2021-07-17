@@ -53,8 +53,6 @@
 
 namespace WebCore {
 
-using namespace PAL;
-
 #if !USE(LIBWEBRTC)
 static std::unique_ptr<PeerConnectionBackend> createNoPeerConnectionBackend(RTCPeerConnection&)
 {
@@ -63,13 +61,13 @@ static std::unique_ptr<PeerConnectionBackend> createNoPeerConnectionBackend(RTCP
 
 CreatePeerConnectionBackend PeerConnectionBackend::create = createNoPeerConnectionBackend;
 
-Optional<RTCRtpCapabilities> PeerConnectionBackend::receiverCapabilities(ScriptExecutionContext&, const String&)
+std::optional<RTCRtpCapabilities> PeerConnectionBackend::receiverCapabilities(ScriptExecutionContext&, const String&)
 {
     ASSERT_NOT_REACHED();
     return { };
 }
 
-Optional<RTCRtpCapabilities> PeerConnectionBackend::senderCapabilities(ScriptExecutionContext&, const String&)
+std::optional<RTCRtpCapabilities> PeerConnectionBackend::senderCapabilities(ScriptExecutionContext&, const String&)
 {
     ASSERT_NOT_REACHED();
     return { };
@@ -606,7 +604,12 @@ ExceptionOr<Ref<RTCRtpTransceiver>> PeerConnectionBackend::addTransceiver(Ref<Me
 void PeerConnectionBackend::generateCertificate(Document& document, const CertificateInformation& info, DOMPromiseDeferred<IDLInterface<RTCCertificate>>&& promise)
 {
 #if USE(LIBWEBRTC)
-    LibWebRTCCertificateGenerator::generateCertificate(document.securityOrigin(), document.page()->libWebRTCProvider(), info, WTFMove(promise));
+    auto* page = document.page();
+    if (!page) {
+        promise.reject(InvalidStateError);
+        return;
+    }
+    LibWebRTCCertificateGenerator::generateCertificate(document.securityOrigin(), page->libWebRTCProvider(), info, WTFMove(promise));
 #else
     UNUSED_PARAM(document);
     UNUSED_PARAM(expires);

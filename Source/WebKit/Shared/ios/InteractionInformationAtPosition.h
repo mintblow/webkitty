@@ -52,7 +52,7 @@ struct InteractionInformationAtPosition {
     InteractionInformationRequest request;
 
     bool canBeValid { true };
-    Optional<bool> nodeAtPositionHasDoubleClickHandler;
+    std::optional<bool> nodeAtPositionHasDoubleClickHandler;
     bool isSelectable { false };
     bool isSelected { false };
     bool prefersDraggingOverTextSelection { false };
@@ -63,6 +63,7 @@ struct InteractionInformationAtPosition {
     bool isAttachment { false };
     bool isAnimatedImage { false };
     bool isElement { false };
+    bool isContentEditable { false };
     WebCore::ScrollingNodeID containerScrollingNodeID { 0 };
 #if ENABLE(DATA_DETECTION)
     bool isDataDetectorLink { false };
@@ -72,6 +73,7 @@ struct InteractionInformationAtPosition {
 #endif
     bool shouldNotUseIBeamInEditableContent { false };
     bool isImageOverlayText { false };
+    bool isHorizontalWritingMode { false };
     WebCore::FloatPoint adjustedPointForNodeRespondingToClickEvents;
     URL url;
     URL imageURL;
@@ -85,19 +87,20 @@ struct InteractionInformationAtPosition {
     String textBefore;
     String textAfter;
 
-    float caretHeight { 0 };
+    float caretLength { 0 };
     WebCore::FloatRect lineCaretExtent;
 
-    Optional<WebCore::Cursor> cursor;
+    std::optional<WebCore::Cursor> cursor;
 
     WebCore::TextIndicatorData linkIndicator;
 #if ENABLE(DATA_DETECTION)
     String dataDetectorIdentifier;
     RetainPtr<NSArray> dataDetectorResults;
+    WebCore::IntRect dataDetectorBounds;
 #endif
 
-    Optional<WebCore::ElementContext> elementContext;
-    Optional<WebCore::ElementContext> imageElementContext;
+    std::optional<WebCore::ElementContext> elementContext;
+    std::optional<WebCore::ElementContext> imageElementContext;
 
     // Copy compatible optional bits forward (for example, if we have a InteractionInformationAtPosition
     // with snapshots in it, and perform another request for the same point without requesting the snapshots,

@@ -365,7 +365,7 @@ public:
     FontVariationSettings fontVariationSettings() const { return fontDescription().variationSettings(); }
     FontSelectionValue fontWeight() const { return fontDescription().weight(); }
     FontSelectionValue fontStretch() const { return fontDescription().stretch(); }
-    Optional<FontSelectionValue> fontItalic() const { return fontDescription().italic(); }
+    std::optional<FontSelectionValue> fontItalic() const { return fontDescription().italic(); }
 
     const Length& textIndent() const { return m_rareInheritedData->indent; }
     TextAlignMode textAlign() const { return static_cast<TextAlignMode>(m_inheritedFlags.textAlign); }
@@ -527,6 +527,7 @@ public:
     bool hasAspectRatio() const { return aspectRatioType() == AspectRatioType::Ratio || aspectRatioType() == AspectRatioType::AutoAndRatio; }
     OptionSet<Containment> contain() const { return m_rareNonInheritedData->contain; }
     bool containsLayout() const { return m_rareNonInheritedData->contain.contains(Containment::Layout); }
+    bool containsSize() const { return m_rareNonInheritedData->contain.contains(Containment::Size); }
     BoxAlignment boxAlign() const { return static_cast<BoxAlignment>(m_rareNonInheritedData->deprecatedFlexibleBox->align); }
     BoxDirection boxDirection() const { return static_cast<BoxDirection>(m_inheritedFlags.boxDirection); }
     float boxFlex() const { return m_rareNonInheritedData->deprecatedFlexibleBox->flex; }
@@ -754,12 +755,10 @@ public:
     const Length& scrollPaddingLeft() const;
     const Length& scrollPaddingRight() const;
 
-#if ENABLE(CSS_SCROLL_SNAP)
     bool hasSnapPosition() const;
     const ScrollSnapType scrollSnapType() const;
     const ScrollSnapAlign& scrollSnapAlign() const;
     ScrollSnapStop scrollSnapStop() const;
-#endif
 
 #if ENABLE(TOUCH_EVENTS)
     Color tapHighlightColor() const { return m_rareInheritedData->tapHighlightColor; }
@@ -778,7 +777,7 @@ public:
 #if ENABLE(TEXT_AUTOSIZING)
     TextSizeAdjustment textSizeAdjust() const { return m_rareInheritedData->textSizeAdjust; }
     AutosizeStatus autosizeStatus() const;
-    bool isIdempotentTextAutosizingCandidate(Optional<AutosizeStatus> overrideStatus = WTF::nullopt) const;
+    bool isIdempotentTextAutosizingCandidate(std::optional<AutosizeStatus> overrideStatus = std::nullopt) const;
 #endif
 
     TextSecurity textSecurity() const { return static_cast<TextSecurity>(m_rareInheritedData->textSecurity); }
@@ -820,8 +819,9 @@ public:
 
 #if ENABLE(CSS_COMPOSITING)
     BlendMode blendMode() const { return static_cast<BlendMode>(m_rareNonInheritedData->effectiveBlendMode); }
-    void setBlendMode(BlendMode mode) { SET_VAR(m_rareNonInheritedData, effectiveBlendMode, static_cast<unsigned>(mode)); }
+    void setBlendMode(BlendMode);
     bool hasBlendMode() const { return static_cast<BlendMode>(m_rareNonInheritedData->effectiveBlendMode) != BlendMode::Normal; }
+    bool isInSubtreeWithBlendMode() const { return m_rareInheritedData->isInSubtreeWithBlendMode; }
 
     Isolation isolation() const { return static_cast<Isolation>(m_rareNonInheritedData->isolation); }
     void setIsolation(Isolation isolation) { SET_VAR(m_rareNonInheritedData, isolation, static_cast<unsigned>(isolation)); }
@@ -969,7 +969,7 @@ public:
     void setFontVariationSettings(FontVariationSettings);
     void setFontWeight(FontSelectionValue);
     void setFontStretch(FontSelectionValue);
-    void setFontItalic(Optional<FontSelectionValue>);
+    void setFontItalic(std::optional<FontSelectionValue>);
 
     void setColor(const Color&);
     void setTextIndent(Length&& length) { SET_VAR(m_rareInheritedData, indent, WTFMove(length)); }
@@ -1069,7 +1069,7 @@ public:
     void setPaddingRight(Length&& length) { SET_VAR(m_surroundData, padding.right(), WTFMove(length)); }
 
     void setCursor(CursorType c) { m_inheritedFlags.cursor = static_cast<unsigned>(c); }
-    void addCursor(RefPtr<StyleImage>&&, const IntPoint& hotSpot = IntPoint());
+    void addCursor(RefPtr<StyleImage>&&, const std::optional<IntPoint>& hotSpot);
     void setCursorList(RefPtr<CursorList>&&);
     void clearCursorList();
 
@@ -1313,11 +1313,9 @@ public:
     void setScrollPaddingLeft(Length&&);
     void setScrollPaddingRight(Length&&);
 
-#if ENABLE(CSS_SCROLL_SNAP)
     void setScrollSnapType(const ScrollSnapType);
     void setScrollSnapAlign(const ScrollSnapAlign&);
     void setScrollSnapStop(const ScrollSnapStop);
-#endif
 
 #if ENABLE(TOUCH_EVENTS)
     void setTapHighlightColor(const Color& c) { SET_VAR(m_rareInheritedData, tapHighlightColor, c); }
@@ -1498,6 +1496,8 @@ public:
     bool isOriginalDisplayInlineType() const { return isDisplayInlineType(originalDisplay()); }
     bool isDisplayFlexibleOrGridBox() const { return isDisplayFlexibleOrGridBox(display()); }
     bool isDisplayRegionType() const;
+    bool isDisplayTableOrTablePart() const { return isDisplayTableOrTablePart(display()); }
+    bool isOriginalDisplayListItemType() const { return isDisplayListItemType(originalDisplay()); }
 
     bool setWritingMode(WritingMode);
 
@@ -1723,11 +1723,9 @@ public:
     static Length initialScrollMargin() { return Length(LengthType::Fixed); }
     static Length initialScrollPadding() { return Length(LengthType::Auto); }
 
-#if ENABLE(CSS_SCROLL_SNAP)
     static ScrollSnapType initialScrollSnapType();
     static ScrollSnapAlign initialScrollSnapAlign();
     static ScrollSnapStop initialScrollSnapStop();
-#endif
 
 #if ENABLE(CSS_TRAILING_WORD)
     static TrailingWord initialTrailingWord() { return TrailingWord::Auto; }
@@ -1963,6 +1961,8 @@ private:
     static bool isDisplayFlexibleBox(DisplayType);
     static bool isDisplayGridBox(DisplayType);
     static bool isDisplayFlexibleOrGridBox(DisplayType);
+    static bool isDisplayListItemType(DisplayType);
+    static bool isDisplayTableOrTablePart(DisplayType);
 
     static LayoutBoxExtent shadowExtent(const ShadowData*);
     static LayoutBoxExtent shadowInsetExtent(const ShadowData*);
@@ -2202,6 +2202,14 @@ inline ImageOrientation RenderStyle::imageOrientation() const
     return static_cast<ImageOrientation::Orientation>(m_rareInheritedData->imageOrientation);
 }
 
+#if ENABLE(CSS_COMPOSITING)
+inline void RenderStyle::setBlendMode(BlendMode mode)
+{
+    SET_VAR(m_rareNonInheritedData, effectiveBlendMode, static_cast<unsigned>(mode));
+    SET_VAR(m_rareInheritedData, isInSubtreeWithBlendMode, mode != BlendMode::Normal);
+}
+#endif
+
 inline void RenderStyle::setLogicalWidth(Length&& logicalWidth)
 {
     if (isHorizontalWritingMode())
@@ -2358,6 +2366,19 @@ inline bool RenderStyle::isDisplayGridBox(DisplayType display)
 inline bool RenderStyle::isDisplayFlexibleOrGridBox(DisplayType display)
 {
     return isDisplayFlexibleBox(display) || isDisplayGridBox(display);
+}
+
+inline bool RenderStyle::isDisplayListItemType(DisplayType display)
+{
+    return display == DisplayType::ListItem;
+}
+
+inline bool RenderStyle::isDisplayTableOrTablePart(DisplayType display)
+{
+    return display == DisplayType::Table || display == DisplayType::InlineTable || display == DisplayType::TableCell
+        || display == DisplayType::TableCaption || display == DisplayType::TableRowGroup || display == DisplayType::TableHeaderGroup
+        || display == DisplayType::TableFooterGroup || display == DisplayType::TableRow || display == DisplayType::TableColumnGroup
+        || display == DisplayType::TableColumn;
 }
 
 inline bool RenderStyle::hasAnyPublicPseudoStyles() const

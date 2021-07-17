@@ -88,10 +88,12 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 #endif
     encoder << textCheckerState;
     encoder << fullKeyboardAccessEnabled;
-#if HAVE(UIKIT_WITH_MOUSE_SUPPORT) && PLATFORM(IOS)
+#if HAVE(MOUSE_DEVICE_OBSERVATION)
     encoder << hasMouseDevice;
 #endif
+#if HAVE(STYLUS_DEVICE_OBSERVATION)
     encoder << hasStylusDevice;
+#endif
     encoder << defaultRequestTimeoutInterval;
     encoder << backForwardCacheCapacity;
 #if PLATFORM(COCOA)
@@ -127,7 +129,7 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 #endif
 
 #if PLATFORM(COCOA)
-    IPC::encode(encoder, networkATSContext.get());
+    encoder << networkATSContext;
 #endif
 
 #if PLATFORM(WAYLAND)
@@ -163,6 +165,10 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << mobileGestaltExtensionHandle;
     encoder << launchServicesExtensionHandle;
 
+#if PLATFORM(MAC) && HAVE(VIDEO_RESTRICTED_DECODING)
+    encoder << trustdAgentExtensionHandle;
+#endif
+
     encoder << diagnosticsExtensionHandles;
 #if PLATFORM(IOS_FAMILY)
     encoder << dynamicMachExtensionHandles;
@@ -175,7 +181,7 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 #endif
 
 #if PLATFORM(IOS_FAMILY)
-    encoder << currentUserInterfaceIdiomIsPad;
+    encoder << currentUserInterfaceIdiomIsPhoneOrWatch;
     encoder << supportsPictureInPicture;
     encoder << cssValueToSystemColorMap;
     encoder << focusRingColor;
@@ -200,6 +206,8 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 #if HAVE(IOSURFACE)
     encoder << maximumIOSurfaceSize;
 #endif
+
+    encoder << accessibilityPreferences;
 }
 
 bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreationParameters& parameters)
@@ -207,13 +215,13 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     if (!decoder.decode(parameters.injectedBundlePath))
         return false;
     
-    Optional<SandboxExtension::Handle> injectedBundlePathExtensionHandle;
+    std::optional<SandboxExtension::Handle> injectedBundlePathExtensionHandle;
     decoder >> injectedBundlePathExtensionHandle;
     if (!injectedBundlePathExtensionHandle)
         return false;
     parameters.injectedBundlePathExtensionHandle = WTFMove(*injectedBundlePathExtensionHandle);
 
-    Optional<SandboxExtension::HandleArray> additionalSandboxExtensionHandles;
+    std::optional<SandboxExtension::HandleArray> additionalSandboxExtensionHandles;
     decoder >> additionalSandboxExtensionHandles;
     if (!additionalSandboxExtensionHandles)
         return false;
@@ -223,19 +231,19 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 
 #if PLATFORM(IOS_FAMILY)
     
-    Optional<SandboxExtension::Handle> cookieStorageDirectoryExtensionHandle;
+    std::optional<SandboxExtension::Handle> cookieStorageDirectoryExtensionHandle;
     decoder >> cookieStorageDirectoryExtensionHandle;
     if (!cookieStorageDirectoryExtensionHandle)
         return false;
     parameters.cookieStorageDirectoryExtensionHandle = WTFMove(*cookieStorageDirectoryExtensionHandle);
 
-    Optional<SandboxExtension::Handle> containerCachesDirectoryExtensionHandle;
+    std::optional<SandboxExtension::Handle> containerCachesDirectoryExtensionHandle;
     decoder >> containerCachesDirectoryExtensionHandle;
     if (!containerCachesDirectoryExtensionHandle)
         return false;
     parameters.containerCachesDirectoryExtensionHandle = WTFMove(*containerCachesDirectoryExtensionHandle);
 
-    Optional<SandboxExtension::Handle> containerTemporaryDirectoryExtensionHandle;
+    std::optional<SandboxExtension::Handle> containerTemporaryDirectoryExtensionHandle;
     decoder >> containerTemporaryDirectoryExtensionHandle;
     if (!containerTemporaryDirectoryExtensionHandle)
         return false;
@@ -243,7 +251,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 
 #endif
 #if PLATFORM(COCOA) && ENABLE(REMOTE_INSPECTOR)
-    Optional<SandboxExtension::Handle> enableRemoteWebInspectorExtensionHandle;
+    std::optional<SandboxExtension::Handle> enableRemoteWebInspectorExtensionHandle;
     decoder >> enableRemoteWebInspectorExtensionHandle;
     if (!enableRemoteWebInspectorExtensionHandle)
         return false;
@@ -257,7 +265,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 
 #if ENABLE(MEDIA_STREAM)
 
-    Optional<SandboxExtension::Handle> audioCaptureExtensionHandle;
+    std::optional<SandboxExtension::Handle> audioCaptureExtensionHandle;
     decoder >> audioCaptureExtensionHandle;
     if (!audioCaptureExtensionHandle)
         return false;
@@ -309,12 +317,14 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
         return false;
     if (!decoder.decode(parameters.fullKeyboardAccessEnabled))
         return false;
-#if HAVE(UIKIT_WITH_MOUSE_SUPPORT) && PLATFORM(IOS)
+#if HAVE(MOUSE_DEVICE_OBSERVATION)
     if (!decoder.decode(parameters.hasMouseDevice))
         return false;
 #endif
+#if HAVE(STYLUS_DEVICE_OBSERVATION)
     if (!decoder.decode(parameters.hasStylusDevice))
         return false;
+#endif
     if (!decoder.decode(parameters.defaultRequestTimeoutInterval))
         return false;
     if (!decoder.decode(parameters.backForwardCacheCapacity))
@@ -337,7 +347,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     if (!decoder.decode(parameters.uiProcessBundleResourcePath))
         return false;
     
-    Optional<SandboxExtension::Handle> uiProcessBundleResourcePathExtensionHandle;
+    std::optional<SandboxExtension::Handle> uiProcessBundleResourcePathExtensionHandle;
     decoder >> uiProcessBundleResourcePathExtensionHandle;
     if (!uiProcessBundleResourcePathExtensionHandle)
         return false;
@@ -383,7 +393,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 #endif
 
 #if PLATFORM(COCOA)
-    if (!IPC::decode(decoder, parameters.networkATSContext))
+    if (!decoder.decode(parameters.networkATSContext))
         return false;
 #endif
 
@@ -401,7 +411,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     if (!decoder.decode(parameters.mediaMIMETypes))
         return false;
 
-    Optional<WebCore::ScreenProperties> screenProperties;
+    std::optional<WebCore::ScreenProperties> screenProperties;
     decoder >> screenProperties;
     if (!screenProperties)
         return false;
@@ -422,52 +432,60 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
         return false;
 #endif
 
-    Optional<Optional<WebProcessDataStoreParameters>> websiteDataStoreParameters;
+    std::optional<std::optional<WebProcessDataStoreParameters>> websiteDataStoreParameters;
     decoder >> websiteDataStoreParameters;
     if (!websiteDataStoreParameters)
         return false;
     parameters.websiteDataStoreParameters = WTFMove(*websiteDataStoreParameters);
 
 #if PLATFORM(IOS)
-    Optional<SandboxExtension::HandleArray> compilerServiceExtensionHandles;
+    std::optional<SandboxExtension::HandleArray> compilerServiceExtensionHandles;
     decoder >> compilerServiceExtensionHandles;
     if (!compilerServiceExtensionHandles)
         return false;
     parameters.compilerServiceExtensionHandles = WTFMove(*compilerServiceExtensionHandles);
 #endif
 
-    Optional<Optional<SandboxExtension::Handle>> containerManagerExtensionHandle;
+    std::optional<std::optional<SandboxExtension::Handle>> containerManagerExtensionHandle;
     decoder >> containerManagerExtensionHandle;
     if (!containerManagerExtensionHandle)
         return false;
     parameters.containerManagerExtensionHandle = WTFMove(*containerManagerExtensionHandle);
 
-    Optional<Optional<SandboxExtension::Handle>> mobileGestaltExtensionHandle;
+    std::optional<std::optional<SandboxExtension::Handle>> mobileGestaltExtensionHandle;
     decoder >> mobileGestaltExtensionHandle;
     if (!mobileGestaltExtensionHandle)
         return false;
     parameters.mobileGestaltExtensionHandle = WTFMove(*mobileGestaltExtensionHandle);
 
-    Optional<Optional<SandboxExtension::Handle>> launchServicesExtensionHandle;
+    std::optional<std::optional<SandboxExtension::Handle>> launchServicesExtensionHandle;
     decoder >> launchServicesExtensionHandle;
     if (!launchServicesExtensionHandle)
         return false;
     parameters.launchServicesExtensionHandle = WTFMove(*launchServicesExtensionHandle);
 
-    Optional<SandboxExtension::HandleArray> diagnosticsExtensionHandles;
+#if PLATFORM(MAC) && HAVE(VIDEO_RESTRICTED_DECODING)
+    std::optional<std::optional<SandboxExtension::Handle>> trustdAgentExtensionHandle;
+    decoder >> trustdAgentExtensionHandle;
+    if (!trustdAgentExtensionHandle)
+        return false;
+    parameters.trustdAgentExtensionHandle = WTFMove(*trustdAgentExtensionHandle);
+#endif
+
+    std::optional<SandboxExtension::HandleArray> diagnosticsExtensionHandles;
     decoder >> diagnosticsExtensionHandles;
     if (!diagnosticsExtensionHandles)
         return false;
     parameters.diagnosticsExtensionHandles = WTFMove(*diagnosticsExtensionHandles);
 
 #if PLATFORM(IOS_FAMILY)
-    Optional<SandboxExtension::HandleArray> dynamicMachExtensionHandles;
+    std::optional<SandboxExtension::HandleArray> dynamicMachExtensionHandles;
     decoder >> dynamicMachExtensionHandles;
     if (!dynamicMachExtensionHandles)
         return false;
     parameters.dynamicMachExtensionHandles = WTFMove(*dynamicMachExtensionHandles);
 
-    Optional<SandboxExtension::HandleArray> dynamicIOKitExtensionHandles;
+    std::optional<SandboxExtension::HandleArray> dynamicIOKitExtensionHandles;
     decoder >> dynamicIOKitExtensionHandles;
     if (!dynamicIOKitExtensionHandles)
         return false;
@@ -475,13 +493,13 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 #endif
 
 #if PLATFORM(COCOA)
-    Optional<bool> systemHasBattery;
+    std::optional<bool> systemHasBattery;
     decoder >> systemHasBattery;
     if (!systemHasBattery)
         return false;
     parameters.systemHasBattery = WTFMove(*systemHasBattery);
 
-    Optional<bool> systemHasAC;
+    std::optional<bool> systemHasAC;
     decoder >> systemHasAC;
     if (!systemHasAC)
         return false;
@@ -489,19 +507,19 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 #endif
 
 #if PLATFORM(IOS_FAMILY)
-    if (!decoder.decode(parameters.currentUserInterfaceIdiomIsPad))
+    if (!decoder.decode(parameters.currentUserInterfaceIdiomIsPhoneOrWatch))
         return false;
 
     if (!decoder.decode(parameters.supportsPictureInPicture))
         return false;
 
-    Optional<WebCore::RenderThemeIOS::CSSValueToSystemColorMap> cssValueToSystemColorMap;
+    std::optional<WebCore::RenderThemeIOS::CSSValueToSystemColorMap> cssValueToSystemColorMap;
     decoder >> cssValueToSystemColorMap;
     if (!cssValueToSystemColorMap)
         return false;
     parameters.cssValueToSystemColorMap = WTFMove(*cssValueToSystemColorMap);
 
-    Optional<WebCore::Color> focusRingColor;
+    std::optional<WebCore::Color> focusRingColor;
     decoder >> focusRingColor;
     if (!focusRingColor)
         return false;
@@ -516,7 +534,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 
 #if PLATFORM(COCOA)
 #if ENABLE(CFPREFS_DIRECT_MODE)
-    Optional<Optional<SandboxExtension::HandleArray>> preferencesExtensionHandles;
+    std::optional<std::optional<SandboxExtension::HandleArray>> preferencesExtensionHandles;
     decoder >> preferencesExtensionHandles;
     if (!preferencesExtensionHandles)
         return false;
@@ -525,7 +543,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 #endif
 
 #if PLATFORM(GTK)
-    Optional<bool> useSystemAppearanceForScrollbars;
+    std::optional<bool> useSystemAppearanceForScrollbars;
     decoder >> useSystemAppearanceForScrollbars;
     if (!useSystemAppearanceForScrollbars)
         return false;
@@ -533,7 +551,7 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 #endif
 
 #if HAVE(CATALYST_USER_INTERFACE_IDIOM_AND_SCALE_FACTOR)
-    Optional<std::pair<int64_t, double>> overrideUserInterfaceIdiomAndScale;
+    std::optional<std::pair<int64_t, double>> overrideUserInterfaceIdiomAndScale;
     decoder >> overrideUserInterfaceIdiomAndScale;
     if (!overrideUserInterfaceIdiomAndScale)
         return false;
@@ -544,6 +562,12 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     if (!decoder.decode(parameters.maximumIOSurfaceSize))
         return false;
 #endif
+
+    std::optional<AccessibilityPreferences> accessibilityPreferences;
+    decoder >> accessibilityPreferences;
+    if (!accessibilityPreferences)
+        return false;
+    parameters.accessibilityPreferences = WTFMove(*accessibilityPreferences);
 
     return true;
 }

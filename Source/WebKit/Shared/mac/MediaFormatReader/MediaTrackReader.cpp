@@ -39,6 +39,7 @@
 #include <WebCore/VideoTrackPrivate.h>
 #include <pal/avfoundation/MediaTimeAVFoundation.h>
 #include <wtf/LoggerHelper.h>
+#include <wtf/WorkQueue.h>
 
 #include <pal/cocoa/MediaToolboxSoftLink.h>
 
@@ -46,7 +47,6 @@ WTF_DECLARE_CF_TYPE_TRAIT(MTPluginTrackReader);
 
 namespace WebKit {
 
-using namespace PAL;
 using namespace WebCore;
 
 CMBaseClassID MediaTrackReader::wrapperClassID()
@@ -59,7 +59,7 @@ CoreMediaWrapped<MediaTrackReader>* MediaTrackReader::unwrap(CMBaseObjectRef obj
     return unwrap(checked_cf_cast<WrapperRef>(object));
 }
 
-RefPtr<MediaTrackReader> MediaTrackReader::create(Allocator&& allocator, const MediaFormatReader& formatReader, CMMediaType mediaType, uint64_t trackID, Optional<bool> enabled)
+RefPtr<MediaTrackReader> MediaTrackReader::create(Allocator&& allocator, const MediaFormatReader& formatReader, CMMediaType mediaType, uint64_t trackID, std::optional<bool> enabled)
 {
     return adoptRef(new (allocator) MediaTrackReader(WTFMove(allocator), formatReader, mediaType, trackID, enabled));
 }
@@ -70,7 +70,7 @@ WorkQueue& MediaTrackReader::storageQueue()
     return queue;
 }
 
-MediaTrackReader::MediaTrackReader(Allocator&& allocator, const MediaFormatReader& formatReader, CMMediaType mediaType, uint64_t trackID, Optional<bool> enabled)
+MediaTrackReader::MediaTrackReader(Allocator&& allocator, const MediaFormatReader& formatReader, CMMediaType mediaType, uint64_t trackID, std::optional<bool> enabled)
     : CoreMediaWrapped(WTFMove(allocator))
     , m_trackID(trackID)
     , m_mediaType(mediaType)
@@ -202,9 +202,7 @@ OSStatus MediaTrackReader::copyProperty(CFStringRef key, CFAllocatorRef allocato
 void MediaTrackReader::finalize()
 {
     Locker locker { m_sampleStorageLock };
-    storageQueue().dispatch([sampleStorage = std::exchange(m_sampleStorage, nullptr)]() mutable {
-        sampleStorage = nullptr;
-    });
+    storageQueue().dispatch([sampleStorage = std::exchange(m_sampleStorage, nullptr)] { });
     CoreMediaWrapped<MediaTrackReader>::finalize();
 }
 

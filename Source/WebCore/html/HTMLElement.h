@@ -36,15 +36,12 @@ class FormNamedItem;
 class HTMLFormElement;
 class VisibleSelection;
 struct SimpleRange;
-
-#if ENABLE(IMAGE_EXTRACTION)
-struct ImageExtractionResult;
-#endif
+struct TextRecognitionResult;
 
 enum class EnterKeyHint : uint8_t;
 
 #if PLATFORM(IOS_FAMILY)
-enum class SelectionRenderingBehavior : uint8_t;
+enum class SelectionRenderingBehavior : bool;
 #endif
 
 class HTMLElement : public StyledElement {
@@ -135,13 +132,16 @@ public:
 
     WEBCORE_EXPORT static bool shouldExtendSelectionToTargetNode(const Node& targetNode, const VisibleSelection& selectionBeforeUpdate);
     WEBCORE_EXPORT bool hasImageOverlay() const;
+    WEBCORE_EXPORT bool isImageOverlayDataDetectorResult() const;
     WEBCORE_EXPORT static bool isInsideImageOverlay(const SimpleRange&);
     WEBCORE_EXPORT static bool isInsideImageOverlay(const Node&);
     WEBCORE_EXPORT static bool isImageOverlayText(const Node&);
     WEBCORE_EXPORT static bool isImageOverlayText(const Node*);
 
-#if ENABLE(IMAGE_EXTRACTION)
-    WEBCORE_EXPORT void updateWithImageExtractionResult(ImageExtractionResult&&);
+#if ENABLE(IMAGE_ANALYSIS)
+    IntRect containerRectForTextRecognition();
+    enum class CacheTextRecognitionResults : bool { No, Yes };
+    WEBCORE_EXPORT void updateWithTextRecognitionResult(const TextRecognitionResult&, CacheTextRecognitionResults = CacheTextRecognitionResults::Yes);
 #endif
 
 #if PLATFORM(IOS_FAMILY)
@@ -151,16 +151,21 @@ public:
 protected:
     HTMLElement(const QualifiedName& tagName, Document&, ConstructionType);
 
-    void addHTMLLengthToStyle(MutableStyleProperties&, CSSPropertyID, const String& value);
+    void addHTMLLengthToStyle(MutableStyleProperties&, CSSPropertyID, StringView value);
+    void addHTMLMultiLengthToStyle(MutableStyleProperties&, CSSPropertyID, StringView value);
+    void addHTMLPixelsToStyle(MutableStyleProperties&, CSSPropertyID, StringView value);
+    void addHTMLNumberToStyle(MutableStyleProperties&, CSSPropertyID, StringView value);
+
     void addHTMLColorToStyle(MutableStyleProperties&, CSSPropertyID, const String& color);
 
+    void applyAspectRatioFromWidthAndHeightAttributesToStyle(StringView widthAttribute, StringView heightAttribute, MutableStyleProperties&);
     void applyAlignmentAttributeToStyle(const AtomString&, MutableStyleProperties&);
     void applyBorderAttributeToStyle(const AtomString&, MutableStyleProperties&);
 
     bool matchesReadWritePseudoClass() const override;
     void parseAttribute(const QualifiedName&, const AtomString&) override;
-    bool isPresentationAttribute(const QualifiedName&) const override;
-    void collectStyleForPresentationAttribute(const QualifiedName&, const AtomString&, MutableStyleProperties&) override;
+    bool hasPresentationalHintsForAttribute(const QualifiedName&) const override;
+    void collectPresentationalHintsForAttribute(const QualifiedName&, const AtomString&, MutableStyleProperties&) override;
     unsigned parseBorderWidthAttribute(const AtomString&) const;
 
     void childrenChanged(const ChildChange&) override;
@@ -182,6 +187,11 @@ private:
 
     static void populateEventHandlerNameMap(EventHandlerNameMap&, const QualifiedName* const table[], size_t tableSize);
     static EventHandlerNameMap createEventHandlerNameMap();
+
+    enum class AllowPercentage : bool { No, Yes };
+    enum class UseCSSPXAsUnitType : bool { No, Yes };
+    enum class IsMultiLength : bool { No, Yes };
+    void addHTMLLengthToStyle(MutableStyleProperties&, CSSPropertyID, StringView value, AllowPercentage, UseCSSPXAsUnitType, IsMultiLength);
 };
 
 inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document& document, ConstructionType type = CreateHTMLElement)

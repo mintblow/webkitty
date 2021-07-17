@@ -112,7 +112,7 @@ class SimulatedDeviceManager(object):
         try:
             device_type_string = SimulatedDeviceManager._device_identifier_to_name[readPlist(host.filesystem.open_binary_file_for_reading(device_plist))['deviceType']]
             device_type = DeviceType.from_string(device_type_string, runtime.version)
-            assert device_type.software_variant == runtime.os_variant
+            device_type.software_variant = runtime.os_variant
         except (ValueError, AssertionError):
             return None
 
@@ -357,6 +357,8 @@ class SimulatedDeviceManager(object):
         device.platform_device.booted_by_script = True
         host.executive.run_command([SimulatedDeviceManager.xcrun, 'simctl', 'boot', device.udid])
         SimulatedDeviceManager.INITIALIZED_DEVICES.append(device)
+        # FIXME: Remove this delay once rdar://77234240 is resolved.
+        time.sleep(10)
 
     @staticmethod
     def device_count_for_type(device_type, host=None, use_booted_simulator=True, **kwargs):
@@ -561,7 +563,11 @@ class SimulatedDevice(object):
             return self._state
 
         device_plist = self.filesystem.expanduser(self.filesystem.join(SimulatedDeviceManager.simulator_device_path, self.udid, 'device.plist'))
-        self._state = int(readPlist(self.filesystem.open_binary_file_for_reading(device_plist))['state'])
+        try:
+            self._state = int(readPlist(self.filesystem.open_binary_file_for_reading(device_plist))['state'])
+        except IOError:
+            self._state = SimulatedDevice.DeviceState.SHUTTING_DOWN
+
         self._last_updated_state = time.time()
         return self._state
 
@@ -575,7 +581,7 @@ class SimulatedDevice(object):
             return False
 
         service = self.UI_MANAGER_SERVICE.get(self.device_type.software_variant)
-        if service:
+        if not service:
             _log.debug(u'{} has no service to check if the device is usable'.format(self.device_type.software_variant))
             return True
 

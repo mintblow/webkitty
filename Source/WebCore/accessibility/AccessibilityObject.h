@@ -93,6 +93,7 @@ public:
     bool isAccessibilityRenderObject() const override { return false; }
     bool isAccessibilityScrollbar() const override { return false; }
     bool isAccessibilityScrollViewInstance() const override { return false; }
+    bool isAXImageInstance() const override { return false; }
     bool isAccessibilitySVGRoot() const override { return false; }
     bool isAccessibilitySVGElement() const override { return false; }
     bool isAccessibilityTableInstance() const override { return false; }
@@ -232,7 +233,7 @@ public:
     bool hasBoldFont() const override { return false; }
     bool hasItalicFont() const override { return false; }
     bool hasMisspelling() const override;
-    Optional<SimpleRange> misspellingRange(const SimpleRange& start, AccessibilitySearchDirection) const override;
+    std::optional<SimpleRange> misspellingRange(const SimpleRange& start, AccessibilitySearchDirection) const override;
     bool hasPlainText() const override { return false; }
     bool hasSameFont(const AXCoreObject&) const override { return false; }
     bool hasSameFontColor(const AXCoreObject&) const override { return false; }
@@ -363,7 +364,6 @@ public:
     AccessibilityObject* observableObject() const override { return nullptr; }
     void linkedUIElements(AccessibilityChildrenVector&) const override { }
     AccessibilityObject* titleUIElement() const override { return nullptr; }
-    bool exposesTitleUIElement() const override { return true; }
     AccessibilityObject* correspondingLabelForControlElement() const override { return nullptr; }
     AccessibilityObject* correspondingControlForLabelElement() const override { return nullptr; }
     AccessibilityObject* scrollBar(AccessibilityOrientation) override { return nullptr; }
@@ -400,6 +400,7 @@ public:
     String brailleLabel() const override { return getAttribute(HTMLNames::aria_braillelabelAttr); }
     String brailleRoleDescription() const override { return getAttribute(HTMLNames::aria_brailleroledescriptionAttr); }
     String embeddedImageDescription() const override;
+    std::optional<AccessibilityChildrenVector> imageOverlayElements() override { return std::nullopt; }
 
     // Abbreviations
     String expandedTextValue() const override { return String(); }
@@ -430,7 +431,7 @@ public:
     Path elementPath() const override { return Path(); }
     bool supportsPath() const override { return false; }
 
-    TextIteratorBehavior textIteratorBehaviorForTextRange() const override;
+    TextIteratorBehaviors textIteratorBehaviorForTextRange() const override;
     PlainTextRange selectedTextRange() const override { return { }; }
     int insertionPointLineNumber() const override { return -1; }
 
@@ -488,8 +489,6 @@ public:
     void addChild(AXCoreObject*) override;
     void insertChild(AXCoreObject*, unsigned) override;
 
-    bool shouldIgnoreAttributeRole() const override { return false; }
-
     bool canHaveChildren() const override { return true; }
     bool hasChildren() const override { return m_haveChildren; }
     void updateChildrenIfNecessary() override;
@@ -517,13 +516,14 @@ public:
     WEBCORE_EXPORT static AccessibilityRole ariaRoleToWebCoreRole(const String&);
     bool hasAttribute(const QualifiedName&) const override;
     const AtomString& getAttribute(const QualifiedName&) const override;
+    int getIntegralAttribute(const QualifiedName&) const;
     bool hasTagName(const QualifiedName&) const override;
     String tagName() const override;
 
     VisiblePositionRange visiblePositionRange() const override { return VisiblePositionRange(); }
     VisiblePositionRange visiblePositionRangeForLine(unsigned) const override { return VisiblePositionRange(); }
 
-    Optional<SimpleRange> elementRange() const override;
+    std::optional<SimpleRange> elementRange() const override;
     static bool replacedNodeNeedsCharacter(Node* replacedNode);
 
     VisiblePositionRange visiblePositionRangeForUnorderedPositions(const VisiblePosition&, const VisiblePosition&) const override;
@@ -537,7 +537,7 @@ public:
     VisiblePositionRange visiblePositionRangeForRange(const PlainTextRange&) const override;
     VisiblePositionRange lineRangeForPosition(const VisiblePosition&) const override;
 
-    Optional<SimpleRange> rangeForPlainTextRange(const PlainTextRange&) const override;
+    std::optional<SimpleRange> rangeForPlainTextRange(const PlainTextRange&) const override;
 #if PLATFORM(MAC)
     AXTextMarkerRangeRef textMarkerRangeForNSRange(const NSRange&) const override;
 #endif
@@ -777,6 +777,7 @@ protected:
     ScrollableArea* scrollableAreaAncestor() const;
     void scrollAreaAndAncestor(std::pair<ScrollableArea*, AccessibilityObject*>&) const;
 
+    virtual bool shouldIgnoreAttributeRole() const { return false; }
     virtual AccessibilityRole buttonRoleType() const;
     String rolePlatformDescription() const;
     bool isOnScreen() const override;
@@ -785,6 +786,7 @@ protected:
     static bool isARIAInput(AccessibilityRole);
     void ariaElementsFromAttribute(AccessibilityChildrenVector&, const QualifiedName&) const;
     void ariaElementsReferencedByAttribute(AccessibilityChildrenVector&, const QualifiedName&) const;
+    virtual bool exposesTitleUIElement() const { return true; }
 
     AccessibilityObject* radioGroupAncestor() const;
 
@@ -794,9 +796,9 @@ protected:
     String outerHTML() const override;
 
 private:
-    Optional<SimpleRange> rangeOfStringClosestToRangeInDirection(const SimpleRange&, AccessibilitySearchDirection, const Vector<String>&) const;
-    Optional<SimpleRange> selectionRange() const;
-    Optional<SimpleRange> findTextRange(const Vector<String>& searchStrings, const SimpleRange& start, AccessibilitySearchTextDirection) const;
+    std::optional<SimpleRange> rangeOfStringClosestToRangeInDirection(const SimpleRange&, AccessibilitySearchDirection, const Vector<String>&) const;
+    std::optional<SimpleRange> selectionRange() const;
+    std::optional<SimpleRange> findTextRange(const Vector<String>& searchStrings, const SimpleRange& start, AccessibilitySearchTextDirection) const;
 
     AXID m_id { 0 };
 protected: // FIXME: Make the data members private.

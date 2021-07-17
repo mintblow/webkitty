@@ -33,6 +33,7 @@
 #include "ImageBufferBackendHandle.h"
 #include "MessageReceiver.h"
 #include "MessageSender.h"
+#include "RemoteRenderingBackendState.h"
 #include "RemoteResourceCache.h"
 #include "RenderingBackendIdentifier.h"
 #include "ScopedRenderingResourcesRequest.h"
@@ -42,16 +43,19 @@
 #include <WebCore/DisplayListReplayer.h>
 #include <wtf/WeakPtr.h>
 
-
 namespace WebCore {
+
 namespace DisplayList {
 class DisplayList;
 class Item;
 }
+
+class DestinationColorSpace;
 class FloatSize;
 class NativeImage;
-enum class DestinationColorSpace : uint8_t;
+
 enum class RenderingMode : bool;
+
 }
 
 namespace WebKit {
@@ -81,21 +85,26 @@ public:
 
     void setNextItemBufferToRead(WebCore::DisplayList::ItemBufferIdentifier, WebCore::RenderingResourceIdentifier destination);
 
-    void populateGetImageDataSharedMemory(WebCore::ImageData*);
+    void didCreateMaskImageBuffer(WebCore::ImageBuffer&);
+    void didResetMaskImageBuffer();
+
+    void populateGetPixelBufferSharedMemory(std::optional<WebCore::PixelBuffer>&&);
 
     bool allowsExitUnderMemoryPressure() const;
 
     // Runs Function in RemoteRenderingBackend task queue.
     void dispatch(Function<void()>&&);
 
+    RemoteRenderingBackendState lastKnownState() const;
+
 private:
     RemoteRenderingBackend(GPUConnectionToWebProcess&, RemoteRenderingBackendCreationParameters&&);
     void startListeningForIPC();
 
-    Optional<WebCore::DisplayList::ItemHandle> WARN_UNUSED_RETURN decodeItem(const uint8_t* data, size_t length, WebCore::DisplayList::ItemType, uint8_t* handleLocation) override;
+    std::optional<WebCore::DisplayList::ItemHandle> WARN_UNUSED_RETURN decodeItem(const uint8_t* data, size_t length, WebCore::DisplayList::ItemType, uint8_t* handleLocation) override;
 
     template<typename T>
-    Optional<WebCore::DisplayList::ItemHandle> WARN_UNUSED_RETURN decodeAndCreate(const uint8_t* data, size_t length, uint8_t* handleLocation)
+    std::optional<WebCore::DisplayList::ItemHandle> WARN_UNUSED_RETURN decodeAndCreate(const uint8_t* data, size_t length, uint8_t* handleLocation)
     {
         if (auto item = IPC::Decoder::decodeSingleObject<T>(data, length)) {
             // FIXME: WebKit2 should not need to know that the first 8 bytes at the handle are reserved for the type.
@@ -103,14 +112,16 @@ private:
             new (handleLocation + sizeof(uint64_t)) T(WTFMove(*item));
             return {{ handleLocation }};
         }
-        return WTF::nullopt;
+        return std::nullopt;
     }
 
     WebCore::DisplayList::ReplayResult submit(const WebCore::DisplayList::DisplayList&, WebCore::ImageBuffer& destination);
     RefPtr<WebCore::ImageBuffer> nextDestinationImageBufferAfterApplyingDisplayLists(WebCore::ImageBuffer& initialDestination, size_t initialOffset, DisplayListReaderHandle&, GPUProcessWakeupReason);
 
-    Optional<SharedMemory::IPCHandle> updateSharedMemoryForGetImageDataHelper(size_t byteCount);
+    std::optional<SharedMemory::IPCHandle> updateSharedMemoryForGetPixelBufferHelper(size_t byteCount);
     void updateRenderingResourceRequest();
+
+    void updateLastKnownState(RemoteRenderingBackendState);
 
     // IPC::MessageSender.
     IPC::Connection* messageSenderConnection() const override;
@@ -121,15 +132,14 @@ private:
     bool didReceiveSyncMessage(IPC::Connection&, IPC::Decoder&, UniqueRef<IPC::Encoder>&) override;
 
     // Messages to be received.
-    void createImageBuffer(const WebCore::FloatSize& logicalSize, WebCore::RenderingMode, float resolutionScale, WebCore::DestinationColorSpace, WebCore::PixelFormat, WebCore::RenderingResourceIdentifier);
+    void createImageBuffer(const WebCore::FloatSize& logicalSize, WebCore::RenderingMode, float resolutionScale, const WebCore::DestinationColorSpace&, WebCore::PixelFormat, WebCore::RenderingResourceIdentifier);
     void wakeUpAndApplyDisplayList(const GPUProcessWakeupMessageArguments&);
-    void updateSharedMemoryForGetImageData(uint32_t byteCount, CompletionHandler<void(const SharedMemory::IPCHandle&)>&&);
-    void semaphoreForGetImageData(CompletionHandler<void(const IPC::Semaphore&)>&&);
-    void updateSharedMemoryAndSemaphoreForGetImageData(uint32_t byteCount, CompletionHandler<void(const SharedMemory::IPCHandle&, const IPC::Semaphore&)>&&);
-    void destroyGetImageDataSharedMemory();
-    void getDataURLForImageBuffer(const String& mimeType, Optional<double> quality, WebCore::PreserveResolution, WebCore::RenderingResourceIdentifier, CompletionHandler<void(String&&)>&&);
-    void getDataForImageBuffer(const String& mimeType, Optional<double> quality, WebCore::RenderingResourceIdentifier, CompletionHandler<void(Vector<uint8_t>&&)>&&);
-    void getBGRADataForImageBuffer(WebCore::RenderingResourceIdentifier, CompletionHandler<void(Vector<uint8_t>&&)>&&);
+    void updateSharedMemoryForGetPixelBuffer(uint32_t byteCount, CompletionHandler<void(const SharedMemory::IPCHandle&)>&&);
+    void semaphoreForGetPixelBuffer(CompletionHandler<void(const IPC::Semaphore&)>&&);
+    void updateSharedMemoryAndSemaphoreForGetPixelBuffer(uint32_t byteCount, CompletionHandler<void(const SharedMemory::IPCHandle&, const IPC::Semaphore&)>&&);
+    void destroyGetPixelBufferSharedMemory();
+    void getDataURLForImageBuffer(const String& mimeType, std::optional<double> quality, WebCore::PreserveResolution, WebCore::RenderingResourceIdentifier, CompletionHandler<void(String&&)>&&);
+    void getDataForImageBuffer(const String& mimeType, std::optional<double> quality, WebCore::RenderingResourceIdentifier, CompletionHandler<void(Vector<uint8_t>&&)>&&);
     void getShareableBitmapForImageBuffer(WebCore::RenderingResourceIdentifier, WebCore::PreserveResolution, CompletionHandler<void(ShareableBitmap::Handle&&)>&&);
     void cacheNativeImage(const ShareableBitmap::Handle&, WebCore::RenderingResourceIdentifier);
     void cacheFont(Ref<WebCore::Font>&&);
@@ -137,10 +147,10 @@ private:
     void releaseRemoteResource(WebCore::RenderingResourceIdentifier);
     void didCreateSharedDisplayListHandle(WebCore::DisplayList::ItemBufferIdentifier, const SharedMemory::IPCHandle&, WebCore::RenderingResourceIdentifier destinationBufferIdentifier);
 
-
     struct PendingWakeupInformation {
         GPUProcessWakeupMessageArguments arguments;
-        Optional<WebCore::RenderingResourceIdentifier> missingCachedResourceIdentifier;
+        std::optional<WebCore::RenderingResourceIdentifier> missingCachedResourceIdentifier;
+        RemoteRenderingBackendState state { RemoteRenderingBackendState::Initialized };
 
         bool shouldPerformWakeup(WebCore::RenderingResourceIdentifier identifier) const
         {
@@ -159,11 +169,13 @@ private:
     Ref<GPUConnectionToWebProcess> m_gpuConnectionToWebProcess;
     RenderingBackendIdentifier m_renderingBackendIdentifier;
     HashMap<WebCore::DisplayList::ItemBufferIdentifier, RefPtr<DisplayListReaderHandle>> m_sharedDisplayListHandles;
-    Optional<PendingWakeupInformation> m_pendingWakeupInfo;
+    std::optional<PendingWakeupInformation> m_pendingWakeupInfo;
     IPC::Semaphore m_resumeDisplayListSemaphore;
-    IPC::Semaphore m_getImageDataSemaphore;
-    RefPtr<SharedMemory> m_getImageDataSharedMemory;
+    IPC::Semaphore m_getPixelBufferSemaphore;
+    RefPtr<SharedMemory> m_getPixelBufferSharedMemory;
     ScopedRenderingResourcesRequest m_renderingResourcesRequest;
+    RefPtr<WebCore::ImageBuffer> m_currentMaskImageBuffer;
+    Atomic<RemoteRenderingBackendState> m_lastKnownState { RemoteRenderingBackendState::Initialized };
 };
 
 } // namespace WebKit

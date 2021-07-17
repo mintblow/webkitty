@@ -81,10 +81,6 @@
 #import <pal/spi/cocoa/NSAccessibilitySPI.h>
 #import <wtf/cocoa/VectorCocoa.h>
 
-#if ENABLE(TREE_DEBUGGING)
-#import <wtf/text/StringBuilder.h>
-#endif
-
 using namespace WebCore;
 
 // Cell Tables
@@ -547,6 +543,10 @@ using namespace WebCore;
 #define NSAccessibilityEmbeddedImageDescriptionAttribute @"AXEmbeddedImageDescription"
 #endif
 
+#ifndef NSAccessibilityImageOverlayElementsAttribute
+#define NSAccessibilityImageOverlayElementsAttribute @"AXImageOverlayElements"
+#endif
+
 extern "C" AXUIElementRef NSAccessibilityCreateAXUIElementRef(id element);
 
 @implementation WebAccessibilityObjectWrapper
@@ -713,11 +713,11 @@ static AccessibilityTextOperation accessibilityTextOperationForParameterizedAttr
     return operation;
 }
 
-static std::pair<Optional<SimpleRange>, AccessibilitySearchDirection> accessibilityMisspellingSearchCriteriaForParameterizedAttribute(AXObjectCache* axObjectCache, const NSDictionary *params)
+static std::pair<std::optional<SimpleRange>, AccessibilitySearchDirection> accessibilityMisspellingSearchCriteriaForParameterizedAttribute(AXObjectCache* axObjectCache, const NSDictionary *params)
 {
     ASSERT(isMainThread());
 
-    std::pair<Optional<SimpleRange>, AccessibilitySearchDirection> criteria;
+    std::pair<std::optional<SimpleRange>, AccessibilitySearchDirection> criteria;
 
     ASSERT(AXObjectIsTextMarkerRange([params objectForKey:@"AXStartTextMarkerRange"]));
     criteria.first = rangeForTextMarkerRange(axObjectCache, (AXTextMarkerRangeRef)[params objectForKey:@"AXStartTextMarkerRange"]);
@@ -1564,8 +1564,9 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         [tempArray addObject:NSAccessibilityVerticalScrollBarAttribute];
         return tempArray;
     }());
-    static auto imageAttrs =  makeNeverDestroyed([] {
+    static auto imageAttrs = makeNeverDestroyed([] {
         auto tempArray = adoptNS([[NSMutableArray alloc] initWithArray:attributes.get().get()]);
+        [tempArray addObject:NSAccessibilityImageOverlayElementsAttribute];
         [tempArray addObject:NSAccessibilityEmbeddedImageDescriptionAttribute];
         [tempArray addObject:NSAccessibilityURLAttribute];
         return tempArray;
@@ -2370,6 +2371,12 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         return [self position];
     if ([attributeName isEqualToString:NSAccessibilityPathAttribute])
         return [self path];
+
+    if ([attributeName isEqualToString:NSAccessibilityImageOverlayElementsAttribute]) {
+        auto imageOverlayElements = backingObject->imageOverlayElements();
+        return imageOverlayElements ? convertToNSArray(*imageOverlayElements) : nil;
+    }
+
     if ([attributeName isEqualToString:NSAccessibilityEmbeddedImageDescriptionAttribute])
         return backingObject->embeddedImageDescription();
 
@@ -2643,13 +2650,8 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
     }
 
     if ([attributeName isEqualToString:NSAccessibilityTitleUIElementAttribute]) {
-        if (!backingObject->exposesTitleUIElement())
-            return nil;
-
-        AXCoreObject* obj = backingObject->titleUIElement();
-        if (obj)
-            return obj->wrapper();
-        return nil;
+        auto* object = backingObject->titleUIElement();
+        return object ? object->wrapper() : nil;
     }
 
     if ([attributeName isEqualToString:NSAccessibilityValueDescriptionAttribute])
@@ -3549,14 +3551,7 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
 
 static void formatForDebugger(const VisiblePositionRange& range, char* buffer, unsigned length)
 {
-    StringBuilder result;
-    
-    result.appendLiteral("from ");
-    result.append(range.start.debugDescription());
-    result.appendLiteral(" to ");
-    result.append(range.end.debugDescription());
-    
-    strlcpy(buffer, result.toString().utf8().data(), length);
+    strlcpy(buffer, makeString("from ", range.start.debugDescription(), " to ", range.end.debugDescription()).utf8().data(), length);
 }
 #endif
 
@@ -3590,7 +3585,7 @@ enum class TextUnit {
             return nil;
 
         auto characterOffset = characterOffsetForTextMarker(cache, textMarker);
-        Optional<SimpleRange> range;
+        std::optional<SimpleRange> range;
         switch (textUnit) {
         case TextUnit::LeftWord:
             range = cache->leftWordRange(characterOffset);

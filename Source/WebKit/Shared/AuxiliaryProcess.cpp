@@ -165,6 +165,11 @@ void AuxiliaryProcess::enableTermination()
     m_terminationTimer.startOneShot(m_terminationTimeout);
 }
 
+void AuxiliaryProcess::mainThreadPing(CompletionHandler<void()>&& completionHandler)
+{
+    completionHandler();
+}
+
 IPC::Connection* AuxiliaryProcess::messageSenderConnection() const
 {
     return m_connection.get();
@@ -207,7 +212,7 @@ void AuxiliaryProcess::shutDown()
     terminate();
 }
 
-Optional<std::pair<IPC::Connection::Identifier, IPC::Attachment>> AuxiliaryProcess::createIPCConnectionPair()
+std::optional<std::pair<IPC::Connection::Identifier, IPC::Attachment>> AuxiliaryProcess::createIPCConnectionPair()
 {
 #if USE(UNIX_DOMAIN_SOCKETS)
     IPC::Connection::SocketPair socketPair = IPC::Connection::createPlatformConnection();

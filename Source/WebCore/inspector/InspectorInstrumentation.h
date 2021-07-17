@@ -125,6 +125,7 @@ public:
     static void didInsertDOMNode(Document&, Node&);
     static void willRemoveDOMNode(Document&, Node&);
     static void didRemoveDOMNode(Document&, Node&);
+    static void willDestroyDOMNode(Node&);
     static void nodeLayoutContextChanged(Node&, RenderObject*);
     static void willModifyDOMAttr(Document&, Element&, const AtomString& oldValue, const AtomString& newValue);
     static void didModifyDOMAttr(Document&, Element&, const AtomString& name, const AtomString& value);
@@ -193,17 +194,17 @@ public:
     static void applyUserAgentOverride(Frame&, String&);
     static void applyEmulatedMedia(Frame&, String&);
 
-    static void willSendRequest(Frame*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse);
+    static void willSendRequest(Frame*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const CachedResource*);
     static void didLoadResourceFromMemoryCache(Page&, DocumentLoader*, CachedResource*);
     static void didReceiveResourceResponse(Frame&, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
     static void didReceiveThreadableLoaderResponse(DocumentThreadableLoader&, unsigned long identifier);
-    static void didReceiveData(Frame*, unsigned long identifier, const char* data, int dataLength, int encodedDataLength);
+    static void didReceiveData(Frame*, unsigned long identifier, const uint8_t* data, int dataLength, int encodedDataLength);
     static void didFinishLoading(Frame*, DocumentLoader*, unsigned long identifier, const NetworkLoadMetrics&, ResourceLoader*);
     static void didFailLoading(Frame*, DocumentLoader*, unsigned long identifier, const ResourceError&);
 
     static void willSendRequest(WorkerOrWorkletGlobalScope&, unsigned long identifier, ResourceRequest&);
     static void didReceiveResourceResponse(WorkerOrWorkletGlobalScope&, unsigned long identifier, const ResourceResponse&);
-    static void didReceiveData(WorkerOrWorkletGlobalScope&, unsigned long identifier, const char* data, int dataLength);
+    static void didReceiveData(WorkerOrWorkletGlobalScope&, unsigned long identifier, const uint8_t* data, int dataLength);
     static void didFinishLoading(WorkerOrWorkletGlobalScope&, unsigned long identifier, const NetworkLoadMetrics&);
     static void didFailLoading(WorkerOrWorkletGlobalScope&, unsigned long identifier, const ResourceError&);
 
@@ -350,6 +351,7 @@ private:
     static void didInsertDOMNodeImpl(InstrumentingAgents&, Node&);
     static void willRemoveDOMNodeImpl(InstrumentingAgents&, Node&);
     static void didRemoveDOMNodeImpl(InstrumentingAgents&, Node&);
+    static void willDestroyDOMNodeImpl(InstrumentingAgents&, Node&);
     static void nodeLayoutContextChangedImpl(InstrumentingAgents&, Node&, RenderObject*);
     static void willModifyDOMAttrImpl(InstrumentingAgents&, Element&, const AtomString& oldValue, const AtomString& newValue);
     static void didModifyDOMAttrImpl(InstrumentingAgents&, Element&, const AtomString& name, const AtomString& value);
@@ -418,13 +420,13 @@ private:
     static void applyUserAgentOverrideImpl(InstrumentingAgents&, String&);
     static void applyEmulatedMediaImpl(InstrumentingAgents&, String&);
 
-    static void willSendRequestImpl(InstrumentingAgents&, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse);
+    static void willSendRequestImpl(InstrumentingAgents&, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const CachedResource*);
     static void willSendRequestOfTypeImpl(InstrumentingAgents&, unsigned long identifier, DocumentLoader*, ResourceRequest&, LoadType);
     static void markResourceAsCachedImpl(InstrumentingAgents&, unsigned long identifier);
     static void didLoadResourceFromMemoryCacheImpl(InstrumentingAgents&, DocumentLoader*, CachedResource*);
     static void didReceiveResourceResponseImpl(InstrumentingAgents&, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
     static void didReceiveThreadableLoaderResponseImpl(InstrumentingAgents&, DocumentThreadableLoader&, unsigned long identifier);
-    static void didReceiveDataImpl(InstrumentingAgents&, unsigned long identifier, const char* data, int dataLength, int encodedDataLength);
+    static void didReceiveDataImpl(InstrumentingAgents&, unsigned long identifier, const uint8_t* data, int dataLength, int encodedDataLength);
     static void didFinishLoadingImpl(InstrumentingAgents&, unsigned long identifier, DocumentLoader*, const NetworkLoadMetrics&, ResourceLoader*);
     static void didFailLoadingImpl(InstrumentingAgents&, unsigned long identifier, DocumentLoader*, const ResourceError&);
     static void willLoadXHRSynchronouslyImpl(InstrumentingAgents&);
@@ -599,6 +601,13 @@ inline void InspectorInstrumentation::didRemoveDOMNode(Document& document, Node&
     FAST_RETURN_IF_NO_FRONTENDS(void());
     if (auto* agents = instrumentingAgents(document))
         didRemoveDOMNodeImpl(*agents, node);
+}
+
+inline void InspectorInstrumentation::willDestroyDOMNode(Node& node)
+{
+    FAST_RETURN_IF_NO_FRONTENDS(void());
+    if (auto* agents = instrumentingAgents(node.document()))
+        willDestroyDOMNodeImpl(*agents, node);
 }
 
 inline void InspectorInstrumentation::nodeLayoutContextChanged(Node& node, RenderObject* newRenderer)
@@ -1049,17 +1058,17 @@ inline void InspectorInstrumentation::applyEmulatedMedia(Frame& frame, String& m
         applyEmulatedMediaImpl(*agents, media);
 }
 
-inline void InspectorInstrumentation::willSendRequest(Frame* frame, unsigned long identifier, DocumentLoader* loader, ResourceRequest& request, const ResourceResponse& redirectResponse)
+inline void InspectorInstrumentation::willSendRequest(Frame* frame, unsigned long identifier, DocumentLoader* loader, ResourceRequest& request, const ResourceResponse& redirectResponse, const CachedResource* cachedResource)
 {
     FAST_RETURN_IF_NO_FRONTENDS(void());
     if (auto* agents = instrumentingAgents(frame))
-        willSendRequestImpl(*agents, identifier, loader, request, redirectResponse);
+        willSendRequestImpl(*agents, identifier, loader, request, redirectResponse, cachedResource);
 }
 
 inline void InspectorInstrumentation::willSendRequest(WorkerOrWorkletGlobalScope& globalScope, unsigned long identifier, ResourceRequest& request)
 {
     FAST_RETURN_IF_NO_FRONTENDS(void());
-    willSendRequestImpl(instrumentingAgents(globalScope), identifier, nullptr, request, ResourceResponse { });
+    willSendRequestImpl(instrumentingAgents(globalScope), identifier, nullptr, request, ResourceResponse { }, nullptr);
 }
 
 inline void InspectorInstrumentation::willSendRequestOfType(Frame* frame, unsigned long identifier, DocumentLoader* loader, ResourceRequest& request, LoadType loadType)
@@ -1093,14 +1102,14 @@ inline void InspectorInstrumentation::didReceiveThreadableLoaderResponse(Documen
         didReceiveThreadableLoaderResponseImpl(*agents, documentThreadableLoader, identifier);
 }
     
-inline void InspectorInstrumentation::didReceiveData(Frame* frame, unsigned long identifier, const char* data, int dataLength, int encodedDataLength)
+inline void InspectorInstrumentation::didReceiveData(Frame* frame, unsigned long identifier, const uint8_t* data, int dataLength, int encodedDataLength)
 {
     FAST_RETURN_IF_NO_FRONTENDS(void());
     if (auto* agents = instrumentingAgents(frame))
         didReceiveDataImpl(*agents, identifier, data, dataLength, encodedDataLength);
 }
 
-inline void InspectorInstrumentation::didReceiveData(WorkerOrWorkletGlobalScope& globalScope, unsigned long identifier, const char* data, int dataLength)
+inline void InspectorInstrumentation::didReceiveData(WorkerOrWorkletGlobalScope& globalScope, unsigned long identifier, const uint8_t* data, int dataLength)
 {
     FAST_RETURN_IF_NO_FRONTENDS(void());
     didReceiveDataImpl(instrumentingAgents(globalScope), identifier, data, dataLength, dataLength);

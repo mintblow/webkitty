@@ -239,8 +239,8 @@ _PATH_RULES_SPECIFIER = [
       os.path.join('Source', 'WebCore', 'platform', 'audio', 'gstreamer', 'WebKitWebAudioSourceGStreamer.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'gstreamer', 'GStreamerMediaStreamSource.h'),
       os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'gstreamer', 'GStreamerMediaStreamSource.cpp'),
-      os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'libwebrtc', 'GStreamerVideoEncoder.h'),
-      os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'libwebrtc', 'GStreamerVideoEncoder.cpp'),
+      os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'gstreamer', 'GStreamerVideoEncoder.h'),
+      os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'gstreamer', 'GStreamerVideoEncoder.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'network', 'soup', 'ProxyResolverSoup.cpp'),
       os.path.join('Source', 'WebCore', 'platform', 'network', 'soup', 'ProxyResolverSoup.h'),
       os.path.join('Source', 'WebCore', 'platform', 'network', 'soup', 'WebKitFormDataInputStream.cpp'),
@@ -271,12 +271,6 @@ _PATH_RULES_SPECIFIER = [
      ["-readability/naming/underscores",
       "-whitespace/declaration",
       "-whitespace/indent"]),
-
-    ([  # Files following using WebRTC optionnal type
-      os.path.join('Source', 'WebCore', 'platform', 'mediastream', 'libwebrtc', 'GStreamerVideoDecoderFactory.cpp'),
-     ],
-     ["-runtime/wtf_optional",
-     ]),
 
     ([
       # There is no way to avoid the symbols __jit_debug_register_code
@@ -614,7 +608,7 @@ class CheckerDispatcher(object):
         return os.path.splitext(file_path)[1].lstrip(".")
 
     def _should_skip_file_path(self, file_path, skip_array_entry):
-        match = re.search("\s*png$", file_path)
+        match = re.search(r"\s*png$", file_path)
         if match:
             return False
         if isinstance(skip_array_entry, str):

@@ -52,6 +52,7 @@ struct PacketOptions;
 }
 
 namespace WebCore {
+class RegistrableDomain;
 class SharedBuffer;
 }
 
@@ -99,22 +100,23 @@ public:
     void closeListeningSockets(Function<void()>&&);
     void authorizeListeningSockets() { m_isListeningSocketAuthorized = true; }
 
-    bool canLog() const { return m_canLog; }
-
     IPC::Connection& connection() { return m_ipcConnection.get(); }
+
+    void closeSocket(WebCore::LibWebRTCSocketIdentifier);
+    void doSocketTaskOnRTCNetworkThread(WebCore::LibWebRTCSocketIdentifier, Function<void(Socket&)>&&);
 
 private:
     explicit NetworkRTCProvider(NetworkConnectionToWebProcess&);
     void startListeningForIPC();
 
-    void createUDPSocket(WebCore::LibWebRTCSocketIdentifier, const RTCNetwork::SocketAddress&, uint16_t, uint16_t);
+    void createUDPSocket(WebCore::LibWebRTCSocketIdentifier, const RTCNetwork::SocketAddress&, uint16_t, uint16_t, bool isFirstParty, bool isRelayDisabled, WebCore::RegistrableDomain&&);
     void createClientTCPSocket(WebCore::LibWebRTCSocketIdentifier, const RTCNetwork::SocketAddress&, const RTCNetwork::SocketAddress&, String&& userAgent, int);
     void createServerTCPSocket(WebCore::LibWebRTCSocketIdentifier, const RTCNetwork::SocketAddress&, uint16_t minPort, uint16_t maxPort, int);
     void wrapNewTCPConnection(WebCore::LibWebRTCSocketIdentifier identifier, WebCore::LibWebRTCSocketIdentifier newConnectionSocketIdentifier);
     void sendToSocket(WebCore::LibWebRTCSocketIdentifier, const IPC::DataReference&, RTCNetwork::SocketAddress&&, RTCPacketOptions&&);
-    void closeSocket(WebCore::LibWebRTCSocketIdentifier);
     void setSocketOption(WebCore::LibWebRTCSocketIdentifier, int option, int value);
-    void setPlatformSocketsEnabled(bool enabled) { m_platformSocketsEnabled = enabled; }
+    void setPlatformTCPSocketsEnabled(bool enabled) { m_platformTCPSocketsEnabled = enabled; }
+    void setPlatformUDPSocketsEnabled(bool enabled) { m_platformUDPSocketsEnabled = enabled; }
 
     void createResolver(LibWebRTCResolverIdentifier, String&&);
     void stopResolver(LibWebRTCResolverIdentifier);
@@ -143,8 +145,8 @@ private:
 
     HashMap<WebCore::LibWebRTCSocketIdentifier, std::unique_ptr<rtc::AsyncPacketSocket>> m_pendingIncomingSockets;
     bool m_isListeningSocketAuthorized { true };
-    bool m_canLog { false };
-    bool m_platformSocketsEnabled { false };
+    bool m_platformTCPSocketsEnabled { false };
+    bool m_platformUDPSocketsEnabled { false };
 };
 
 } // namespace WebKit

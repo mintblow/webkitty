@@ -35,8 +35,8 @@
 #include "FormatConverter.h"
 #include "HostWindow.h"
 #include "Image.h"
-#include "ImageData.h"
 #include "ImageObserver.h"
+#include "PixelBuffer.h"
 
 namespace WebCore {
 
@@ -670,32 +670,32 @@ GCGLenum GraphicsContextGL::computeImageSizeInBytes(GCGLenum format, GCGLenum ty
     if (!computeFormatAndTypeParameters(format, type, &componentsPerPixel, &bytesPerComponent))
         return GraphicsContextGL::INVALID_ENUM;
     unsigned bytesPerGroup = bytesPerComponent * componentsPerPixel;
-    Checked<uint32_t, RecordOverflow> checkedValue = static_cast<uint32_t>(rowLength);
+    CheckedUint32 checkedValue = static_cast<uint32_t>(rowLength);
     checkedValue *= bytesPerGroup;
     if (checkedValue.hasOverflowed())
         return GraphicsContextGL::INVALID_VALUE;
 
     unsigned lastRowSize;
     if (params.rowLength > 0 && params.rowLength != width) {
-        Checked<uint32_t, RecordOverflow> tmp = width;
+        CheckedUint32 tmp = width;
         tmp *= bytesPerGroup;
         if (tmp.hasOverflowed())
             return GraphicsContextGL::INVALID_VALUE;
-        lastRowSize = tmp.unsafeGet();
+        lastRowSize = tmp;
     } else
-        lastRowSize = checkedValue.unsafeGet();
+        lastRowSize = checkedValue;
 
     unsigned padding = 0;
-    unsigned residual = checkedValue.unsafeGet() % params.alignment;
+    unsigned residual = checkedValue.value() % params.alignment;
     if (residual) {
         padding = params.alignment - residual;
         checkedValue += padding;
     }
     if (checkedValue.hasOverflowed())
         return GraphicsContextGL::INVALID_VALUE;
-    unsigned paddedRowSize = checkedValue.unsafeGet();
+    unsigned paddedRowSize = checkedValue;
 
-    Checked<uint32_t, RecordOverflow> rows = imageHeight;
+    CheckedUint32 rows = imageHeight;
     rows *= (depth - 1);
     // Last image is not affected by IMAGE_HEIGHT parameter.
     rows += height;
@@ -706,39 +706,39 @@ GCGLenum GraphicsContextGL::computeImageSizeInBytes(GCGLenum format, GCGLenum ty
     checkedValue += lastRowSize;
     if (checkedValue.hasOverflowed())
         return GraphicsContextGL::INVALID_VALUE;
-    *imageSizeInBytes = checkedValue.unsafeGet();
+    *imageSizeInBytes = checkedValue;
     if (paddingInBytes)
         *paddingInBytes = padding;
 
-    Checked<uint32_t, RecordOverflow> skipSize = 0;
+    CheckedUint32 skipSize = 0;
     if (params.skipImages > 0) {
-        Checked<uint32_t, RecordOverflow> tmp = paddedRowSize;
+        CheckedUint32 tmp = paddedRowSize;
         tmp *= imageHeight;
         tmp *= params.skipImages;
         if (tmp.hasOverflowed())
             return GraphicsContextGL::INVALID_VALUE;
-        skipSize += tmp.unsafeGet();
+        skipSize += tmp;
     }
     if (params.skipRows > 0) {
-        Checked<uint32_t, RecordOverflow> tmp = paddedRowSize;
+        CheckedUint32 tmp = paddedRowSize;
         tmp *= params.skipRows;
         if (tmp.hasOverflowed())
             return GraphicsContextGL::INVALID_VALUE;
-        skipSize += tmp.unsafeGet();
+        skipSize += tmp;
     }
     if (params.skipPixels > 0) {
-        Checked<uint32_t, RecordOverflow> tmp = bytesPerGroup;
+        CheckedUint32 tmp = bytesPerGroup;
         tmp *= params.skipPixels;
         if (tmp.hasOverflowed())
             return GraphicsContextGL::INVALID_VALUE;
-        skipSize += tmp.unsafeGet();
+        skipSize += tmp;
     }
     if (skipSize.hasOverflowed())
         return GraphicsContextGL::INVALID_VALUE;
     if (skipSizeInBytes)
-        *skipSizeInBytes = skipSize.unsafeGet();
+        *skipSizeInBytes = skipSize;
 
-    checkedValue += skipSize.unsafeGet();
+    checkedValue += skipSize;
     if (checkedValue.hasOverflowed())
         return GraphicsContextGL::INVALID_VALUE;
     return GraphicsContextGL::NO_ERROR;
@@ -757,19 +757,17 @@ bool GraphicsContextGL::packImageData(Image* image, const void* pixels, GCGLenum
         return false;
     data.resize(packedSize);
 
-    if (!packPixels(reinterpret_cast<const uint8_t*>(pixels), sourceFormat, sourceImageWidth, sourceImageHeight, sourceImageSubRectangle, depth, sourceUnpackAlignment, unpackImageHeight, format, type, alphaOp, data.data(), flipY))
+    if (!packPixels(static_cast<const uint8_t*>(pixels), sourceFormat, sourceImageWidth, sourceImageHeight, sourceImageSubRectangle, depth, sourceUnpackAlignment, unpackImageHeight, format, type, alphaOp, data.data(), flipY))
         return false;
     if (ImageObserver* observer = image->imageObserver())
         observer->didDraw(*image);
     return true;
 }
 
-bool GraphicsContextGL::extractImageData(ImageData* imageData, DataFormat sourceDataFormat, const IntRect& sourceImageSubRectangle, int depth, int unpackImageHeight, GCGLenum format, GCGLenum type, bool flipY, bool premultiplyAlpha, Vector<uint8_t>& data)
+bool GraphicsContextGL::extractPixelBuffer(const PixelBuffer& pixelBuffer, DataFormat sourceDataFormat, const IntRect& sourceImageSubRectangle, int depth, int unpackImageHeight, GCGLenum format, GCGLenum type, bool flipY, bool premultiplyAlpha, Vector<uint8_t>& data)
 {
-    if (!imageData)
-        return false;
-    int width = imageData->width();
-    int height = imageData->height();
+    int width = pixelBuffer.size().width();
+    int height = pixelBuffer.size().height();
 
     unsigned packedSize;
     // Output data is tightly packed (alignment == 1).
@@ -779,7 +777,7 @@ bool GraphicsContextGL::extractImageData(ImageData* imageData, DataFormat source
         return false;
     data.resize(packedSize);
 
-    if (!packPixels(imageData->data().data(), sourceDataFormat, width, height, sourceImageSubRectangle, depth, 0, unpackImageHeight, format, type, premultiplyAlpha ? AlphaOp::DoPremultiply : AlphaOp::DoNothing, data.data(), flipY))
+    if (!packPixels(pixelBuffer.data().data(), sourceDataFormat, width, height, sourceImageSubRectangle, depth, 0, unpackImageHeight, format, type, premultiplyAlpha ? AlphaOp::DoPremultiply : AlphaOp::DoNothing, data.data(), flipY))
         return false;
 
     return true;

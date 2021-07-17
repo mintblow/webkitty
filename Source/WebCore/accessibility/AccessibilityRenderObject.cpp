@@ -550,7 +550,7 @@ bool AccessibilityRenderObject::isOffScreen() const
     if (!m_renderer)
         return true;
 
-    IntRect contentRect = snappedIntRect(m_renderer->absoluteClippedOverflowRect());
+    IntRect contentRect = snappedIntRect(m_renderer->absoluteClippedOverflowRectForSpatialNavigation());
     // FIXME: unclear if we need LegacyIOSDocumentVisibleRect.
     IntRect viewRect = m_renderer->view().frameView().visibleContentRect(ScrollableArea::LegacyIOSDocumentVisibleRect);
     viewRect.intersect(contentRect);
@@ -649,7 +649,7 @@ String AccessibilityRenderObject::textUnderElement(AccessibilityTextUnderElement
         // If possible, use a text iterator to get the text, so that whitespace
         // is handled consistently.
         Document* nodeDocument = nullptr;
-        Optional<SimpleRange> textRange;
+        std::optional<SimpleRange> textRange;
         if (Node* node = m_renderer->node()) {
             nodeDocument = &node->document();
             textRange = makeRangeSelectingNodeContents(*node);
@@ -770,7 +770,7 @@ String AccessibilityRenderObject::stringValue() const
     }
     
     if (is<RenderListMarker>(*m_renderer))
-        return downcast<RenderListMarker>(*m_renderer).text();
+        return downcast<RenderListMarker>(*m_renderer).textWithoutSuffix().toString();
     
     if (isWebArea())
         return String();
@@ -1004,7 +1004,7 @@ AccessibilityObject* AccessibilityRenderObject::internalLinkElement() const
     if (!equalIgnoringFragmentIdentifier(documentURL, linkURL))
         return nullptr;
 
-    auto linkedNode = m_renderer->document().findAnchor(fragmentIdentifier.toStringWithoutCopying());
+    auto linkedNode = m_renderer->document().findAnchor(fragmentIdentifier);
     if (!linkedNode)
         return nullptr;
 
@@ -1214,9 +1214,9 @@ void AccessibilityRenderObject::titleElementText(Vector<AccessibilityText>& text
     
 AccessibilityObject* AccessibilityRenderObject::titleUIElement() const
 {
-    if (!m_renderer)
+    if (!m_renderer || !exposesTitleUIElement())
         return nullptr;
-    
+
     // if isFieldset is true, the renderer is guaranteed to be a RenderFieldset
     if (isFieldset())
         return axObjectCache()->getOrCreate(downcast<RenderBlock>(*m_renderer).findFieldsetLegend(RenderBlock::FieldsetIncludeFloatingOrOutOfFlow));
@@ -1551,8 +1551,8 @@ bool AccessibilityRenderObject::computeAccessibilityIsIgnored() const
 
     // Find out if this element is inside of a label element.
     // If so, it may be ignored because it's the label for a checkbox or radio button.
-    AccessibilityObject* controlObject = correspondingControlForLabelElement();
-    if (controlObject && !controlObject->exposesTitleUIElement() && controlObject->isCheckboxOrRadio())
+    auto* controlObject = correspondingControlForLabelElement();
+    if (controlObject && controlObject->isCheckboxOrRadio() && !controlObject->titleUIElement())
         return true;
 
     // By default, objects should be ignored so that the AX hierarchy is not
@@ -2313,7 +2313,7 @@ VisiblePosition AccessibilityRenderObject::visiblePositionForPoint(const IntPoin
     Node* innerNode = nullptr;
     
     // Locate the node containing the point
-    // FIXME: Remove this loop and instead add HitTestRequest::AllowVisibleChildFrameContentOnly to the hit test request type.
+    // FIXME: Remove this loop and instead add HitTestRequest::Type::AllowVisibleChildFrameContentOnly to the hit test request type.
     LayoutPoint pointResult;
     while (1) {
         LayoutPoint pointToUse;
@@ -2322,7 +2322,7 @@ VisiblePosition AccessibilityRenderObject::visiblePositionForPoint(const IntPoin
 #else
         pointToUse = point;
 #endif
-        constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active };
+        constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active };
         HitTestResult result { pointToUse };
         renderView->document().hitTest(hitType, result);
         innerNode = result.innerNode();
@@ -2536,7 +2536,7 @@ AXCoreObject* AccessibilityRenderObject::accessibilityHitTest(const IntPoint& po
 
     RenderLayer* layer = downcast<RenderBox>(*m_renderer).layer();
      
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::AccessibilityHitTest };
+    constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::AccessibilityHitTest };
     HitTestResult hitTestResult { point };
     layer->hitTest(hitType, hitTestResult);
     Node* node = hitTestResult.innerNode();
@@ -2565,8 +2565,8 @@ AXCoreObject* AccessibilityRenderObject::accessibilityHitTest(const IntPoint& po
     
     if (result && result->accessibilityIsIgnored()) {
         // If this element is the label of a control, a hit test should return the control.
-        AXCoreObject* controlObject = result->correspondingControlForLabelElement();
-        if (controlObject && !controlObject->exposesTitleUIElement())
+        auto* controlObject = result->correspondingControlForLabelElement();
+        if (controlObject && !controlObject->titleUIElement())
             return controlObject;
 
         result = result->parentObjectUnignored();
@@ -2788,6 +2788,14 @@ bool AccessibilityRenderObject::supportsExpandedTextValue() const
             return parent->hasTagName(abbrTag) || parent->hasTagName(acronymTag);
     }
     
+    return false;
+}
+
+bool AccessibilityRenderObject::shouldIgnoreAttributeRole() const
+{
+    if (m_ariaRole == AccessibilityRole::Document
+        && hasContentEditableAttributeSet())
+        return true;
     return false;
 }
 
@@ -3241,7 +3249,7 @@ AccessibilitySVGRoot* AccessibilityRenderObject::remoteSVGRootElement(CreationCh
     Image* image = cachedImage->image();
     if (!is<SVGImage>(image))
         return nullptr;
-    
+
     FrameView* frameView = downcast<SVGImage>(*image).frameView();
     if (!frameView)
         return nullptr;

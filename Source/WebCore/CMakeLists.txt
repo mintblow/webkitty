@@ -78,6 +78,7 @@ set(WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/crypto/keys"
     "${WEBCORE_DIR}/crypto/parameters"
     "${WEBCORE_DIR}/css"
+    "${WEBCORE_DIR}/css/calc"
     "${WEBCORE_DIR}/css/parser"
     "${WEBCORE_DIR}/css/typedom"
     "${WEBCORE_DIR}/cssjit"
@@ -125,6 +126,7 @@ set(WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/platform"
     "${WEBCORE_DIR}/platform/animation"
     "${WEBCORE_DIR}/platform/audio"
+    "${WEBCORE_DIR}/platform/calc"
     "${WEBCORE_DIR}/platform/encryptedmedia"
     "${WEBCORE_DIR}/platform/gamepad"
     "${WEBCORE_DIR}/platform/graphics"
@@ -229,8 +231,7 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/cache/CacheQueryOptions.idl
     Modules/cache/DOMCache.idl
     Modules/cache/DOMCacheStorage.idl
-    Modules/cache/DOMWindow+Caches.idl
-    Modules/cache/WorkerGlobalScope+Caches.idl
+    Modules/cache/WindowOrWorkerGlobalScope+Caches.idl
 
     Modules/contact-picker/ContactInfo.idl
     Modules/contact-picker/ContactProperty.idl
@@ -571,13 +572,6 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/webaudio/ScriptProcessorNode.idl
     Modules/webaudio/WaveShaperNode.idl
     Modules/webaudio/WaveShaperOptions.idl
-    Modules/webaudio/WebKitAudioBufferSourceNode.idl
-    Modules/webaudio/WebKitAudioContext.idl
-    Modules/webaudio/WebKitAudioListener.idl
-    Modules/webaudio/WebKitAudioPannerNode.idl
-    Modules/webaudio/WebKitDynamicsCompressorNode.idl
-    Modules/webaudio/WebKitOfflineAudioContext.idl
-    Modules/webaudio/WebKitOscillatorNode.idl
 
     Modules/webauthn/AttestationConveyancePreference.idl
     Modules/webauthn/AuthenticationExtensionsClientInputs.idl
@@ -798,6 +792,7 @@ set(WebCore_NON_SVG_IDL_FILES
     dom/Attr.idl
     dom/BeforeLoadEvent.idl
     dom/BeforeUnloadEvent.idl
+    dom/BroadcastChannel.idl
     dom/CDATASection.idl
     dom/CharacterData.idl
     dom/ChildNode.idl
@@ -1024,11 +1019,13 @@ set(WebCore_NON_SVG_IDL_FILES
     html/ImageBitmap.idl
     html/ImageBitmapOptions.idl
     html/ImageData.idl
+    html/ImageDataSettings.idl
     html/MediaController.idl
     html/MediaEncryptedEvent.idl
     html/MediaError.idl
     html/OffscreenCanvas.idl
     html/RadioNodeList.idl
+    html/SubmitEvent.idl
     html/TextMetrics.idl
     html/TimeRanges.idl
     html/URLSearchParams.idl
@@ -1135,6 +1132,7 @@ set(WebCore_NON_SVG_IDL_FILES
     page/PerformanceObserverCallback.idl
     page/PerformanceObserverEntryList.idl
     page/PerformanceNavigation.idl
+    page/PerformanceNavigationTiming.idl
     page/PerformancePaintTiming.idl
     page/PerformanceResourceTiming.idl
     page/PerformanceServerTiming.idl
@@ -1474,7 +1472,12 @@ endif ()
 # For platforms that want to use system-provided OpenGL (ES) / EGL headers,
 # these include directories, libraries or definitions need to be
 # added before the ANGLE directories.
-if (USE_LIBEPOXY)
+if (USE_ANGLE_EGL)
+    list(APPEND WebCore_LIBRARIES
+        ANGLE::EGL
+        ANGLE::GLES
+    )
+elseif (USE_LIBEPOXY)
     list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
         ${LIBEPOXY_INCLUDE_DIRS}
     )
@@ -1693,6 +1696,8 @@ if (ENABLE_WEBGL)
             platform/graphics/angle/GraphicsContextGLANGLEEGLUtilities.cpp
             platform/graphics/angle/TemporaryANGLESetting.cpp
         )
+
+        list(APPEND WebCore_LIBRARIES ANGLE::GLES)
     else ()
         list(APPEND WebCore_SOURCES
             platform/graphics/ANGLEWebKitBridge.cpp
@@ -1715,10 +1720,9 @@ if (ENABLE_WEBGL)
                 platform/graphics/opengl/GraphicsContextGLOpenGLBase.cpp
             )
         endif ()
-    endif ()
 
-    list(APPEND WebCore_LIBRARIES ANGLEFramework)
-    list(APPEND WebCoreTestSupport_LIBRARIES ANGLEFramework)
+        list(APPEND WebCore_LIBRARIES ANGLE::ANGLE)
+    endif ()
 elseif (USE_ANGLE_EGL)
     list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
         ${WEBCORE_DIR}/platform/graphics/angle
@@ -1728,9 +1732,6 @@ elseif (USE_ANGLE_EGL)
     list(APPEND WebCore_SOURCES
         platform/graphics/opengl/TemporaryOpenGLSetting.cpp
     )
-
-    list(APPEND WebCore_LIBRARIES ANGLEFramework)
-    list(APPEND WebCoreTestSupport_LIBRARIES ANGLEFramework)
 endif ()
 
 list(APPEND WebCore_IDL_FILES
@@ -1760,6 +1761,7 @@ endif ()
 if (USE_LIBWEBRTC)
     list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/libwebrtc/Source/"
         "${THIRDPARTY_DIR}/libwebrtc/Source/webrtc"
+        "${THIRDPARTY_DIR}/libwebrtc/Source/third_party/libvpx/source/libvpx"
         "${THIRDPARTY_DIR}/libwebrtc/Source/third_party/abseil-cpp")
     list(APPEND WebCore_LIBRARIES webrtc)
     list(APPEND WebCore_SOURCES
@@ -1857,6 +1859,7 @@ set(MAKE_NAMES_DEPENDENCIES
 )
 set(SUPPLEMENTAL_DEPENDENCY_FILE ${WebCore_DERIVED_SOURCES_DIR}/supplemental_dependency.tmp)
 set(ISO_SUBSPACES_HEADER_FILE ${WebCore_DERIVED_SOURCES_DIR}/DOMIsoSubspaces.h)
+set(CONSTRUCTORS_HEADER_FILE ${WebCore_DERIVED_SOURCES_DIR}/DOMConstructors.h)
 set(WINDOW_CONSTRUCTORS_FILE ${WebCore_DERIVED_SOURCES_DIR}/DOMWindowConstructors.idl)
 set(WORKERGLOBALSCOPE_CONSTRUCTORS_FILE ${WebCore_DERIVED_SOURCES_DIR}/WorkerGlobalScopeConstructors.idl)
 set(DEDICATEDWORKERGLOBALSCOPE_CONSTRUCTORS_FILE ${WebCore_DERIVED_SOURCES_DIR}/DedicatedWorkerGlobalScopeConstructors.idl)
@@ -2042,9 +2045,10 @@ GENERATE_BINDINGS(WebCoreBindings
     GENERATOR JS
     SUPPLEMENTAL_DEPFILE ${SUPPLEMENTAL_DEPENDENCY_FILE}
     PP_EXTRA_OUTPUT
-        ${ISO_SUBSPACES_HEADER_FILE} ${WINDOW_CONSTRUCTORS_FILE} ${WORKERGLOBALSCOPE_CONSTRUCTORS_FILE} ${DEDICATEDWORKERGLOBALSCOPE_CONSTRUCTORS_FILE}
+        ${ISO_SUBSPACES_HEADER_FILE} ${CONSTRUCTORS_HEADER_FILE} ${WINDOW_CONSTRUCTORS_FILE} ${WORKERGLOBALSCOPE_CONSTRUCTORS_FILE} ${DEDICATEDWORKERGLOBALSCOPE_CONSTRUCTORS_FILE}
     PP_EXTRA_ARGS
         --isoSubspacesHeaderFile ${ISO_SUBSPACES_HEADER_FILE}
+        --constructorsHeaderFile ${CONSTRUCTORS_HEADER_FILE}
         --windowConstructorsFile ${WINDOW_CONSTRUCTORS_FILE}
         --workerGlobalScopeConstructorsFile ${WORKERGLOBALSCOPE_CONSTRUCTORS_FILE}
         --dedicatedWorkerGlobalScopeConstructorsFile ${DEDICATEDWORKERGLOBALSCOPE_CONSTRUCTORS_FILE}

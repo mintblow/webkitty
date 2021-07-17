@@ -39,6 +39,7 @@
 @property (nonatomic, copy) void (^didEndZoomingCallback)(void);
 @property (nonatomic, copy) void (^didShowKeyboardCallback)(void);
 @property (nonatomic, copy) void (^didHideKeyboardCallback)(void);
+@property (nonatomic, copy) void (^willStartInputSessionCallback)(void);
 @property (nonatomic, copy) void (^willPresentPopoverCallback)(void);
 @property (nonatomic, copy) void (^didDismissPopoverCallback)(void);
 @property (nonatomic, copy) void (^didEndScrollingCallback)(void);
@@ -82,6 +83,7 @@
 
 - (void)dismissActiveMenu;
 - (void)resetInteractionCallbacks;
-- (void)_appBoundNavigationDataForDomain:(NSString *)domain completionHandler:(void (^)(NSString * context))completionHandler;
+- (void)_didLoadAppInitiatedRequest:(void (^)(BOOL result))completionHandler;
+- (void)_didLoadNonAppInitiatedRequest:(void (^)(BOOL result))completionHandler;
 
 @end

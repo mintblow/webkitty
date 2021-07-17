@@ -25,7 +25,7 @@
 
 #include "Filter.h"
 #include "GraphicsContext.h"
-#include "ImageData.h"
+#include "PixelBuffer.h"
 #include <wtf/MathExtras.h>
 #include <wtf/text/TextStream.h>
 
@@ -100,7 +100,7 @@ inline void luminance(float& red, float& green, float& blue, float& alpha)
 template<ColorMatrixType filterType>
 bool effectApplyAccelerated(Uint8ClampedArray& pixelArray, const Vector<float>& values, float components[9], IntSize bufferSize)
 {
-    ASSERT(pixelArray.length() == bufferSize.area().unsafeGet() * 4);
+    ASSERT(pixelArray.length() == bufferSize.area() * 4);
     
     if (filterType == FECOLORMATRIX_TYPE_MATRIX) {
         // vImageMatrixMultiply_ARGB8888 takes a 4x4 matrix, if any value in the last column of the FEColorMatrix 5x4 matrix
@@ -285,13 +285,14 @@ void FEColorMatrix::platformApplySoftware()
     if (inBuffer)
         resultImage->context().drawImageBuffer(*inBuffer, drawingRegionOfInputImage(in->absolutePaintRect()));
 
+    PixelBufferFormat format { AlphaPremultiplication::Unpremultiplied, PixelFormat::RGBA8, resultColorSpace() };
     IntRect imageRect(IntPoint(), resultImage->logicalSize());
-    auto imageData = resultImage->getImageData(AlphaPremultiplication::Unpremultiplied, imageRect);
-    if (!imageData)
+    auto pixelBuffer = resultImage->getPixelBuffer(format, imageRect);
+    if (!pixelBuffer)
         return;
 
-    auto& pixelArray = imageData->data();
-    IntSize pixelArrayDimensions = imageData->size();
+    auto& pixelArray = pixelBuffer->data();
+    auto pixelArrayDimensions = pixelBuffer->size();
 
     Vector<float> values = normalizedFloats(m_values);
     
@@ -313,7 +314,7 @@ void FEColorMatrix::platformApplySoftware()
         break;
     }
 
-    resultImage->putImageData(AlphaPremultiplication::Unpremultiplied, *imageData, imageRect);
+    resultImage->putPixelBuffer(*pixelBuffer, imageRect);
 }
 
 static TextStream& operator<<(TextStream& ts, const ColorMatrixType& type)

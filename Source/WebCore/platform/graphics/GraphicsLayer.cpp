@@ -35,7 +35,6 @@
 #include <wtf/HashMap.h>
 #include <wtf/NeverDestroyed.h>
 #include <wtf/text/CString.h>
-#include <wtf/text/StringBuilder.h>
 #include <wtf/text/TextStream.h>
 #include <wtf/text/WTFString.h>
 
@@ -151,7 +150,11 @@ GraphicsLayer::GraphicsLayer(Type type, GraphicsLayerClient& layerClient)
     , m_userInteractionEnabled(true)
     , m_canDetachBackingStore(true)
 #if HAVE(CORE_ANIMATION_SEPARATED_LAYERS)
-    , m_separated(false)
+    , m_isSeparated(false)
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+    , m_isSeparatedPortal(false)
+    , m_isDescendentOfSeparatedPortal(false)
+#endif
 #endif
 {
 #ifndef NDEBUG
@@ -598,11 +601,7 @@ FloatRect GraphicsLayer::adjustCoverageRectForMovement(const FloatRect& coverage
 String GraphicsLayer::animationNameForTransition(AnimatedPropertyID property)
 {
     // | is not a valid identifier character in CSS, so this can never conflict with a keyframe identifier.
-    StringBuilder id;
-    id.appendLiteral("-|transition");
-    id.appendNumber(static_cast<int>(property));
-    id.append('-');
-    return id.toString();
+    return makeString("-|transition", static_cast<int>(property), '-');
 }
 
 void GraphicsLayer::suspendAnimations(MonotonicTime)
@@ -950,7 +949,7 @@ void GraphicsLayer::dumpProperties(TextStream& ts, LayerTreeAsTextBehavior behav
     if (m_maskLayer) {
         ts << indent << "(mask layer";
         if (behavior & LayerTreeAsTextDebug)
-            ts << " " << m_maskLayer;
+            ts << " " << m_maskLayer.get();
         ts << ")\n";
 
         TextStream::IndentScope indentScope(ts);
@@ -960,7 +959,7 @@ void GraphicsLayer::dumpProperties(TextStream& ts, LayerTreeAsTextBehavior behav
     if (m_replicaLayer) {
         ts << indent << "(replica layer";
         if (behavior & LayerTreeAsTextDebug)
-            ts << " " << m_replicaLayer;
+            ts << " " << m_replicaLayer.get();
         ts << ")\n";
 
         TextStream::IndentScope indentScope(ts);

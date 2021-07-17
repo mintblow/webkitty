@@ -62,7 +62,7 @@ inline bool webkitGstCheckVersion(guint major, guint minor, guint micro)
 GstPad* webkitGstGhostPadFromStaticTemplate(GstStaticPadTemplate*, const gchar* name, GstPad* target);
 #if ENABLE(VIDEO)
 bool getVideoSizeAndFormatFromCaps(const GstCaps*, WebCore::IntSize&, GstVideoFormat&, int& pixelAspectRatioNumerator, int& pixelAspectRatioDenominator, int& stride);
-Optional<FloatSize> getVideoResolutionFromCaps(const GstCaps*);
+std::optional<FloatSize> getVideoResolutionFromCaps(const GstCaps*);
 bool getSampleVideoInfo(GstSample*, GstVideoInfo&);
 #endif
 const char* capsMediaType(const GstCaps*);
@@ -302,6 +302,10 @@ bool webkitGstSetElementStateSynchronously(GstElement*, GstState, Function<bool(
 
 GstBuffer* gstBufferNewWrappedFast(void* data, size_t length);
 
+// These functions should be used for elements not provided by WebKit itself and not provided by GStreamer -core.
+GstElement* makeGStreamerElement(const char* factoryName, const char* name);
+GstElement* makeGStreamerBin(const char* description, bool ghostUnlinkedPads);
+
 }
 
 #ifndef GST_BUFFER_DTS_OR_PTS
@@ -315,5 +319,20 @@ GstBuffer* gstBufferNewWrappedFast(void* data, size_t length);
 #else
 #define webkitGstAudioFormatFillSilence gst_audio_format_fill_silence
 #endif
+
+// In GStreamer 1.20 gst_element_get_request_pad() was renamed to gst_element_request_pad_simple(),
+// so create an alias for older versions.
+#if !GST_CHECK_VERSION(1, 19, 0)
+#define gst_element_request_pad_simple gst_element_get_request_pad
+#endif
+
+// We can't pass macros as template parameters, so we need to wrap them in inline functions.
+inline void gstObjectLock(void* object) { GST_OBJECT_LOCK(object); }
+inline void gstObjectUnlock(void* object) { GST_OBJECT_UNLOCK(object); }
+inline void gstPadStreamLock(GstPad* pad) { GST_PAD_STREAM_LOCK(pad); }
+inline void gstPadStreamUnlock(GstPad* pad) { GST_PAD_STREAM_UNLOCK(pad); }
+
+using GstObjectLocker = ExternalLocker<void, gstObjectLock, gstObjectUnlock>;
+using GstPadStreamLocker = ExternalLocker<GstPad, gstPadStreamLock, gstPadStreamUnlock>;
 
 #endif // USE(GSTREAMER)

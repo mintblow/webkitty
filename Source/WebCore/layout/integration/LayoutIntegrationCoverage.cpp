@@ -270,8 +270,8 @@ static void printReason(AvoidanceReason reason, TextStream& stream)
     case AvoidanceReason::InlineBoxHasBackground:
         stream << "inline box has background";
         break;
-    case AvoidanceReason::InlineBoxHasMarginOrPadding:
-        stream << "inline box has margin or padding";
+    case AvoidanceReason::InlineBoxHasNegativeMargin:
+        stream << "inline box has negative margin";
         break;
     default:
         break;
@@ -463,7 +463,7 @@ template<> OptionSet<AvoidanceReason> canUseForCharacter(LChar character, bool t
 }
 
 template <typename CharacterType>
-static OptionSet<AvoidanceReason> canUseForText(const CharacterType* text, unsigned length, const FontCascade& fontCascade, Optional<float> lineHeightConstraint,
+static OptionSet<AvoidanceReason> canUseForText(const CharacterType* text, unsigned length, const FontCascade& fontCascade, std::optional<float> lineHeightConstraint,
     bool textIsJustified, IncludeReasons includeReasons)
 {
     OptionSet<AvoidanceReason> reasons;
@@ -496,7 +496,7 @@ static OptionSet<AvoidanceReason> canUseForText(const CharacterType* text, unsig
     return reasons;
 }
 
-static OptionSet<AvoidanceReason> canUseForText(StringView text, const FontCascade& fontCascade, Optional<float> lineHeightConstraint, bool textIsJustified, IncludeReasons includeReasons)
+static OptionSet<AvoidanceReason> canUseForText(StringView text, const FontCascade& fontCascade, std::optional<float> lineHeightConstraint, bool textIsJustified, IncludeReasons includeReasons)
 {
     if (text.is8Bit())
         return canUseForText(text.characters8(), text.length(), fontCascade, lineHeightConstraint, textIsJustified, includeReasons);
@@ -511,7 +511,7 @@ static OptionSet<AvoidanceReason> canUseForFontAndText(const RenderBoxModelObjec
     auto& fontCascade = style.fontCascade();
     if (fontCascade.primaryFont().isInterstitial())
         SET_REASON_AND_RETURN_IF_NEEDED(FlowIsMissingPrimaryFont, reasons, includeReasons);
-    Optional<float> lineHeightConstraint;
+    std::optional<float> lineHeightConstraint;
     if (style.lineBoxContain().contains(LineBoxContain::Glyphs))
         lineHeightConstraint = container.lineHeight(false, HorizontalLine, PositionOfInteriorLineBoxes).toFloat();
     bool flowIsJustified = style.textAlign() == TextAlignMode::Justify;
@@ -591,7 +591,7 @@ static OptionSet<AvoidanceReason> canUseForStyle(const RenderStyle& style, Inclu
     if (style.textSecurity() != TextSecurity::None)
         SET_REASON_AND_RETURN_IF_NEEDED(FlowHasTextSecurity, reasons, includeReasons);
     if (style.hyphens() == Hyphens::Auto) {
-        auto textReasons = canUseForText(style.hyphenString(), style.fontCascade(), WTF::nullopt, false, includeReasons);
+        auto textReasons = canUseForText(style.hyphenString(), style.fontCascade(), std::nullopt, false, includeReasons);
         if (textReasons)
             ADD_REASONS_AND_RETURN_IF_NEEDED(textReasons, reasons, includeReasons);
     }
@@ -634,6 +634,8 @@ static OptionSet<AvoidanceReason> canUseForChild(const RenderBlockFlow& flow, co
         if (style.minWidth().isPercent() || style.maxWidth().isPercent())
             return false;
         if (style.minHeight().isPercent() || style.maxHeight().isPercent())
+            return false;
+        if (style.boxShadow())
             return false;
         return true;
     };
@@ -704,9 +706,8 @@ static OptionSet<AvoidanceReason> canUseForChild(const RenderBlockFlow& flow, co
             SET_REASON_AND_RETURN_IF_NEEDED(InlineBoxHasBackground, reasons, includeReasons);
         if (style.hasOutline())
             SET_REASON_AND_RETURN_IF_NEEDED(ContentHasOutline, reasons, includeReasons);
-        if (renderInline.marginLeft() < 0 || renderInline.marginRight() < 0 || renderInline.marginTop() < 0 || renderInline.marginBottom() < 0
-            || renderInline.paddingLeft() < 0 || renderInline.paddingRight() < 0 || renderInline.paddingTop() < 0 || renderInline.paddingBottom() < 0)
-            SET_REASON_AND_RETURN_IF_NEEDED(InlineBoxHasMarginOrPadding, reasons, includeReasons);
+        if (renderInline.marginLeft() < 0 || renderInline.marginRight() < 0 || renderInline.marginTop() < 0 || renderInline.marginBottom() < 0)
+            SET_REASON_AND_RETURN_IF_NEEDED(InlineBoxHasNegativeMargin, reasons, includeReasons);
         if (renderInline.isInFlowPositioned())
             SET_REASON_AND_RETURN_IF_NEEDED(ChildBoxIsFloatingOrPositioned, reasons, includeReasons);
         if (renderInline.containingBlock()->style().lineBoxContain() != RenderStyle::initialLineBoxContain())

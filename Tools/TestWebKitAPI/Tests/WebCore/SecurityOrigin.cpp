@@ -77,8 +77,8 @@ private:
 
 TEST_F(SecurityOriginTest, SecurityOriginConstructors)
 {
-    auto o1 = SecurityOrigin::create("http", "example.com", Optional<uint16_t>(80));
-    auto o2 = SecurityOrigin::create("http", "example.com", Optional<uint16_t>());
+    auto o1 = SecurityOrigin::create("http", "example.com", std::optional<uint16_t>(80));
+    auto o2 = SecurityOrigin::create("http", "example.com", std::optional<uint16_t>());
     auto o3 = SecurityOrigin::createFromString("http://example.com");
     auto o4 = SecurityOrigin::createFromString("http://example.com:80");
     auto o5 = SecurityOrigin::create(URL(URL(), "http://example.com"));
@@ -88,6 +88,7 @@ TEST_F(SecurityOriginTest, SecurityOriginConstructors)
 #if PLATFORM(COCOA)
     auto o9 = SecurityOrigin::createFromString("x-apple-ql-id://host");
     auto o10 = SecurityOrigin::createFromString("x-apple-ql-magic://host");
+    auto o11 = SecurityOrigin::createFromString("x-apple-ql-id2://host");
 #endif
 
     EXPECT_EQ(String("http"), o1->protocol());
@@ -101,6 +102,7 @@ TEST_F(SecurityOriginTest, SecurityOriginConstructors)
 #if PLATFORM(COCOA)
     EXPECT_EQ(String("x-apple-ql-id"), o9->protocol());
     EXPECT_EQ(String("x-apple-ql-magic"), o10->protocol());
+    EXPECT_EQ(String("x-apple-ql-id2"), o11->protocol());
 #endif
 
     EXPECT_EQ(String("example.com"), o1->host());
@@ -114,6 +116,7 @@ TEST_F(SecurityOriginTest, SecurityOriginConstructors)
 #if PLATFORM(COCOA)
     EXPECT_EQ(String("host"), o9->host());
     EXPECT_EQ(String("host"), o10->host());
+    EXPECT_EQ(String("host"), o11->host());
 #endif
 
     EXPECT_FALSE(o1->port());
@@ -122,11 +125,12 @@ TEST_F(SecurityOriginTest, SecurityOriginConstructors)
     EXPECT_FALSE(o4->port());
     EXPECT_FALSE(o5->port());
     EXPECT_FALSE(o6->port());
-    EXPECT_EQ(o7->port(), Optional<uint16_t>(81));
+    EXPECT_EQ(o7->port(), std::optional<uint16_t>(81));
     EXPECT_FALSE(o8->port());
 #if PLATFORM(COCOA)
     EXPECT_FALSE(o9->port());
     EXPECT_FALSE(o10->port());
+    EXPECT_FALSE(o11->port());
 #endif
 
     EXPECT_EQ("http://example.com", o1->toString());
@@ -140,6 +144,7 @@ TEST_F(SecurityOriginTest, SecurityOriginConstructors)
 #if PLATFORM(COCOA)
     EXPECT_EQ("x-apple-ql-id://host", o9->toString());
     EXPECT_EQ("x-apple-ql-magic://host", o10->toString());
+    EXPECT_EQ("x-apple-ql-id2://host", o11->toString());
 #endif
 
     EXPECT_TRUE(o1->isSameOriginAs(o2.get()));
@@ -152,6 +157,7 @@ TEST_F(SecurityOriginTest, SecurityOriginConstructors)
 #if PLATFORM(COCOA)
     EXPECT_FALSE(o1->isSameOriginAs(o9.get()));
     EXPECT_FALSE(o1->isSameOriginAs(o10.get()));
+    EXPECT_FALSE(o1->isSameOriginAs(o11.get()));
 #endif
 }
 

@@ -64,6 +64,8 @@ public:
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
     void playbackTargetIsWirelessChanged();
 #endif
+
+    void queueTaskOnEventLoop(Function<void()>&&);
     
     class Notification {
     public:
@@ -323,8 +325,8 @@ private:
 
     WTF::Function<void()> m_pendingSeek;
 
-    Deque<Notification> m_queuedNotifications;
-    mutable Lock m_queueMutex;
+    mutable Lock m_queuedNotificationsLock;
+    Deque<Notification> m_queuedNotifications WTF_GUARDED_BY_LOCK(m_queuedNotificationsLock);
 
     mutable std::unique_ptr<PlatformTimeRanges> m_cachedLoadedTimeRanges;
 

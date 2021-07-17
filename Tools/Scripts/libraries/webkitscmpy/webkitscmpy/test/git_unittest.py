@@ -21,18 +21,19 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import shutil
-import tempfile
-import unittest
 
 from datetime import datetime
-from webkitcorepy import LoggerCapture, OutputCapture
+from webkitcorepy import run, testing, LoggerCapture, OutputCapture
 from webkitcorepy.mocks import Time as MockTime
 from webkitscmpy import Commit, local, mocks, remote
 
 
-class TestGit(unittest.TestCase):
-    path = '/mock/repository'
+class TestGit(testing.PathTestCase):
+    basepath = 'mock/repository'
+
+    def setUp(self):
+        super(TestGit, self).setUp()
+        os.mkdir(os.path.join(self.path, '.git'))
 
     def test_detection(self):
         with OutputCapture(), mocks.local.Git(self.path), mocks.local.Svn():
@@ -79,65 +80,52 @@ class TestGit(unittest.TestCase):
             self.assertEqual(local.Git(self.path).default_branch, 'main')
 
     def test_scm_type(self):
-        try:
-            dirname = tempfile.mkdtemp()
-            with mocks.local.Git(dirname, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
-                self.assertTrue(local.Git(dirname).is_git)
-                self.assertFalse(local.Git(dirname).is_svn)
+        with mocks.local.Git(self.path, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
+            self.assertTrue(local.Git(self.path).is_git)
+            self.assertFalse(local.Git(self.path).is_svn)
 
-            with mocks.local.Git(dirname, git_svn=True, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
-                self.assertTrue(local.Git(dirname).is_git)
-                self.assertTrue(local.Git(dirname).is_svn)
-
-        finally:
-            shutil.rmtree(dirname)
+        with mocks.local.Git(self.path, git_svn=True, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
+            self.assertTrue(local.Git(self.path).is_git)
+            self.assertTrue(local.Git(self.path).is_svn)
 
     def test_info(self):
-        try:
-            dirname = tempfile.mkdtemp()
-            with mocks.local.Git(dirname, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
-                with self.assertRaises(local.Git.Exception):
-                    self.assertEqual(dict(), local.Git(dirname).info())
+        with mocks.local.Git(self.path, remote='git@example.org:mock/repository'), MockTime, LoggerCapture():
+            with self.assertRaises(local.Git.Exception):
+                self.assertEqual(dict(), local.Git(self.path).info())
 
-            with mocks.local.Git(dirname, git_svn=True, remote='git@example.org:{}'.format(self.path)), MockTime:
-                self.assertDictEqual(
-                    {
-                        'Path': '.',
-                        'Repository Root': 'git@example.org:/mock/repository',
-                        'URL': 'git@example.org:/mock/repository/main',
-                        'Revision': '9',
-                        'Node Kind': 'directory',
-                        'Schedule': 'normal',
-                        'Last Changed Author': 'jbedard@apple.com',
-                        'Last Changed Rev': '9',
-                        'Last Changed Date': datetime.fromtimestamp(1601668000).strftime('%Y-%m-%d %H:%M:%S'),
-                    }, local.Git(dirname).info(),
-                )
-        finally:
-            shutil.rmtree(dirname)
+        with mocks.local.Git(self.path, git_svn=True, remote='git@example.org:mock/repository'), MockTime:
+            self.assertDictEqual(
+                {
+                    'Path': '.',
+                    'Repository Root': 'git@example.org:mock/repository',
+                    'URL': 'git@example.org:mock/repository/main',
+                    'Revision': '9',
+                    'Node Kind': 'directory',
+                    'Schedule': 'normal',
+                    'Last Changed Author': 'jbedard@apple.com',
+                    'Last Changed Rev': '9',
+                    'Last Changed Date': datetime.fromtimestamp(1601668000).strftime('%Y-%m-%d %H:%M:%S'),
+                }, local.Git(self.path).info(),
+            )
 
     def test_commit_revision(self):
-        try:
-            dirname = tempfile.mkdtemp()
-            with mocks.local.Git(dirname), MockTime, LoggerCapture():
-                with self.assertRaises(local.Git.Exception):
-                    self.assertEqual(None, local.Git(dirname).commit(revision=1))
+        with mocks.local.Git(self.path), MockTime, LoggerCapture():
+            with self.assertRaises(local.Git.Exception):
+                self.assertEqual(None, local.Git(self.path).commit(revision=1))
 
-            with mocks.local.Git(dirname, git_svn=True, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
-                self.assertEqual('1@main', str(local.Git(dirname).commit(revision=1)))
-                self.assertEqual('2@main', str(local.Git(dirname).commit(revision=2)))
-                self.assertEqual('2.1@branch-a', str(local.Git(dirname).commit(revision=3)))
-                self.assertEqual('3@main', str(local.Git(dirname).commit(revision=4)))
-                self.assertEqual('2.2@branch-b', str(local.Git(dirname).commit(revision=5)))
-                self.assertEqual('2.2@branch-a', str(local.Git(dirname).commit(revision=6)))
-                self.assertEqual('2.3@branch-b', str(local.Git(dirname).commit(revision=7)))
-                self.assertEqual('4@main', str(local.Git(dirname).commit(revision=8)))
+        with mocks.local.Git(self.path, git_svn=True, remote='git@example.org:{}'.format(self.path)), MockTime, LoggerCapture():
+            self.assertEqual('1@main', str(local.Git(self.path).commit(revision=1)))
+            self.assertEqual('2@main', str(local.Git(self.path).commit(revision=2)))
+            self.assertEqual('2.1@branch-a', str(local.Git(self.path).commit(revision=3)))
+            self.assertEqual('3@main', str(local.Git(self.path).commit(revision=4)))
+            self.assertEqual('2.2@branch-b', str(local.Git(self.path).commit(revision=5)))
+            self.assertEqual('2.2@branch-a', str(local.Git(self.path).commit(revision=6)))
+            self.assertEqual('2.3@branch-b', str(local.Git(self.path).commit(revision=7)))
+            self.assertEqual('4@main', str(local.Git(self.path).commit(revision=8)))
 
-                # Out-of-bounds commit
-                with self.assertRaises(local.Git.Exception):
-                    self.assertEqual(None, local.Git(dirname).commit(revision=10))
-        finally:
-            shutil.rmtree(dirname)
+            # Out-of-bounds commit
+            with self.assertRaises(local.Git.Exception):
+                self.assertEqual(None, local.Git(self.path).commit(revision=10))
 
     def test_commit_hash(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
@@ -237,7 +225,7 @@ class TestGit(unittest.TestCase):
 
     def test_tag(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
-            with mock:
+            with mock, LoggerCapture():
                 mock.tags['tag-1'] = mock.commits['branch-a'][-1]
 
                 self.assertEqual(
@@ -247,7 +235,7 @@ class TestGit(unittest.TestCase):
 
     def test_checkout(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
-            with mock:
+            with mock, LoggerCapture():
                 mock.tags['tag-1'] = mock.commits['branch-a'][-1]
 
                 repository = local.Git(self.path)
@@ -263,7 +251,7 @@ class TestGit(unittest.TestCase):
 
     def test_no_log(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
-            with mock:
+            with mock, LoggerCapture():
                 self.assertIsNone(local.Git(self.path).commit(identifier='4@main', include_log=False).message)
 
     def test_alternative_default_branch(self):
@@ -279,13 +267,13 @@ class TestGit(unittest.TestCase):
 
     def test_order(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
-            with mock:
+            with mock, LoggerCapture():
                 self.assertEqual(0, local.Git(self.path).commit(hash='bae5d1e90999').order)
                 self.assertEqual(1, local.Git(self.path).commit(hash='d8bce26fa65c').order)
 
     def test_commits(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
-            with mock:
+            with mock, LoggerCapture():
                 git = local.Git(self.path)
                 self.assertEqual(Commit.Encoder().default([
                     git.commit(hash='bae5d1e9'),
@@ -296,7 +284,7 @@ class TestGit(unittest.TestCase):
 
     def test_commits_branch(self):
         for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
-            with mock:
+            with mock, LoggerCapture():
                 git = local.Git(self.path)
                 self.assertEqual(Commit.Encoder().default([
                     git.commit(hash='621652ad'),
@@ -305,8 +293,106 @@ class TestGit(unittest.TestCase):
                     git.commit(hash='9b8311f2'),
                 ]), Commit.Encoder().default(list(git.commits(begin=dict(argument='9b8311f2'), end=dict(argument='621652ad')))))
 
+    def test_log(self):
+        with mocks.local.Git(self.path, git_svn=True):
+            self.assertEqual(
+                run([
+                    local.Git.executable(), 'log', '--format=fuller', 'remotes/origin/main...1abe25b4',
+                ], cwd=self.path, capture_output=True, encoding='utf-8').stdout,
+                '''commit d8bce26fa65c6fc8f39c17927abb77f69fab82fc
+Author:     Jonathan Bedard <jbedard@apple.com>
+AuthorDate: Sat Oct 03 03:46:40 2020 +0000
+Commit:     Jonathan Bedard <jbedard@apple.com>
+CommitDate: Sat Oct 03 03:46:40 2020 +0000
 
-class TestGitHub(unittest.TestCase):
+    Patch Series
+    git-svn-id: https://svn.example.org/repository/repository/trunk@9 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+
+commit bae5d1e90999d4f916a8a15810ccfa43f37a2fd6
+Author:     Jonathan Bedard <jbedard@apple.com>
+AuthorDate: Sat Oct 03 03:46:40 2020 +0000
+Commit:     Jonathan Bedard <jbedard@apple.com>
+CommitDate: Sat Oct 03 03:46:40 2020 +0000
+
+    8th commit
+    git-svn-id: https://svn.example.org/repository/repository/trunk@8 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+
+commit 1abe25b443e985f93b90d830e4a7e3731336af4d
+Author:     Jonathan Bedard <jbedard@apple.com>
+AuthorDate: Sat Oct 03 02:23:20 2020 +0000
+Commit:     Jonathan Bedard <jbedard@apple.com>
+CommitDate: Sat Oct 03 02:23:20 2020 +0000
+
+    4th commit
+    git-svn-id: https://svn.example.org/repository/repository/trunk@4 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+'''
+            )
+
+    def test_branch_log(self):
+        with mocks.local.Git(self.path, git_svn=True):
+            self.assertEqual(
+                run([
+                    local.Git.executable(), 'log', '--format=fuller', 'branch-b...main',
+                ], cwd=self.path, capture_output=True, encoding='utf-8').stdout,
+                '''commit 790725a6d79e28db2ecdde29548d2262c0bd059d
+Author:     Jonathan Bedard <jbedard@apple.com>
+AuthorDate: Sat Oct 03 03:30:00 2020 +0000
+Commit:     Jonathan Bedard <jbedard@apple.com>
+CommitDate: Sat Oct 03 03:30:00 2020 +0000
+
+    7th commit
+    git-svn-id: https://svn.example.org/repository/repository/trunk@7 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+
+commit 3cd32e352410565bb543821fbf856a6d3caad1c4
+Author:     Jonathan Bedard <jbedard@apple.com>
+AuthorDate: Sat Oct 03 02:40:00 2020 +0000
+Commit:     Jonathan Bedard <jbedard@apple.com>
+CommitDate: Sat Oct 03 02:40:00 2020 +0000
+
+    5th commit
+        Cherry pick
+        git-svn-id: https://svn.webkit.org/repository/webkit/trunk@6 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+    git-svn-id: https://svn.example.org/repository/repository/trunk@5 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+
+commit a30ce8494bf1ac2807a69844f726be4a9843ca55
+Author:     Jonathan Bedard <jbedard@apple.com>
+AuthorDate: Sat Oct 03 02:06:40 2020 +0000
+Commit:     Jonathan Bedard <jbedard@apple.com>
+CommitDate: Sat Oct 03 02:06:40 2020 +0000
+
+    3rd commit
+    git-svn-id: https://svn.example.org/repository/repository/trunk@3 268f45cc-cd09-0410-ab3c-d52691b4dbfc
+'''
+            )
+
+    def test_cache(self):
+        for mock in [mocks.local.Git(self.path), mocks.local.Git(self.path, git_svn=True)]:
+            with mock, OutputCapture():
+                repo = local.Git(self.path, cached=True)
+
+                self.assertEqual(repo.cache.to_hash(identifier='1@main'), '9b8311f25a77ba14923d9d5a6532103f54abefcb')
+                self.assertEqual(repo.cache.to_identifier(hash='d8bce26fa65c'), '5@main')
+                self.assertEqual(repo.cache.to_hash(identifier='2.3@branch-b'), '790725a6d79e28db2ecdde29548d2262c0bd059d')
+                self.assertEqual(repo.cache.to_hash(identifier='2.1@branch-a'), 'a30ce8494bf1ac2807a69844f726be4a9843ca55')
+                self.assertEqual(repo.cache.to_identifier(hash='a30ce8494bf1'), '2.1@branch-a')
+
+                self.assertEqual(repo.cache.to_identifier(hash='badc0dd1f'), None)
+                self.assertEqual(repo.cache.to_hash(identifier='6@main'), None)
+
+    def test_revision_cache(self):
+        with mocks.local.Git(self.path, git_svn=True), OutputCapture():
+            repo = local.Git(self.path, cached=True)
+
+            self.assertEqual(repo.cache.to_revision(identifier='1@main'), 1)
+            self.assertEqual(repo.cache.to_identifier(revision='r9'), '5@main')
+            self.assertEqual(repo.cache.to_hash(revision='r9'), 'd8bce26fa65c6fc8f39c17927abb77f69fab82fc')
+
+            self.assertEqual(repo.cache.to_identifier(revision=100), None)
+            self.assertEqual(repo.cache.to_revision(hash='badc0dd1f'), None)
+            self.assertEqual(repo.cache.to_revision(identifier='6@main'), None)
+
+
+class TestGitHub(testing.TestCase):
     remote = 'https://github.example.com/WebKit/WebKit'
 
     def test_detection(self):
@@ -458,8 +544,7 @@ class TestGitHub(unittest.TestCase):
             ]), Commit.Encoder().default(list(git.commits(begin=dict(argument='9b8311f2'), end=dict(argument='621652ad')))))
 
 
-
-class TestBitBucket(unittest.TestCase):
+class TestBitBucket(testing.TestCase):
     remote = 'https://bitbucket.example.com/projects/WEBKIT/repos/webkit'
 
     def test_detection(self):

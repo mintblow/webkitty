@@ -341,18 +341,11 @@ void ProcessLauncher::platformInvalidate()
     m_xpcConnection = nullptr;
 }
 
-void terminateWithReason(xpc_connection_t connection, ReasonCode reasonCode, const char* reason)
+void terminateWithReason(xpc_connection_t connection, ReasonCode, const char*)
 {
-#if PLATFORM(MACCATALYST) || PLATFORM(IOS)
-    // FIXME: Remove this once rdar://76601307 and rdar://76652763 are fixed.
     ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     xpc_connection_kill(connection, SIGKILL);
     ALLOW_DEPRECATED_DECLARATIONS_END
-    UNUSED_PARAM(reasonCode);
-    UNUSED_PARAM(reason);
-#else
-    terminate_with_reason(xpc_connection_get_pid(connection), OS_REASON_WEBKIT, static_cast<uint64_t>(reasonCode), reason, OS_REASON_FLAG_NO_CRASH_REPORT);
-#endif
 }
 
 } // namespace WebKit

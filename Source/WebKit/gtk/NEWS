@@ -1,4 +1,34 @@
 ================
+WebKitGTK 2.33.2
+================
+
+What's new in WebKitGTK 2.33.2?
+
+  - HTTP/2 support when building with libsoup3.
+  - Add API to disable CORS on a web view for particular domains.
+  - Fix rendering on HiDPI /4k screen and scaling.
+  - Improve calculation of initial WebKitWebView size.
+  - Fix rendering of VP9 with transparency.
+  - Remove dependency on glvideoflip and videoflip.
+  - Several fixes on scrolling when async scrolling is enabled.
+  - Ensure WebKitScriptWorld::window-object-cleared signal is always emitted.
+  - Translation updates: Danish, Swedish, Ukrainian.
+
+================
+WebKitGTK 2.33.1
+================
+
+What's new in WebKitGTK 2.33.1?
+
+  - Add support for CSS Scroll Snap.
+  - Add support for date and datetime-local input elements.
+  - Add support for ICC color management.
+  - Build with libsoup3 by default.
+  - Add new API to handle web process unresponsiveness.
+  - Add support for link preconnect when building with libsoup3.
+  - Refactored Media Source Extensions platform code to increase stability and ease support of more features in the future.
+
+================
 WebKitGTK 2.31.1
 ================
 

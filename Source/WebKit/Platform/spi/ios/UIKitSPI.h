@@ -227,6 +227,8 @@ typedef NS_ENUM(NSInteger, UIDatePickerStyle) {
 @property (nonatomic, readonly, retain) NSString *buildVersion;
 @end
 
+static const UIUserInterfaceIdiom UIUserInterfaceIdiomWatch = (UIUserInterfaceIdiom)4;
+
 typedef enum {
     kUIKeyboardInputRepeat                 = 1 << 0,
     kUIKeyboardInputPopupVariant           = 1 << 1,
@@ -385,6 +387,7 @@ typedef enum {
 - (void)_wheelChangedWithEvent:(UIEvent *)event;
 - (void)_beginPinningInputViews;
 - (void)_endPinningInputViews;
+
 @end
 
 @class FBSDisplayConfiguration;
@@ -1218,9 +1221,6 @@ typedef NS_ENUM(NSUInteger, _UIContextMenuLayout) {
 @end
 
 #if USE(UICONTEXTMENU)
-@interface UITargetedPreview ()
-@property (nonatomic, strong, setter=_setOverridePositionTrackingView:) UIView *overridePositionTrackingView;
-@end
 
 @interface UIContextMenuInteraction ()
 @property (nonatomic, readonly) UIGestureRecognizer *gestureRecognizerForFailureRelationships;
@@ -1447,6 +1447,30 @@ typedef NS_ENUM(NSUInteger, _UIContextMenuLayout) {
 @interface UIView (Staging_75759822)
 @property (nonatomic, readwrite, copy) UIFocusEffect *focusEffect;
 @end
+#endif
+
+#if HAVE(UIDATEPICKER_OVERLAY_PRESENTATION)
+
+// FIXME: Import the header directly once bots are updated to a build containing rdar://78779655.
+
+typedef NS_ENUM(NSInteger, _UIDatePickerOverlayAnchor) {
+    _UIDatePickerOverlayAnchorSourceRect = 2
+};
+
+@interface _UIDatePickerOverlayPresentation : NSObject
+
+- (instancetype)initWithSourceView:(UIView *)sourceView;
+- (void)presentDatePicker:(UIDatePicker *)datePicker onDismiss:(void(^)(BOOL retargeted))dismissHandler;
+- (void)dismissPresentationAnimated:(BOOL)animated;
+
+@property (nonatomic, weak, readonly) UIView *sourceView;
+@property (nonatomic, assign) CGRect sourceRect;
+@property (nonatomic, assign) _UIDatePickerOverlayAnchor overlayAnchor;
+@property (nonatomic, strong) UIView *accessoryView;
+@property (nonatomic, assign) BOOL accessoryViewIgnoresDefaultInsets;
+
+@end
+
 #endif
 
 WTF_EXTERN_C_BEGIN

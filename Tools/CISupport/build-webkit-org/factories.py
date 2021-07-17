@@ -1,4 +1,4 @@
-# Copyright (C) 2017-2020 Apple Inc. All rights reserved.
+# Copyright (C) 2017-2021 Apple Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -30,6 +30,7 @@ class Factory(factory.BuildFactory):
     def __init__(self, platform, configuration, architectures, buildOnly, additionalArguments, device_model):
         factory.BuildFactory.__init__(self)
         self.addStep(ConfigureBuild(platform=platform, configuration=configuration, architecture=" ".join(architectures), buildOnly=buildOnly, additionalArguments=additionalArguments, device_model=device_model))
+        self.addStep(PrintConfiguration())
         self.addStep(CheckOutSource())
         self.addStep(ShowIdentifier())
         if not (platform == "jsc-only"):
@@ -62,6 +63,9 @@ class BuildFactory(Factory):
             self.addStep(GenerateMiniBrowserBundle())
 
         if triggers:
+            if platform == "gtk":
+                self.addStep(InstallBuiltProduct())
+
             self.addStep(ArchiveBuiltProduct())
             self.addStep(UploadBuiltProduct())
             if platform.startswith('mac') or platform.startswith('ios-simulator') or platform.startswith('tvos-simulator') or platform.startswith('watchos-simulator'):
@@ -93,6 +97,13 @@ class TestFactory(Factory):
             self.addStep(self.JSCTestClass())
         if self.LayoutTestClass:
             self.addStep(self.LayoutTestClass())
+        if not platform.startswith('win'):
+            self.addStep(RunDashboardTests())
+        if self.LayoutTestClass:
+            self.addStep(ArchiveTestResults())
+            self.addStep(UploadTestResults())
+            self.addStep(ExtractTestResults())
+            self.addStep(SetPermissions())
 
         if platform.startswith('win') or platform.startswith('mac') or platform.startswith('ios-simulator'):
             self.addStep(RunAPITests())
@@ -104,17 +115,10 @@ class TestFactory(Factory):
         self.addStep(RunPerlTests())
         self.addStep(RunBindingsTests())
         self.addStep(RunBuiltinsTests())
-        if not platform.startswith('win'):
-            self.addStep(RunDashboardTests())
 
         if platform.startswith('mac') or platform.startswith('ios-simulator'):
             self.addStep(TriggerCrashLogSubmission())
 
-        if self.LayoutTestClass:
-            self.addStep(ArchiveTestResults())
-            self.addStep(UploadTestResults())
-            self.addStep(ExtractTestResults())
-            self.addStep(SetPermissions())
         if platform == "gtk":
             self.addStep(RunGtkAPITests())
             if additionalArguments and "--display-server=wayland" in additionalArguments:

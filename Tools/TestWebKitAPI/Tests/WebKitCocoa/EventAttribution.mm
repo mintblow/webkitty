@@ -37,15 +37,10 @@
 
 #if HAVE(RSA_BSSA)
 
-#include <Security/SecKeyPriv.h>
-#include <WebCore/PrivateClickMeasurement.h>
+#include "CoreCryptoSPI.h"
 
-extern "C" {
-#include <corecrypto/cc_priv.h>
-#include <corecrypto/ccrng.h>
-#include <corecrypto/ccrsa.h>
-#include <corecrypto/ccrsabssa.h>
-}
+#include <WebCore/PrivateClickMeasurement.h>
+#include <wtf/spi/cocoa/SecuritySPI.h>
 
 #endif // HAVE(RSA_BSSA)
 
@@ -159,7 +154,7 @@ TEST(EventAttribution, FraudPrevention)
     auto spkiData = adoptCF(SecKeyCopySubjectPublicKeyInfo(secKey.get()));
     auto *nsSpkiData = (__bridge NSData *)spkiData.get();
 
-    auto keyData = WTF::base64URLEncode(nsSpkiData.bytes, nsSpkiData.length);
+    auto keyData = base64URLEncodeToString(nsSpkiData.bytes, nsSpkiData.length);
 
     // The server.
     HTTPServer server([&done, connectionCount = 0, &rsaPrivateKey, &modulusNBytes, &rng, &keyData, &secKey] (Connection connection) mutable {
@@ -184,13 +179,12 @@ TEST(EventAttribution, FraudPrevention)
                         auto end = request2String.find('"', start);
                         auto token = request2String.substring(start, end - start);
 
-                        Vector<uint8_t> blindedMessage;
-                        base64URLDecode(token, blindedMessage);
+                        auto blindedMessage = base64URLDecode(token);
 
                         const struct ccrsabssa_ciphersuite *ciphersuite = &ccrsabssa_ciphersuite_rsa4096_sha384;
-                        auto blindedSignature = adoptNS([[NSMutableData alloc] initWithLength: modulusNBytes]);
-                        ccrsabssa_sign_blinded_message(ciphersuite, rsaPrivateKey, blindedMessage.data(), blindedMessage.size(), static_cast<uint8_t *>([blindedSignature mutableBytes]), [blindedSignature length], rng);
-                        auto unlinkableToken = WTF::base64URLEncode([blindedSignature bytes], [blindedSignature length]);
+                        auto blindedSignature = adoptNS([[NSMutableData alloc] initWithLength:modulusNBytes]);
+                        ccrsabssa_sign_blinded_message(ciphersuite, rsaPrivateKey, blindedMessage->data(), blindedMessage->size(), static_cast<uint8_t *>([blindedSignature mutableBytes]), [blindedSignature length], rng);
+                        auto unlinkableToken = base64URLEncodeToString([blindedSignature bytes], [blindedSignature length]);
 
                         // Example response: { "unlinkable_token": "ABCD" }. "ABCD" should be Base64URL encoded.
                         auto response = makeString("HTTP/1.1 200 OK\r\n"
@@ -222,18 +216,16 @@ TEST(EventAttribution, FraudPrevention)
                                         start += key.length() + 3;
                                         auto end = request4String.find('"', start);
                                         auto token = request4String.substring(start, end - start);
-                                        Vector<uint8_t> tokenVector;
-                                        base64URLDecode(token, tokenVector);
-                                        auto tokenData = adoptNS([[NSData alloc] initWithBytes:tokenVector.data() length:tokenVector.size()]);
+                                        auto tokenVector = base64URLDecode(token);
+                                        auto tokenData = adoptNS([[NSData alloc] initWithBytes:tokenVector->data() length:tokenVector->size()]);
 
                                         key = String("source_secret_token_signature");
                                         start = request4String.find(key);
                                         start += key.length() + 3;
                                         end = request4String.find('"', start);
                                         auto signature = request4String.substring(start, end - start);
-                                        Vector<uint8_t> signatureVector;
-                                        base64URLDecode(signature, signatureVector);
-                                        auto signatureData = adoptNS([[NSData alloc] initWithBytes:signatureVector.data() length:signatureVector.size()]);
+                                        auto signatureVector = base64URLDecode(signature);
+                                        auto signatureData = adoptNS([[NSData alloc] initWithBytes:signatureVector->data() length:signatureVector->size()]);
 
                                         EXPECT_TRUE(SecKeyVerifySignature(secKey.get(), kSecKeyAlgorithmRSASignatureMessagePSSSHA384, (__bridge CFDataRef)tokenData.get(), (__bridge CFDataRef)signatureData.get(), NULL));
 

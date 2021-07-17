@@ -27,6 +27,7 @@
 #include "config.h"
 #include "JSDOMGlobalObject.h"
 
+#include "DOMConstructors.h"
 #include "DOMWindow.h"
 #include "Document.h"
 #include "FetchResponse.h"
@@ -77,6 +78,7 @@ const ClassInfo JSDOMGlobalObject::s_info = { "DOMGlobalObject", &JSGlobalObject
 
 JSDOMGlobalObject::JSDOMGlobalObject(VM& vm, Structure* structure, Ref<DOMWrapperWorld>&& world, const GlobalObjectMethodTable* globalObjectMethodTable)
     : JSGlobalObject(vm, structure, globalObjectMethodTable)
+    , m_constructors(makeUnique<DOMConstructors>())
     , m_world(WTFMove(world))
     , m_worldIsNormal(m_world->isNormal())
     , m_builtinInternalFunctions(vm)
@@ -193,10 +195,8 @@ SUPPRESS_ASAN void JSDOMGlobalObject::addBuiltinGlobals(VM& vm)
             JSFunction::create(vm, this, 2, String(), whenSignalAborted), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
         JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().cloneArrayBufferPrivateName(),
             JSFunction::create(vm, this, 3, String(), cloneArrayBuffer), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
-        JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().structuredCloneArrayBufferPrivateName(),
-            JSFunction::create(vm, this, 1, String(), structuredCloneArrayBuffer), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
-        JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().structuredCloneArrayBufferViewPrivateName(),
-            JSFunction::create(vm, this, 1, String(), structuredCloneArrayBufferView), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
+        JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().structuredCloneForStreamPrivateName(),
+            JSFunction::create(vm, this, 1, String(), structuredCloneForStream), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
         JSDOMGlobalObject::GlobalPropertyInfo(vm.propertyNames->builtinNames().ArrayBufferPrivateName(), arrayBufferConstructor(), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
         JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().streamClosedPrivateName(), jsNumber(1), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
         JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().streamClosingPrivateName(), jsNumber(2), PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly),
@@ -256,17 +256,18 @@ void JSDOMGlobalObject::visitChildrenImpl(JSCell* cell, Visitor& visitor)
     Base::visitChildren(thisObject, visitor);
 
     {
-        auto locker = holdLock(thisObject->m_gcLock);
+        // The GC thread has to grab the GC lock even though it is not mutating the containers.
+        Locker locker { thisObject->m_gcLock };
 
-        for (auto& structure : thisObject->structures(locker).values())
+        for (auto& structure : thisObject->m_structures.values())
             visitor.append(structure);
 
-        for (auto& constructor : thisObject->constructors(locker).values())
-            visitor.append(constructor);
-
-        for (auto& guarded : thisObject->guardedObjects(locker))
+        for (auto& guarded : thisObject->m_guardedObjects)
             guarded->visitAggregate(visitor);
     }
+
+    for (auto& constructor : thisObject->constructors().array())
+        visitor.append(constructor);
 
     thisObject->m_builtinInternalFunctions.visit(visitor);
 }
@@ -300,9 +301,12 @@ void JSDOMGlobalObject::reportUncaughtExceptionAtEventLoop(JSGlobalObject* jsGlo
     reportException(jsGlobalObject, exception);
 }
 
-void JSDOMGlobalObject::clearDOMGuardedObjects()
+void JSDOMGlobalObject::clearDOMGuardedObjects() const
 {
-    auto guardedObjectsCopy = m_guardedObjects;
+    // No locking is necessary here since we are not directly modifying the returned container.
+    // Calling JSDOMGuardedObject::clear() will however modify the guarded objects container but
+    // it will grab the lock as needed.
+    auto guardedObjectsCopy = guardedObjects();
     for (auto& guarded : guardedObjectsCopy)
         guarded->clear();
 }
@@ -423,8 +427,8 @@ static JSC::JSPromise* handleResponseOnStreamingAction(JSC::JSGlobalObject* glob
                 return;
             }
 
-            if (auto chunk = result.returnValue())
-                compiler->addBytes(chunk->data, chunk->size);
+            if (auto* chunk = result.returnValue())
+                compiler->addBytes(chunk->data(), chunk->size());
             else
                 compiler->finalize(globalObject);
         });
@@ -434,7 +438,7 @@ static JSC::JSPromise* handleResponseOnStreamingAction(JSC::JSGlobalObject* glob
     auto body = inputResponse->consumeBody();
     WTF::switchOn(body, [&](Ref<FormData>& formData) {
         if (auto buffer = formData->asSharedBuffer()) {
-            compiler->addBytes(reinterpret_cast<const uint8_t*>(buffer->data()), buffer->size());
+            compiler->addBytes(buffer->data(), buffer->size());
             compiler->finalize(globalObject);
             return;
         }
@@ -442,7 +446,7 @@ static JSC::JSPromise* handleResponseOnStreamingAction(JSC::JSGlobalObject* glob
         // https://bugs.webkit.org/show_bug.cgi?id=221248
         compiler->fail(globalObject, createDOMException(*globalObject, Exception { NotSupportedError, "Not implemented"_s  }));
     }, [&](Ref<SharedBuffer>& buffer) {
-        compiler->addBytes(reinterpret_cast<const uint8_t*>(buffer->data()), buffer->size());
+        compiler->addBytes(buffer->data(), buffer->size());
         compiler->finalize(globalObject);
     }, [&](std::nullptr_t&) {
         compiler->finalize(globalObject);

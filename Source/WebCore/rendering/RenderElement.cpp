@@ -145,13 +145,13 @@ RenderElement::~RenderElement()
     ASSERT(!m_firstChild);
 }
 
-RenderPtr<RenderElement> RenderElement::createFor(Element& element, RenderStyle&& style, RendererCreationType creationType)
+RenderPtr<RenderElement> RenderElement::createFor(Element& element, RenderStyle&& style, OptionSet<ConstructBlockLevelRendererFor> rendererTypeOverride)
 {
     // Minimal support for content properties replacing an entire element.
     // Works only if we have exactly one piece of content and it's a URL.
     // Otherwise acts as if we didn't support this feature.
     const ContentData* contentData = style.contentData();
-    if (creationType == CreateAllRenderers && contentData && !contentData->next() && is<ImageContentData>(*contentData) && !element.isPseudoElement()) {
+    if (!rendererTypeOverride && contentData && !contentData->next() && is<ImageContentData>(*contentData) && !element.isPseudoElement()) {
         Style::loadPendingResources(style, element.document(), &element);
         auto& styleImage = downcast<ImageContentData>(*contentData).image();
         auto image = createRenderer<RenderImage>(element, WTFMove(style), const_cast<StyleImage*>(&styleImage));
@@ -164,19 +164,19 @@ RenderPtr<RenderElement> RenderElement::createFor(Element& element, RenderStyle&
     case DisplayType::Contents:
         return nullptr;
     case DisplayType::Inline:
-        if (creationType == CreateAllRenderers)
-            return createRenderer<RenderInline>(element, WTFMove(style));
-        FALLTHROUGH; // Fieldsets should make a block flow if display:inline is set.
+        if (rendererTypeOverride.contains(ConstructBlockLevelRendererFor::Inline))
+            return createRenderer<RenderBlockFlow>(element, WTFMove(style));
+        return createRenderer<RenderInline>(element, WTFMove(style));
     case DisplayType::Block:
     case DisplayType::FlowRoot:
     case DisplayType::InlineBlock:
         return createRenderer<RenderBlockFlow>(element, WTFMove(style));
     case DisplayType::ListItem:
+        if (rendererTypeOverride.contains(ConstructBlockLevelRendererFor::ListItem))
+            return createRenderer<RenderBlockFlow>(element, WTFMove(style));
         return createRenderer<RenderListItem>(element, WTFMove(style));
     case DisplayType::Flex:
     case DisplayType::InlineFlex:
-    case DisplayType::WebKitFlex:
-    case DisplayType::WebKitInlineFlex:
         return createRenderer<RenderFlexibleBox>(element, WTFMove(style));
     case DisplayType::Grid:
     case DisplayType::InlineGrid:
@@ -185,8 +185,9 @@ RenderPtr<RenderElement> RenderElement::createFor(Element& element, RenderStyle&
     case DisplayType::InlineBox:
         return createRenderer<RenderDeprecatedFlexibleBox>(element, WTFMove(style));
     default: {
-        if (creationType == OnlyCreateBlockAndFlexboxRenderers)
+        if (style.isDisplayTableOrTablePart() && rendererTypeOverride.contains(ConstructBlockLevelRendererFor::TableOrTablePart))
             return createRenderer<RenderBlockFlow>(element, WTFMove(style));
+
         switch (style.display()) {
         case DisplayType::Table:
         case DisplayType::InlineTable:
@@ -360,6 +361,12 @@ void RenderElement::updateFillImages(const FillLayer* oldLayers, const FillLayer
         for (; layer1 && layer2; layer1 = layer1->next(), layer2 = layer2->next()) {
             if (!arePointingToEqualData(layer1->image(), layer2->image()))
                 return false;
+            if (layer1->image() && layer1->image()->usesDataProtocol())
+                return false;
+            if (auto styleImage = layer1->image()) {
+                if (styleImage->errorOccurred() || !styleImage->hasImage() || styleImage->usesDataProtocol())
+                    return false;
+            }
         }
 
         return !layer1 && !layer2;
@@ -621,24 +628,23 @@ RenderPtr<RenderObject> RenderElement::detachRendererInternal(RenderObject& rend
     return RenderPtr<RenderObject>(&renderer);
 }
 
+static inline RenderBlock* nearestNonAnonymousContainingBlockIncludingSelf(RenderElement* renderer)
+{
+    while (renderer && (!is<RenderBlock>(*renderer) || renderer->isAnonymousBlock()))
+        renderer = renderer->containingBlock();
+    return downcast<RenderBlock>(renderer);
+}
+
 RenderBlock* RenderElement::containingBlockForFixedPosition() const
 {
-    auto* renderer = parent();
-    while (renderer && !renderer->canContainFixedPositionObjects())
-        renderer = renderer->parent();
-
-    ASSERT(!renderer || !renderer->isAnonymousBlock());
-    return downcast<RenderBlock>(renderer);
+    auto* ancestor = parent();
+    while (ancestor && !ancestor->canContainFixedPositionObjects())
+        ancestor = ancestor->parent();
+    return nearestNonAnonymousContainingBlockIncludingSelf(ancestor);
 }
 
 RenderBlock* RenderElement::containingBlockForAbsolutePosition() const
 {
-    auto nearestNonAnonymousContainingBlockIncludingSelf = [&] (auto* renderer) {
-        while (renderer && (!is<RenderBlock>(*renderer) || renderer->isAnonymousBlock()))
-            renderer = renderer->containingBlock();
-        return downcast<RenderBlock>(renderer);
-    };
-
     if (is<RenderInline>(*this) && style().position() == PositionType::Relative) {
         // A relatively positioned RenderInline forwards its absolute positioned descendants to
         // its nearest non-anonymous containing block (to avoid having positioned objects list in RenderInlines).
@@ -887,7 +893,7 @@ void RenderElement::styleWillChange(StyleDifference diff, const RenderStyle& new
 
         setHorizontalWritingMode(true);
         setHasVisibleBoxDecorations(false);
-        setHasOverflowClip(false);
+        setHasNonVisibleOverflow(false);
         setHasTransformRelatedProperty(false);
         setHasReflection(false);
     }
@@ -1334,7 +1340,7 @@ bool RenderElement::mayCauseRepaintInsideViewport(const IntRect* optionalViewpor
     if (frameView.isOffscreen())
         return false;
 
-    if (!hasOverflowClip()) {
+    if (!hasNonVisibleOverflow()) {
         // FIXME: Computing the overflow rect is expensive if any descendant has
         // its own self-painting layer. As a result, we prefer to abort early in
         // this case and assume it may cause us to repaint inside the viewport.
@@ -1344,7 +1350,7 @@ bool RenderElement::mayCauseRepaintInsideViewport(const IntRect* optionalViewpor
 
     // Compute viewport rect if it was not provided.
     const IntRect& visibleRect = optionalViewportRect ? *optionalViewportRect : frameView.windowToContents(frameView.windowClipRect());
-    return visibleRect.intersects(enclosingIntRect(absoluteClippedOverflowRect()));
+    return visibleRect.intersects(enclosingIntRect(absoluteClippedOverflowRectForRepaint()));
 }
 
 bool RenderElement::isVisibleIgnoringGeometry() const
@@ -1377,7 +1383,7 @@ bool RenderElement::isVisibleInDocumentRect(const IntRect& documentRect) const
         backgroundIsPaintedByRoot = !rootRenderer.hasBackground();
     }
 
-    LayoutRect backgroundPaintingRect = backgroundIsPaintedByRoot ? view().backgroundRect() : absoluteClippedOverflowRect();
+    LayoutRect backgroundPaintingRect = backgroundIsPaintedByRoot ? view().backgroundRect() : absoluteClippedOverflowRectForRepaint();
     if (!documentRect.intersects(enclosingIntRect(backgroundPaintingRect)))
         return false;
 

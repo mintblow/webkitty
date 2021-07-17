@@ -36,6 +36,7 @@
 #include <CoreText/SFNTLayoutTypes.h>
 
 #include <wtf/HashSet.h>
+#include <wtf/Lock.h>
 #include <wtf/MainThread.h>
 #include <wtf/MemoryPressureHandler.h>
 #include <wtf/NeverDestroyed.h>
@@ -507,7 +508,7 @@ RetainPtr<CTFontRef> preparePlatformFont(CTFontRef originalFont, const FontDescr
     if (applyWeightWidthSlopeVariations && !fontIsSystemFont(originalFont)) {
         float weight = fontSelectionRequest.weight;
         float width = fontSelectionRequest.width;
-        float slope = fontSelectionRequest.slope.valueOr(normalItalicValue());
+        float slope = fontSelectionRequest.slope.value_or(normalItalicValue());
         if (auto weightValue = fontFaceCapabilities.weight)
             weight = std::max(std::min(weight, static_cast<float>(weightValue->maximum)), static_cast<float>(weightValue->minimum));
         if (auto widthValue = fontFaceCapabilities.width)
@@ -845,7 +846,7 @@ public:
     {
         auto folded = FontCascadeDescription::foldedFamilyName(familyName);
         {
-            auto locker = holdLock(m_familyNameToFontDescriptorsLock);
+            Locker locker { m_familyNameToFontDescriptorsLock };
             auto it = m_familyNameToFontDescriptors.find(folded);
             if (it != m_familyNameToFontDescriptors.end())
                 return *it->value;
@@ -871,7 +872,7 @@ public:
             return makeUnique<InstalledFontFamily>();
         }();
 
-        auto locker = holdLock(m_familyNameToFontDescriptorsLock);
+        Locker locker { m_familyNameToFontDescriptorsLock };
         return *m_familyNameToFontDescriptors.add(folded.isolatedCopy(), WTFMove(installedFontFamily)).iterator->value;
     }
 
@@ -895,7 +896,7 @@ public:
     void clear()
     {
         {
-            auto locker = holdLock(m_familyNameToFontDescriptorsLock);
+            Locker locker { m_familyNameToFontDescriptorsLock };
             m_familyNameToFontDescriptors.clear();
         }
         m_postScriptNameToFontDescriptors.clear();
@@ -910,7 +911,7 @@ private:
     }
 
     Lock m_familyNameToFontDescriptorsLock;
-    HashMap<String, std::unique_ptr<InstalledFontFamily>> m_familyNameToFontDescriptors;
+    HashMap<String, std::unique_ptr<InstalledFontFamily>> m_familyNameToFontDescriptors WTF_GUARDED_BY_LOCK(m_familyNameToFontDescriptorsLock);
     HashMap<String, InstalledFont> m_postScriptNameToFontDescriptors;
     AllowUserInstalledFonts m_allowUserInstalledFonts;
 };
@@ -923,12 +924,12 @@ struct MinMax {
 };
 
 struct VariationCapabilities {
-    Optional<MinMax> weight;
-    Optional<MinMax> width;
-    Optional<MinMax> slope;
+    std::optional<MinMax> weight;
+    std::optional<MinMax> width;
+    std::optional<MinMax> slope;
 };
 
-static Optional<MinMax> extractVariationBounds(CFDictionaryRef axis)
+static std::optional<MinMax> extractVariationBounds(CFDictionaryRef axis)
 {
     CFNumberRef minimumValue = static_cast<CFNumberRef>(CFDictionaryGetValue(axis, kCTFontVariationAxisMinimumValueKey));
     CFNumberRef maximumValue = static_cast<CFNumberRef>(CFDictionaryGetValue(axis, kCTFontVariationAxisMaximumValueKey));
@@ -938,7 +939,7 @@ static Optional<MinMax> extractVariationBounds(CFDictionaryRef axis)
     CFNumberGetValue(maximumValue, kCFNumberFloatType, &rawMaximumValue);
     if (rawMinimumValue < rawMaximumValue)
         return {{ rawMinimumValue, rawMaximumValue }};
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 static VariationCapabilities variationCapabilitiesForFontDescriptor(CTFontDescriptorRef fontDescriptor)
@@ -1167,7 +1168,7 @@ static void invalidateFontCache()
 static RetainPtr<CTFontRef> fontWithFamilySpecialCase(const AtomString& family, const FontDescription& fontDescription, float size, AllowUserInstalledFonts allowUserInstalledFonts)
 {
     // FIXME: See comment in FontCascadeDescription::effectiveFamilyAt() in FontDescriptionCocoa.cpp
-    Optional<SystemFontKind> systemDesign;
+    std::optional<SystemFontKind> systemDesign;
 
 #if HAVE(DESIGN_SYSTEM_UI_FONTS)
     if (equalLettersIgnoringASCIICase(family, "ui-serif"))
@@ -1415,7 +1416,7 @@ RefPtr<Font> FontCache::systemFallbackForCharacters(const FontDescription& descr
     return fontForPlatformData(alternateFont);
 }
 
-Optional<ASCIILiteral> FontCache::platformAlternateFamilyName(const String& familyName)
+std::optional<ASCIILiteral> FontCache::platformAlternateFamilyName(const String& familyName)
 {
     static const UChar heitiString[] = { 0x9ed1, 0x4f53 };
     static const UChar songtiString[] = { 0x5b8b, 0x4f53 };
@@ -1461,7 +1462,7 @@ Optional<ASCIILiteral> FontCache::platformAlternateFamilyName(const String& fami
         break;
     }
 
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 void addAttributesForInstalledFonts(CFMutableDictionaryRef attributes, AllowUserInstalledFonts allowUserInstalledFonts)

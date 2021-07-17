@@ -134,9 +134,14 @@ void Chrome::contentsSizeChanged(Frame& frame, const IntSize& size) const
     m_client.contentsSizeChanged(frame, size);
 }
 
-void Chrome::scrollRectIntoView(const IntRect& rect) const
+void Chrome::scrollContainingScrollViewsToRevealRect(const IntRect& rect) const
 {
-    m_client.scrollRectIntoView(rect);
+    m_client.scrollContainingScrollViewsToRevealRect(rect);
+}
+
+void Chrome::scrollMainFrameToRevealRect(const IntRect& rect) const
+{
+    m_client.scrollMainFrameToRevealRect(rect);
 }
 
 void Chrome::setWindowRect(const FloatRect& rect) const
@@ -473,7 +478,7 @@ void Chrome::showShareSheet(ShareDataWithParsedURL& shareData, CompletionHandler
     m_client.showShareSheet(shareData, WTFMove(callback));
 }
 
-void Chrome::showContactPicker(const ContactsRequestData& requestData, CompletionHandler<void(Optional<Vector<ContactInfo>>&&)>&& callback)
+void Chrome::showContactPicker(const ContactsRequestData& requestData, CompletionHandler<void(std::optional<Vector<ContactInfo>>&&)>&& callback)
 {
     m_client.showContactPicker(requestData, WTFMove(callback));
 }
@@ -529,7 +534,7 @@ void Chrome::setCursorHiddenUntilMouseMoves(bool hiddenUntilMouseMoves)
     m_client.setCursorHiddenUntilMouseMoves(hiddenUntilMouseMoves);
 }
 
-RefPtr<ImageBuffer> Chrome::createImageBuffer(const FloatSize& size, RenderingMode renderingMode, RenderingPurpose purpose, float resolutionScale, DestinationColorSpace colorSpace, PixelFormat pixelFormat) const
+RefPtr<ImageBuffer> Chrome::createImageBuffer(const FloatSize& size, RenderingMode renderingMode, RenderingPurpose purpose, float resolutionScale, const DestinationColorSpace& colorSpace, PixelFormat pixelFormat) const
 {
     return m_client.createImageBuffer(size, renderingMode, purpose, resolutionScale, colorSpace, pixelFormat);
 }
@@ -546,7 +551,7 @@ PlatformDisplayID Chrome::displayID() const
     return m_page.displayID();
 }
 
-void Chrome::windowScreenDidChange(PlatformDisplayID displayID, Optional<FramesPerSecond> nominalFrameInterval)
+void Chrome::windowScreenDidChange(PlatformDisplayID displayID, std::optional<FramesPerSecond> nominalFrameInterval)
 {
     m_page.windowScreenDidChange(displayID, nominalFrameInterval);
 }

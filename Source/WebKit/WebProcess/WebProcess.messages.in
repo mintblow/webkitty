@@ -50,11 +50,13 @@ messages -> WebProcess LegacyReceiver NotRefCounted {
     UserPreferredLanguagesChanged(Vector<String> languages)
     FullKeyboardAccessModeChanged(bool fullKeyboardAccessEnabled)
 
-#if HAVE(UIKIT_WITH_MOUSE_SUPPORT) && PLATFORM(IOS)
+#if HAVE(MOUSE_DEVICE_OBSERVATION)
     SetHasMouseDevice(bool hasMouseDevice)
 #endif
 
+#if HAVE(STYLUS_DEVICE_OBSERVATION)
     SetHasStylusDevice(bool hasStylusDevice)
+#endif
 
     RefreshPlugins()
 
@@ -90,7 +92,6 @@ messages -> WebProcess LegacyReceiver NotRefCounted {
     PrepareToSuspend(bool isSuspensionImminent) -> () Async
     ProcessDidResume()
 
-    MainThreadPing()
     BackgroundResponsivenessPing()
 
 #if ENABLE(GAMEPAD)
@@ -117,7 +118,7 @@ messages -> WebProcess LegacyReceiver NotRefCounted {
 #endif
 
 #if PLATFORM(IOS_FAMILY)
-    UserInterfaceIdiomDidChange(bool isPadOrMac)
+    UserInterfaceIdiomDidChange(bool isPhoneOrWatch)
 #endif
 
 #if PLATFORM(IOS_FAMILY) && !PLATFORM(MACCATALYST)
@@ -173,7 +174,7 @@ messages -> WebProcess LegacyReceiver NotRefCounted {
 #if PLATFORM(COCOA)
     UnblockServicesRequiredByAccessibility(WebKit::SandboxExtension::HandleArray handleArray)
 #if ENABLE(CFPREFS_DIRECT_MODE)
-    NotifyPreferencesChanged(String domain, String key, Optional<String> encodedValue)
+    NotifyPreferencesChanged(String domain, String key, std::optional<String> encodedValue)
     UnblockPreferenceService(WebKit::SandboxExtension::HandleArray handleArray)
 #endif
     PowerSourceDidChange(bool hasAC)
@@ -199,5 +200,10 @@ messages -> WebProcess LegacyReceiver NotRefCounted {
 
 #if PLATFORM(COCOA)
     ConsumeAudioComponentRegistrations(IPC::SharedBufferDataReference registrationData)
+    AccessibilityPreferencesDidChange(struct WebKit::AccessibilityPreferences accessibilityPreferences)
+#endif
+
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+    SetMediaAccessibilityPreferences(WebCore::CaptionUserPreferences::CaptionDisplayMode displayMode, Vector<String> languages)
 #endif
 }

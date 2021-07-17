@@ -154,7 +154,7 @@ ExceptionOr<Ref<IDBObjectStore>> IDBTransaction::objectStore(const String& objec
     if (isFinishedOrFinishing())
         return Exception { InvalidStateError, "Failed to execute 'objectStore' on 'IDBTransaction': The transaction finished."_s };
 
-    Locker<Lock> locker(m_referencedObjectStoreLock);
+    Locker locker { m_referencedObjectStoreLock };
 
     if (auto* store = m_referencedObjectStores.get(objectStoreName))
         return makeRef(*store);
@@ -226,7 +226,7 @@ void IDBTransaction::internalAbort()
     m_database->willAbortTransaction(*this);
 
     if (isVersionChange()) {
-        Locker<Lock> locker(m_referencedObjectStoreLock);
+        Locker locker { m_referencedObjectStoreLock };
 
         auto& info = m_database->info();
         Vector<uint64_t> identifiersToRemove;
@@ -584,6 +584,7 @@ void IDBTransaction::enqueueEvent(Ref<Event>&& event)
     if (!scriptExecutionContext() || isContextStopped())
         return;
 
+    m_abortOrCommitEvent = event.ptr();
     queueTaskToDispatchEvent(*this, TaskSource::DatabaseAccess, WTFMove(event));
 }
 
@@ -594,15 +595,19 @@ void IDBTransaction::dispatchEvent(Event& event)
     ASSERT(canCurrentThreadAccessThreadLocalData(m_database->originThread()));
     ASSERT(scriptExecutionContext());
     ASSERT(!isContextStopped());
-    ASSERT(event.type() == eventNames().completeEvent || event.type() == eventNames().abortEvent);
+    
 
     auto protectedThis = makeRef(*this);
 
     EventDispatcher::dispatchEvent({ this, m_database.ptr() }, event);
+    
+    if (m_abortOrCommitEvent != &event)
+        return;
+    
+    ASSERT(event.type() == eventNames().completeEvent || event.type() == eventNames().abortEvent);
     m_didDispatchAbortOrCommit = true;
 
     if (isVersionChange()) {
-        ASSERT(m_openDBRequest);
         m_openDBRequest->versionChangeTransactionDidFinish();
 
         if (event.type() == eventNames().completeEvent) {
@@ -623,7 +628,7 @@ Ref<IDBObjectStore> IDBTransaction::createObjectStore(const IDBObjectStoreInfo& 
     ASSERT(scriptExecutionContext());
     ASSERT(canCurrentThreadAccessThreadLocalData(m_database->originThread()));
 
-    Locker<Lock> locker(m_referencedObjectStoreLock);
+    Locker locker { m_referencedObjectStoreLock };
 
     auto objectStore = makeUnique<IDBObjectStore>(*scriptExecutionContext(), info, *this);
     auto* rawObjectStore = objectStore.get();
@@ -659,7 +664,7 @@ void IDBTransaction::renameObjectStore(IDBObjectStore& objectStore, const String
 {
     LOG(IndexedDB, "IDBTransaction::renameObjectStore");
 
-    Locker<Lock> locker(m_referencedObjectStoreLock);
+    Locker locker { m_referencedObjectStoreLock };
 
     ASSERT(isVersionChange());
     ASSERT(scriptExecutionContext());
@@ -746,7 +751,7 @@ void IDBTransaction::didCreateIndexOnServer(const IDBResultData& resultData)
 void IDBTransaction::renameIndex(IDBIndex& index, const String& newName)
 {
     LOG(IndexedDB, "IDBTransaction::renameIndex");
-    Locker<Lock> locker(m_referencedObjectStoreLock);
+    Locker locker { m_referencedObjectStoreLock };
 
     ASSERT(isVersionChange());
     ASSERT(scriptExecutionContext());
@@ -892,7 +897,7 @@ void IDBTransaction::didIterateCursorOnServer(IDBRequest& request, const IDBResu
     completeCursorRequest(request, resultData);
 }
 
-Ref<IDBRequest> IDBTransaction::requestGetAllObjectStoreRecords(JSC::JSGlobalObject& state, IDBObjectStore& objectStore, const IDBKeyRangeData& keyRangeData, IndexedDB::GetAllType getAllType, Optional<uint32_t> count)
+Ref<IDBRequest> IDBTransaction::requestGetAllObjectStoreRecords(JSC::JSGlobalObject& state, IDBObjectStore& objectStore, const IDBKeyRangeData& keyRangeData, IndexedDB::GetAllType getAllType, std::optional<uint32_t> count)
 {
     LOG(IndexedDB, "IDBTransaction::requestGetAllObjectStoreRecords");
     ASSERT(isActive());
@@ -915,7 +920,7 @@ Ref<IDBRequest> IDBTransaction::requestGetAllObjectStoreRecords(JSC::JSGlobalObj
     return request;
 }
 
-Ref<IDBRequest> IDBTransaction::requestGetAllIndexRecords(JSC::JSGlobalObject& state, IDBIndex& index, const IDBKeyRangeData& keyRangeData, IndexedDB::GetAllType getAllType, Optional<uint32_t> count)
+Ref<IDBRequest> IDBTransaction::requestGetAllIndexRecords(JSC::JSGlobalObject& state, IDBIndex& index, const IDBKeyRangeData& keyRangeData, IndexedDB::GetAllType getAllType, std::optional<uint32_t> count)
 {
     LOG(IndexedDB, "IDBTransaction::requestGetAllIndexRecords");
     ASSERT(isActive());
@@ -1308,7 +1313,7 @@ void IDBTransaction::deleteObjectStore(const String& objectStoreName)
     ASSERT(canCurrentThreadAccessThreadLocalData(m_database->originThread()));
     ASSERT(isVersionChange());
 
-    Locker<Lock> locker(m_referencedObjectStoreLock);
+    Locker locker { m_referencedObjectStoreLock };
 
     if (auto objectStore = m_referencedObjectStores.take(objectStoreName)) {
         objectStore->markAsDeleted();
@@ -1456,7 +1461,7 @@ void IDBTransaction::connectionClosedFromServer(const IDBError& error)
 template<typename Visitor>
 void IDBTransaction::visitReferencedObjectStores(Visitor& visitor) const
 {
-    Locker<Lock> locker(m_referencedObjectStoreLock);
+    Locker locker { m_referencedObjectStoreLock };
     for (auto& objectStore : m_referencedObjectStores.values())
         visitor.addOpaqueRoot(objectStore.get());
     for (auto& objectStore : m_deletedObjectStores.values())

@@ -42,11 +42,13 @@ public:
     static size_t calculateMemoryCost(const Parameters&);
     static size_t calculateExternalMemoryCost(const Parameters&);
     
-    static std::unique_ptr<ImageBufferIOSurfaceBackend> create(const Parameters&, CGColorSpaceRef, const HostWindow*);
     static std::unique_ptr<ImageBufferIOSurfaceBackend> create(const Parameters&, const HostWindow*);
+    // FIXME: Rename to createUsingColorSpaceOfGraphicsContext() (or something like that).
     static std::unique_ptr<ImageBufferIOSurfaceBackend> create(const Parameters&, const GraphicsContext&);
 
     ImageBufferIOSurfaceBackend(const Parameters&, std::unique_ptr<IOSurface>&&);
+
+    IOSurface* surface();
 
     GraphicsContext& context() const override;
     void flushContext() override;
@@ -58,27 +60,26 @@ public:
 
     void drawConsuming(GraphicsContext&, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions&) override;
 
-    RetainPtr<CFDataRef> toCFData(const String& mimeType, Optional<double> quality, PreserveResolution) const override;
-    Vector<uint8_t> toBGRAData() const override;
 
-    RefPtr<ImageData> getImageData(AlphaPremultiplication outputFormat, const IntRect&) const override;
-    void putImageData(AlphaPremultiplication inputFormat, const ImageData&, const IntRect& srcRect, const IntPoint& destPoint, AlphaPremultiplication destFormat) override;
-    IOSurface* surface();
+    std::optional<PixelBuffer> getPixelBuffer(const PixelBufferFormat& outputFormat, const IntRect&) const override;
+    void putPixelBuffer(const PixelBuffer&, const IntRect& srcRect, const IntPoint& destPoint, AlphaPremultiplication destFormat) override;
 
     bool isInUse() const override;
     void releaseGraphicsContext() override;
     VolatilityState setVolatile(bool) override;
     void releaseBufferToPool() override;
 
-    static constexpr bool isOriginAtUpperLeftCorner = true;
     static constexpr RenderingMode renderingMode = RenderingMode::Accelerated;
 
 protected:
     static RetainPtr<CGColorSpaceRef> contextColorSpace(const GraphicsContext&);
     unsigned bytesPerRow() const override;
 
+    // ImageBufferCGBackend overrides.
+    RetainPtr<CGImageRef> copyCGImageForEncoding(CFStringRef destinationUTI, PreserveResolution) const final;
+
     std::unique_ptr<IOSurface> m_surface;
-    mutable bool m_requiresDrawAfterPutImageData { false };
+    mutable bool m_requiresDrawAfterPutPixelBuffer { false };
 
     mutable bool m_needsSetupContext { false };
 };

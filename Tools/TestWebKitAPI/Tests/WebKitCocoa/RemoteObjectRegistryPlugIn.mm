@@ -123,10 +123,20 @@
     completionHandler(error);
 }
 
+- (void)sendAwakener:(TestAwakener *)awakener completionHandler:(void (^)(TestAwakener *))completionHandler
+{
+    completionHandler(awakener);
+}
+
 - (void)callUIProcessMethodWithReplyBlock
 {
     id <LocalObjectProtocol> localObject = [[_browserContextController _remoteObjectRegistry] remoteObjectProxyWithInterface:localObjectInterface()];
     [localObject doSomethingWithCompletionHandler:^{ }];
+}
+
+- (void)getGroupIdentifier:(void(^)(NSString *))completionHandler
+{
+    completionHandler([_browserContextController _groupIdentifier]);
 }
 
 @end

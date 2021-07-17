@@ -52,7 +52,6 @@
 #include <WebKit/WKSerializedScriptValue.h>
 #include <WebKit/WebKit2_C.h>
 #include <wtf/HashMap.h>
-#include <wtf/Optional.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/UniqueArray.h>
 #include <wtf/text/CString.h>
@@ -314,7 +313,7 @@ void TestRunner::execCommand(JSStringRef name, JSStringRef showUI, JSStringRef v
     WKBundlePageExecuteEditingCommand(page(), toWK(name).get(), toWK(value).get());
 }
 
-static Optional<WKFindOptions> findOptionsFromArray(JSValueRef optionsArrayAsValue)
+static std::optional<WKFindOptions> findOptionsFromArray(JSValueRef optionsArrayAsValue)
 {
     auto context = mainFrameJSContext();
     auto optionsArray = JSValueToObject(context, optionsArrayAsValue, nullptr);
@@ -647,7 +646,7 @@ enum {
     EnterFullscreenForElementCallbackID,
     ExitFullscreenForElementCallbackID,
     AppBoundRequestContextDataForDomainCallbackID,
-    DidNotHandleTapAsMeaningfulClickCallbackID,
+    DidHandleTapCallbackID,
     FirstUIScriptCallbackID = 100
 };
 
@@ -790,7 +789,7 @@ void TestRunner::setUserStyleSheetEnabled(bool enabled)
     auto emptyString = toWK("");
     auto location = enabled ? m_userStyleSheetLocation.get() : emptyString.get();
     auto& injectedBundle = InjectedBundle::singleton();
-    WKBundleSetUserStyleSheetLocation(injectedBundle.bundle(), injectedBundle.pageGroup(), location);
+    WKBundleSetUserStyleSheetLocationForTesting(injectedBundle.bundle(), location);
 }
 
 void TestRunner::setUserStyleSheetLocation(JSStringRef location)
@@ -824,7 +823,7 @@ void TestRunner::setCacheModel(int model)
 void TestRunner::setAsynchronousSpellCheckingEnabled(bool enabled)
 {
     auto& injectedBundle = InjectedBundle::singleton();
-    WKBundleSetAsynchronousSpellCheckingEnabled(injectedBundle.bundle(), injectedBundle.pageGroup(), enabled);
+    WKBundleSetAsynchronousSpellCheckingEnabledForTesting(injectedBundle.bundle(), enabled);
 }
 
 void TestRunner::grantWebNotificationPermission(JSStringRef origin)
@@ -859,7 +858,7 @@ bool TestRunner::isGeolocationProviderActive()
     return InjectedBundle::singleton().isGeolocationProviderActive();
 }
 
-void TestRunner::setMockGeolocationPosition(double latitude, double longitude, double accuracy, Optional<double> altitude, Optional<double> altitudeAccuracy, Optional<double> heading, Optional<double> speed, Optional<double> floorLevel)
+void TestRunner::setMockGeolocationPosition(double latitude, double longitude, double accuracy, std::optional<double> altitude, std::optional<double> altitudeAccuracy, std::optional<double> heading, std::optional<double> speed, std::optional<double> floorLevel)
 {
     InjectedBundle::singleton().setMockGeolocationPosition(latitude, longitude, accuracy, altitude, altitudeAccuracy, heading, speed, floorLevel);
 }
@@ -1108,14 +1107,15 @@ void TestRunner::installCustomMenuAction(JSStringRef name, bool dismissesAutomat
     }));
 }
 
-void TestRunner::installDidNotHandleTapAsMeaningfulClickCallback(JSValueRef callback)
+void TestRunner::installDidHandleTapCallback(JSValueRef callback)
 {
-    cacheTestRunnerCallback(DidNotHandleTapAsMeaningfulClickCallbackID, callback);
+    cacheTestRunnerCallback(DidHandleTapCallbackID, callback);
 }
 
-void TestRunner::callDidNotHandleTapAsMeaningfulClickCallback()
+void TestRunner::callDidHandleTapCallback(bool wasMeaningful)
 {
-    callTestRunnerCallback(DidNotHandleTapAsMeaningfulClickCallbackID);
+    auto result = JSValueMakeBoolean(mainFrameJSContext(), wasMeaningful);
+    callTestRunnerCallback(DidHandleTapCallbackID, 1, &result);
 }
 
 void TestRunner::installDidBeginSwipeCallback(JSValueRef callback)
@@ -2116,16 +2116,14 @@ void TestRunner::didSetAppBoundDomainsCallback()
     callTestRunnerCallback(DidSetAppBoundDomainsCallbackID);
 }
 
-void TestRunner::appBoundRequestContextDataForDomain(JSStringRef domain, JSValueRef callback)
+bool TestRunner::didLoadAppInitiatedRequest()
 {
-    cacheTestRunnerCallback(AppBoundRequestContextDataForDomainCallbackID, callback);
-    postMessage("AppBoundRequestContextDataForDomain", domain);
+    return postSynchronousPageMessageReturningBoolean("DidLoadAppInitiatedRequest");
 }
 
-void TestRunner::callDidReceiveAppBoundRequestContextDataForDomainCallback(String&& contextDomain)
+bool TestRunner::didLoadNonAppInitiatedRequest()
 {
-    JSValueRef resultValue = JSValueMakeString(mainFrameJSContext(), createJSString(contextDomain.utf8().data()).get());
-    callTestRunnerCallback(AppBoundRequestContextDataForDomainCallbackID, 1, &resultValue);
+    return postSynchronousPageMessageReturningBoolean("DidLoadNonAppInitiatedRequest");
 }
 
 void TestRunner::setIsSpeechRecognitionPermissionGranted(bool granted)

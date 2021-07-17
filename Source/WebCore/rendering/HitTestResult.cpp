@@ -75,12 +75,6 @@ HitTestResult::HitTestResult(const LayoutRect& rect)
 {
 }
 
-HitTestResult::HitTestResult(const LayoutPoint& centerPoint, unsigned topPadding, unsigned rightPadding, unsigned bottomPadding, unsigned leftPadding)
-    : m_hitTestLocation(centerPoint, topPadding, rightPadding, bottomPadding, leftPadding)
-    , m_pointInInnerNodeFrame(centerPoint)
-{
-}
-
 HitTestResult::HitTestResult(const HitTestLocation& other)
     : m_hitTestLocation(other)
     , m_pointInInnerNodeFrame(m_hitTestLocation.point())
@@ -290,7 +284,7 @@ String HitTestResult::innerTextIfTruncated(TextDirection& dir) const
             if (is<RenderBlockFlow>(*renderer)) {
                 RenderBlockFlow& block = downcast<RenderBlockFlow>(*renderer);
                 if (block.style().textOverflow() == TextOverflow::Ellipsis) {
-                    for (RootInlineBox* line = block.firstRootBox(); line; line = line->nextRootBox()) {
+                    for (auto* line = block.firstRootBox(); line; line = line->nextRootBox()) {
                         if (line->hasEllipsisBox()) {
                             dir = block.style().direction();
                             return downcast<Element>(*truncatedNode).innerText();
@@ -656,7 +650,8 @@ inline HitTestProgress HitTestResult::addNodeToListBasedTestResultCommon(Node* n
     if (!node)
         return HitTestProgress::Continue;
 
-    if (request.disallowsUserAgentShadowContent() && node->isInUserAgentShadowTree())
+    if ((request.disallowsUserAgentShadowContent() && node->isInUserAgentShadowTree())
+        || (request.disallowsUserAgentShadowContentExceptForImageOverlays() && !HTMLElement::isInsideImageOverlay(*node) && node->isInUserAgentShadowTree()))
         node = node->document().ancestorNodeInThisScope(node);
 
     mutableListBasedTestResult().add(*node);

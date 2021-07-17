@@ -52,7 +52,7 @@ public:
     virtual void textTrackRemoveCue(TextTrack&, TextTrackCue&) = 0;
 };
 
-class TextTrack : public TrackBase, public EventTargetWithInlineData, public ContextDestructionObserver {
+class TextTrack : public TrackBase, public EventTargetWithInlineData, public ActiveDOMObject {
     WTF_MAKE_ISO_ALLOCATED(TextTrack);
 public:
     static Ref<TextTrack> create(Document*, TextTrackClient*, const AtomString& kind, const AtomString& id, const AtomString& label, const AtomString& language);
@@ -133,7 +133,7 @@ public:
     using RefCounted::ref;
     using RefCounted::deref;
 
-    const Optional<Vector<String>>& styleSheets() const { return m_styleSheets; }
+    const std::optional<Vector<String>>& styleSheets() const { return m_styleSheets; }
 
     virtual bool shouldPurgeCuesFromUnbufferedRanges() const { return false; }
     virtual void removeCuesNotInTimeRanges(PlatformTimeRanges&);
@@ -148,7 +148,7 @@ protected:
     void setKind(Kind);
 
     RefPtr<TextTrackCueList> m_cues;
-    Optional<Vector<String>> m_styleSheets;
+    std::optional<Vector<String>> m_styleSheets;
 
 private:
     EventTargetInterface eventTargetInterface() const final { return TextTrackEventTargetInterfaceType; }
@@ -158,6 +158,9 @@ private:
 
     void refEventTarget() final { ref(); }
     void derefEventTarget() final { deref(); }
+
+    // ActiveDOMObject
+    const char* activeDOMObjectName() const final;
 
 #if !RELEASE_LOG_DISABLED
     const char* logClassName() const override { return "TextTrack"; }
@@ -173,8 +176,8 @@ private:
     TextTrackClient* m_client;
     TextTrackType m_trackType;
     ReadinessState m_readinessState { NotLoaded };
-    Optional<int> m_trackIndex;
-    Optional<int> m_renderedTrackIndex;
+    std::optional<int> m_trackIndex;
+    std::optional<int> m_renderedTrackIndex;
     bool m_hasBeenConfigured { false };
 };
 

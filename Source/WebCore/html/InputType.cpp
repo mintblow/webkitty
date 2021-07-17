@@ -865,10 +865,10 @@ void InputType::dataListMayHaveChanged()
 {
 }
 
-Optional<Decimal> InputType::findClosestTickMarkValue(const Decimal&)
+std::optional<Decimal> InputType::findClosestTickMarkValue(const Decimal&)
 {
     ASSERT_NOT_REACHED();
-    return WTF::nullopt;
+    return std::nullopt;
 }
 #endif
 
@@ -1081,6 +1081,12 @@ Vector<Color> InputType::suggestedColors() const
 RefPtr<TextControlInnerTextElement> InputType::innerTextElement() const
 {
     return nullptr;
+}
+
+String InputType::resultForDialogSubmit() const
+{
+    ASSERT(element());
+    return element()->value();
 }
 
 } // namespace WebCore

@@ -27,6 +27,7 @@
 #include "JSDOMConstructorNotConstructable.h"
 #include "JSDOMConvertInterface.h"
 #include "JSDOMExceptionHandling.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMIterator.h"
 #include "JSDOMOperation.h"
 #include "JSDOMWrapperCache.h"
@@ -157,18 +158,13 @@ JSObject* JSTestIterable::prototype(VM& vm, JSDOMGlobalObject& globalObject)
 
 JSValue JSTestIterable::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSTestIterableDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+    return getDOMConstructor<JSTestIterableDOMConstructor, DOMConstructorID::TestIterable>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 void JSTestIterable::destroy(JSC::JSCell* cell)
 {
     JSTestIterable* thisObject = static_cast<JSTestIterable*>(cell);
     thisObject->JSTestIterable::~JSTestIterable();
-}
-
-template<> inline JSTestIterable* IDLOperation<JSTestIterable>::cast(JSGlobalObject& lexicalGlobalObject, CallFrame& callFrame)
-{
-    return jsDynamicCast<JSTestIterable*>(JSC::getVM(&lexicalGlobalObject), callFrame.thisValue());
 }
 
 JSC_DEFINE_CUSTOM_GETTER(jsTestIterableConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName))

@@ -56,9 +56,12 @@
 #import <wtf/cocoa/NSURLExtras.h>
 #import <wtf/spi/cocoa/SecuritySPI.h>
 
-
 #if !HAVE(URL_FORMATTING)
 SOFT_LINK_PRIVATE_FRAMEWORK_OPTIONAL(LinkPresentation)
+#endif
+
+#if HAVE(UIKIT_WEBKIT_INTERNALS)
+#include <WebKitAdditions/WKFullscreenWindowControllerAdditions.h>
 #endif
 
 namespace WebKit {
@@ -687,6 +690,10 @@ private:
             manager->setAnimatingFullScreen(false);
             page->setSuppressVisibilityUpdates(false);
 
+#if HAVE(UIKIT_WEBKIT_INTERNALS)
+            configureViewForFullscreen(_fullscreenViewController.get().view);
+#endif
+
             if (auto* videoFullscreenManager = self._videoFullscreenManager) {
                 videoFullscreenManager->setClient(&_videoFullscreenManagerProxyClient);
 
@@ -811,7 +818,7 @@ private:
 
     _viewState.applyTo(webView.get());
     if (auto page = [webView _page])
-        page->setOverrideViewportArguments(WTF::nullopt);
+        page->setOverrideViewportArguments(std::nullopt);
 
     [webView setNeedsLayout];
     [webView layoutIfNeeded];
@@ -854,6 +861,7 @@ private:
         completionHandler();
 
     [_fullscreenViewController setPrefersStatusBarHidden:YES];
+    [_fullscreenViewController invalidate];
     _fullscreenViewController = nil;
 }
 

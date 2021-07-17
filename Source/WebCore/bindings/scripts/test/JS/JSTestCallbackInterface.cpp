@@ -34,6 +34,7 @@
 #include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObject.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMStringList.h"
 #include "JSTestNode.h"
 #include "JSTestObj.h"
@@ -65,14 +66,14 @@ template<> JSString* convertEnumerationToJS(JSGlobalObject& lexicalGlobalObject,
     return jsStringWithCache(lexicalGlobalObject.vm(), convertEnumerationToString(enumerationValue));
 }
 
-template<> Optional<TestCallbackInterface::Enum> parseEnumeration<TestCallbackInterface::Enum>(JSGlobalObject& lexicalGlobalObject, JSValue value)
+template<> std::optional<TestCallbackInterface::Enum> parseEnumeration<TestCallbackInterface::Enum>(JSGlobalObject& lexicalGlobalObject, JSValue value)
 {
     auto stringValue = value.toWTFString(&lexicalGlobalObject);
     if (stringValue == "value1")
         return TestCallbackInterface::Enum::Value1;
     if (stringValue == "value2")
         return TestCallbackInterface::Enum::Value2;
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 template<> const char* expectedEnumerationValues<TestCallbackInterface::Enum>()
@@ -170,7 +171,7 @@ template<> void JSTestCallbackInterfaceDOMConstructor::initializeProperties(VM& 
 
 JSValue JSTestCallbackInterface::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSTestCallbackInterfaceDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+    return getDOMConstructor<JSTestCallbackInterfaceDOMConstructor, DOMConstructorID::TestCallbackInterface>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 CallbackResult<typename IDLUndefined::ImplementationType> JSTestCallbackInterface::callbackWithNoParam()

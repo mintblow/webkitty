@@ -1,3 +1,267 @@
+2021-07-16  Alexander Mikhaylenko  <alexm@gnome.org>
+
+        [GTK][WPE] Support color-schemes CSS property
+        https://bugs.webkit.org/show_bug.cgi?id=208204
+
+        Reviewed by Adrian Perez de Castro.
+
+        * Source/cmake/OptionsGTK.cmake:
+        Enable HAVE_OS_DARK_MODE_SUPPORT.
+        * Source/cmake/OptionsWPE.cmake:
+        Enable ENABLE_DARK_MODE_CSS and HAVE_OS_DARK_MODE_SUPPORT.
+
+2021-07-15  Philippe Normand  <pnormand@igalia.com>
+
+        Unreviewed, CMake fix-up after r279940
+
+        * Source/cmake/FindLIBPORTAL.cmake: Fix libportal detection.
+
+2021-07-15  Philippe Normand  <pnormand@igalia.com>
+
+        [GStreamer][Pipewire] Implement getDisplayMedia() backend
+        https://bugs.webkit.org/show_bug.cgi?id=210926
+
+        Reviewed by Xabier Rodriguez-Calvar.
+
+        * Source/cmake/FindLIBPORTAL.cmake: Added.
+        * Source/cmake/GStreamerChecks.cmake: Enable Pipewire support if libportal was found.
+
+2021-07-13  Michael Catanzaro  <mcatanzaro@gnome.org>
+
+        Remove USE_64KB_PAGE_BLOCK
+        https://bugs.webkit.org/show_bug.cgi?id=227905
+
+        Reviewed by Yusuke Suzuki.
+
+        I added the USE_64KB_PAGE_BLOCK build option in bug #217989 for use by RHEL. But going
+        forward, I don't need it anymore, and can maintain it downstream where it is needed. (This
+        option might also be useful to SUSE, but they already don't use it, so won't miss it.)
+
+        I've seen users who don't understand the consequences of this option enabling it on x86_64,
+        even though there are serious negative consequences and zero benefits to using it. So let's
+        get rid of it.
+
+        * Source/cmake/WebKitFeatures.cmake:
+
+2021-07-13  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK][WPE] Expose support for client certificate auth
+        https://bugs.webkit.org/show_bug.cgi?id=200805
+
+        Reviewed by Michael Catanzaro.
+
+        Bump libsoup3 required version.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-06-24  Zan Dobersek  <zdobersek@igalia.com>
+
+        REGRESSION(r236846): WPE shouldn't depend on OpenGL ES 3
+        https://bugs.webkit.org/show_bug.cgi?id=227289
+
+        Reviewed by Adrian Perez de Castro.
+
+        * Source/cmake/OptionsWPE.cmake: Drop the OpenGLES2 package search.
+        None of the possible versions are meaningful because libepoxy is used
+        as the underlying GL relay.
+
+2021-06-24  Martin Robinson  <mrobinson@webkit.org>
+
+        [css-scroll-snap] Remove ENABLE_SCROLL_SNAP compile-time option
+        https://bugs.webkit.org/show_bug.cgi?id=227067
+
+        Reviewed by Simon Fraser.
+
+        Remove compile-time ENABLE_SCROLL_SNAP configuration option.
+
+        * Source/cmake/WebKitFeatures.cmake: Remove the flag from the CMake configuration.
+
+2021-06-21  Fujii Hironori  <Hironori.Fujii@sony.com>
+
+        [WinCairo] Turn ENABLE_SHAREABLE_RESOURCE on
+        https://bugs.webkit.org/show_bug.cgi?id=227011
+
+        Reviewed by Don Olmstead.
+
+        * Source/cmake/OptionsWin.cmake: Turned ENABLE_SHAREABLE_RESOURCE on for WinCairo port.
+
+2021-06-18  Sergio Villar Senin  <svillar@igalia.com>
+
+        Ignore clangd's directory with index files
+        https://bugs.webkit.org/show_bug.cgi?id=227162
+
+        Reviewed by Žan Doberšek.
+
+        clangd stores its indexes in a .cache directory. Let git ignore it.
+
+        * .gitignore:
+
+2021-06-11  Adrian Perez de Castro  <aperez@igalia.com>
+
+        Unreviewed. Update OptionsWPE.cmake and NEWS for the 2.33.2 release
+
+        * Source/cmake/OptionsWPE.cmake: Bump version numbers.
+
+2021-06-10  Carlos Alberto Lopez Perez  <clopez@igalia.com>
+
+        [CMake][GTK][WPE] Improve error message when libsoup3 is not found
+        https://bugs.webkit.org/show_bug.cgi?id=226905
+
+        Reviewed by Adrian Perez de Castro.
+
+        When libsoup 3 is not found be more clear about the problem and
+        offer possible workaround to continue the build.
+
+        * Source/cmake/FindLibSoup.cmake:
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-06-10  Philippe Normand  <pnormand@igalia.com>
+
+        [WPE] Enable Cog for developer builds
+        https://bugs.webkit.org/show_bug.cgi?id=224360
+
+        Reviewed by Adrian Perez de Castro.
+
+        Cog would be preferred over MiniBrowser for WPE developer builds because it provides a nicer
+        user experience, while keeping the same spirit as MiniBrowser. Pass `-DENABLE_COG=NO` to
+        CMake to disable it and fall back to MiniBrowser.
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-06-08  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Unreviewed. Update OptionsGTK.cmake and NEWS for 2.33.2 release
+
+        * Source/cmake/OptionsGTK.cmake: Bump version numbers.
+
+2021-06-07  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK][WPE] Bump libsoup3 version to 2.99.8
+        https://bugs.webkit.org/show_bug.cgi?id=226713
+
+        Reviewed by Philippe Normand.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-06-04  Per Arne Vollan  <pvollan@apple.com>
+
+        [AppleWin] JSC build failure
+        https://bugs.webkit.org/show_bug.cgi?id=226659
+        <rdar://78844190>
+
+        Reviewed by Brent Fulgham.
+
+        WTF scripts location is not being correctly identified.
+
+        * Source/cmake/OptionsAppleWin.cmake:
+
+2021-06-04  Martin Robinson  <mrobinson@webkit.org>
+
+        [Win] Implement scroll-snap-points on Windows
+        https://bugs.webkit.org/show_bug.cgi?id=142503
+        <rdar://problem/20093603>
+
+        Reviewed by Simon Fraser.
+
+        * Source/cmake/OptionsWin.cmake: Stop disabling scroll-snap for Apple Win port.
+
+2021-05-27  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Add check for timingsafe_bcmp
+        https://bugs.webkit.org/show_bug.cgi?id=226347
+
+        Reviewed by Chris Dumez.
+
+        Adds a symbol check for timingsafe_bcmp and sets HAVE_TIMINGSAFE_BCMP accordingly in the
+        cmakeconfig.h.
+
+        * Source/cmake/OptionsCommon.cmake:
+
+2021-05-27  Adrian Perez de Castro  <aperez@igalia.com>
+
+        Unreviewed. Update OptionsWPE.cmake and NEWS for the 2.33.1 release
+
+        * Source/cmake/OptionsWPE.cmake: Bump version numbers.
+
+2021-05-27  Adrian Perez de Castro  <aperez@igalia.com>
+
+        Unreviewed. [WPE] Bump version numbers
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-05-26  Don Olmstead  <don.olmstead@sony.com>
+
+        [CMake] Support USE_ANGLE_EGL on additional platforms
+        https://bugs.webkit.org/show_bug.cgi?id=224888
+        <rdar://problem/77280211>
+
+        Reviewed by Ken Russell.
+
+        USE_ANGLE_EGL is for platforms that want to use ANGLE as the sole OpenGL ES implementation
+        within WebKit. This setting is applicable to Mac and Windows platforms. USE_ANGLE_WEBGL is
+        just for platforms that want to use ANGLE for WebGL 2.0 support only. Any other uses of
+        OpenGL should go through the system OpenGL (desktop or embedded). This setting applies to
+        GTK.
+
+        The platform options were modified to match this. 
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsMac.cmake:
+
+2021-05-25  Don Olmstead  <don.olmstead@sony.com>
+
+        [PlayStation] Implement FileSystem without std::filesystem
+        https://bugs.webkit.org/show_bug.cgi?id=226197
+
+        Reviewed by Chris Dumez.
+
+        Expose the result of the check for <filesystem> support as HAVE_STD_FILESYSTEM.
+
+        * Source/cmake/OptionsCommon.cmake:
+
+2021-05-18  Yoshiaki Jitsukawa  <yoshiaki.jitsukawa@sony.com>
+
+        [PlayStation] Fix PlayStation port
+        https://bugs.webkit.org/show_bug.cgi?id=225913
+
+        Reviewed by Don Olmstead.
+
+        Fix PlayStation port
+
+        * Source/cmake/OptionsPlayStation.cmake: Rename
+        PLAYSTATION_COPY_SHARED_LIBRARIES to PLAYSTATION_COPY_REQUIREMENTS and
+        let it copy more general files.
+        Touch ebootparam.ini by the playstation_tools_copy custom_target.
+
+2021-05-15  Sam Weinig  <weinig@apple.com>
+
+        Allow conditionally enabling OffscreenCanvas only for non-worker contexts
+        https://bugs.webkit.org/show_bug.cgi?id=225845
+
+        Reviewed by Darin Adler.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+        * Source/cmake/WebKitFeatures.cmake:
+        Match current behavior of ENABLE_OFFSCREEN_CANVAS for ENABLE_OFFSCREEN_CANVAS_IN_WORKERS.
+
+2021-05-14  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Unreviewed. Update OptionsGTK.cmake and NEWS for 2.33.1 release
+
+        * Source/cmake/OptionsGTK.cmake: Bump version numbers.
+
+2021-05-14  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Unreviewed. [GTK] Fix make distcheck
+
+        Use WEBKITGTK_API_DOC_VERSION instead of WEBKITGTK_API_VERSION or the documentation install rules.
+
+        * Source/PlatformGTK.cmake:
+
 2021-05-07  Carlos Garcia Campos  <cgarcia@igalia.com>
 
         [GTK][WPE] Bump libsoup3 version to 2.99.5

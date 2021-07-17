@@ -258,7 +258,7 @@ interface TestRunner {
     object neverInlineFunction(object function);
 
     // UI delegate hooks.
-    undefined installDidNotHandleTapAsMeaningfulClickCallback(object callback);
+    undefined installDidHandleTapCallback(object callback);
 
     // Swipe gestures
     undefined installDidBeginSwipeCallback(object callback);
@@ -388,7 +388,8 @@ interface TestRunner {
     boolean hasAppBoundSession();
     undefined clearAppBoundSession();
     undefined setAppBoundDomains(object originsArray, object callback);
-    undefined appBoundRequestContextDataForDomain(DOMString domain, object callback);
+    boolean didLoadAppInitiatedRequest();
+    boolean didLoadNonAppInitiatedRequest();
 
     undefined injectUserScript(DOMString string);
     readonly attribute unsigned long userScriptInjectedCount;

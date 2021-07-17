@@ -65,6 +65,7 @@ public:
 
     unsigned size() const;
     unsigned capacity() const;
+    unsigned memoryUse() const;
     bool isEmpty() const;
 
     void reserveInitialCapacity(unsigned keyCount) { m_impl.reserveInitialCapacity(keyCount); }
@@ -85,6 +86,7 @@ public:
     template<typename HashTranslator, typename T> iterator find(const T&) const;
     template<typename HashTranslator, typename T> bool contains(const T&) const;
 
+    ALWAYS_INLINE bool isNullStorage() const { return m_impl.isNullStorage(); }
 
     // The return value includes both an iterator to the added value's location,
     // and an isNewEntry bool that indicates if it is a new or existing entry in the set.
@@ -200,6 +202,12 @@ template<typename T, typename U, typename V, typename W>
 inline unsigned HashSet<T, U, V, W>::capacity() const
 {
     return m_impl.capacity(); 
+}
+
+template<typename T, typename U, typename V, typename W>
+inline unsigned HashSet<T, U, V, W>::memoryUse() const
+{
+    return capacity() * sizeof(T);
 }
 
 template<typename T, typename U, typename V, typename W>

@@ -463,31 +463,34 @@ bool WebPage::performNonEditingBehaviorForSelector(const String& selector, Keybo
     // Should such non-editing behaviors be implemented in Editor or EventHandler::defaultArrowEventHandler() perhaps?
     
     bool didPerformAction = false;
+    
+    if (!frame->settings().eventHandlerDrivenSmoothKeyboardScrollingEnabled()) {
+        if (selector == "moveUp:")
+            didPerformAction = scroll(m_page.get(), ScrollUp, ScrollByLine);
+        else if (selector == "moveToBeginningOfParagraph:")
+            didPerformAction = scroll(m_page.get(), ScrollUp, ScrollByPage);
+        else if (selector == "moveToBeginningOfDocument:") {
+            didPerformAction = scroll(m_page.get(), ScrollUp, ScrollByDocument);
+            didPerformAction |= scroll(m_page.get(), ScrollLeft, ScrollByDocument);
+        } else if (selector == "moveDown:")
+            didPerformAction = scroll(m_page.get(), ScrollDown, ScrollByLine);
+        else if (selector == "moveToEndOfParagraph:")
+            didPerformAction = scroll(m_page.get(), ScrollDown, ScrollByPage);
+        else if (selector == "moveToEndOfDocument:") {
+            didPerformAction = scroll(m_page.get(), ScrollDown, ScrollByDocument);
+            didPerformAction |= scroll(m_page.get(), ScrollLeft, ScrollByDocument);
+        } else if (selector == "moveLeft:")
+            didPerformAction = scroll(m_page.get(), ScrollLeft, ScrollByLine);
+        else if (selector == "moveWordLeft:")
+            didPerformAction = scroll(m_page.get(), ScrollLeft, ScrollByPage);
+        else if (selector == "moveRight:")
+            didPerformAction = scroll(m_page.get(), ScrollRight, ScrollByLine);
+        else if (selector == "moveWordRight:")
+            didPerformAction = scroll(m_page.get(), ScrollRight, ScrollByPage);
+    }
 
-    if (selector == "moveUp:")
-        didPerformAction = scroll(m_page.get(), ScrollUp, ScrollByLine);
-    else if (selector == "moveToBeginningOfParagraph:")
-        didPerformAction = scroll(m_page.get(), ScrollUp, ScrollByPage);
-    else if (selector == "moveToBeginningOfDocument:") {
-        didPerformAction = scroll(m_page.get(), ScrollUp, ScrollByDocument);
-        didPerformAction |= scroll(m_page.get(), ScrollLeft, ScrollByDocument);
-    } else if (selector == "moveDown:")
-        didPerformAction = scroll(m_page.get(), ScrollDown, ScrollByLine);
-    else if (selector == "moveToEndOfParagraph:")
-        didPerformAction = scroll(m_page.get(), ScrollDown, ScrollByPage);
-    else if (selector == "moveToEndOfDocument:") {
-        didPerformAction = scroll(m_page.get(), ScrollDown, ScrollByDocument);
-        didPerformAction |= scroll(m_page.get(), ScrollLeft, ScrollByDocument);
-    } else if (selector == "moveLeft:")
-        didPerformAction = scroll(m_page.get(), ScrollLeft, ScrollByLine);
-    else if (selector == "moveWordLeft:")
-        didPerformAction = scroll(m_page.get(), ScrollLeft, ScrollByPage);
-    else if (selector == "moveToLeftEndOfLine:")
+    if (selector == "moveToLeftEndOfLine:")
         didPerformAction = m_userInterfaceLayoutDirection == WebCore::UserInterfaceLayoutDirection::LTR ? m_page->backForward().goBack() : m_page->backForward().goForward();
-    else if (selector == "moveRight:")
-        didPerformAction = scroll(m_page.get(), ScrollRight, ScrollByLine);
-    else if (selector == "moveWordRight:")
-        didPerformAction = scroll(m_page.get(), ScrollRight, ScrollByPage);
     else if (selector == "moveToRightEndOfLine:")
         didPerformAction = m_userInterfaceLayoutDirection == WebCore::UserInterfaceLayoutDirection::LTR ? m_page->backForward().goForward() : m_page->backForward().goBack();
 
@@ -592,7 +595,7 @@ void WebPage::shouldDelayWindowOrderingEvent(const WebKit::WebMouseEvent& event,
 
     bool result = false;
 #if ENABLE(DRAG_SUPPORT)
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::AllowChildFrameContent };
+    constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::AllowChildFrameContent };
     HitTestResult hitResult = frame.eventHandler().hitTestResultAtPoint(frame.view()->windowToContents(event.position()), hitType);
     if (hitResult.isSelected())
         result = frame.eventHandler().eventMayStartDrag(platform(event));
@@ -610,7 +613,7 @@ void WebPage::acceptsFirstMouse(int eventNumber, const WebKit::WebMouseEvent& ev
 
     auto& frame = m_page->focusController().focusedOrMainFrame();
 
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::AllowChildFrameContent };
+    constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::AllowChildFrameContent };
     HitTestResult hitResult = frame.eventHandler().hitTestResultAtPoint(frame.view()->windowToContents(event.position()), hitType);
     frame.eventHandler().setActivationEventNumber(eventNumber);
     bool result = false;
@@ -838,7 +841,7 @@ bool WebPage::hoverSupportedByAnyAvailablePointingDevice() const
     return true;
 }
 
-Optional<PointerCharacteristics> WebPage::pointerCharacteristicsOfPrimaryPointingDevice() const
+std::optional<PointerCharacteristics> WebPage::pointerCharacteristicsOfPrimaryPointingDevice() const
 {
     return PointerCharacteristics::Fine;
 }
@@ -858,9 +861,13 @@ void WebPage::performImmediateActionHitTestAtLocation(WebCore::FloatPoint locati
         return;
     }
 
-    IntPoint locationInContentCoordinates = mainFrame.view()->rootViewToContents(roundedIntPoint(locationInViewCoordinates));
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::DisallowUserAgentShadowContent, HitTestRequest::AllowChildFrameContent };
-    HitTestResult hitTestResult = mainFrame.eventHandler().hitTestResultAtPoint(locationInContentCoordinates, hitType);
+    auto locationInContentCoordinates = mainFrame.view()->rootViewToContents(roundedIntPoint(locationInViewCoordinates));
+    auto hitTestResult = mainFrame.eventHandler().hitTestResultAtPoint(locationInContentCoordinates, {
+        HitTestRequest::Type::ReadOnly,
+        HitTestRequest::Type::Active,
+        HitTestRequest::Type::DisallowUserAgentShadowContentExceptForImageOverlays,
+        HitTestRequest::Type::AllowChildFrameContent,
+    });
 
     bool immediateActionHitTestPreventsDefault = false;
     Element* element = hitTestResult.targetElement();
@@ -873,10 +880,18 @@ void WebPage::performImmediateActionHitTestAtLocation(WebCore::FloatPoint locati
 
     auto selectionRange = corePage()->focusController().focusedOrMainFrame().selection().selection().firstRange();
 
+    auto indicatorOptions = [&](const SimpleRange& range) {
+        OptionSet<TextIndicatorOption> options { TextIndicatorOption::UseBoundingRectAndPaintAllContentForComplexRanges };
+        if (HTMLElement::isInsideImageOverlay(range))
+            options.add({ TextIndicatorOption::PaintAllContent, TextIndicatorOption::PaintBackgrounds });
+        return options;
+    };
+
     URL absoluteLinkURL = hitTestResult.absoluteLinkURL();
-    Element* URLElement = hitTestResult.URLElement();
-    if (!absoluteLinkURL.isEmpty() && URLElement)
-        immediateActionResult.linkTextIndicator = TextIndicator::createWithRange(makeRangeSelectingNodeContents(*URLElement), { TextIndicatorOption::UseBoundingRectAndPaintAllContentForComplexRanges }, TextIndicatorPresentationTransition::FadeIn);
+    if (auto urlElement = makeRefPtr(hitTestResult.URLElement()); !absoluteLinkURL.isEmpty() && urlElement) {
+        auto elementRange = makeRangeSelectingNodeContents(*urlElement);
+        immediateActionResult.linkTextIndicator = TextIndicator::createWithRange(elementRange, indicatorOptions(elementRange), TextIndicatorPresentationTransition::FadeIn);
+    }
 
     if (auto lookupResult = lookupTextAtLocation(locationInViewCoordinates)) {
         auto [lookupRange, options] = WTFMove(*lookupResult);
@@ -904,7 +919,7 @@ void WebPage::performImmediateActionHitTestAtLocation(WebCore::FloatPoint locati
         pageOverlayDidOverrideDataDetectors = true;
         immediateActionResult.detectedDataActionContext = actionContext->context.get();
         immediateActionResult.detectedDataBoundingBox = view->contentsToWindow(enclosingIntRect(unitedBoundingBoxes(RenderObject::absoluteTextQuads(actionContext->range))));
-        immediateActionResult.detectedDataTextIndicator = TextIndicator::createWithRange(actionContext->range, { TextIndicatorOption::UseBoundingRectAndPaintAllContentForComplexRanges }, TextIndicatorPresentationTransition::FadeIn);
+        immediateActionResult.detectedDataTextIndicator = TextIndicator::createWithRange(actionContext->range, indicatorOptions(actionContext->range), TextIndicatorPresentationTransition::FadeIn);
         immediateActionResult.detectedDataOriginatingPageOverlay = overlay->pageOverlayID();
         break;
     }
@@ -914,8 +929,7 @@ void WebPage::performImmediateActionHitTestAtLocation(WebCore::FloatPoint locati
         if (auto result = DataDetection::detectItemAroundHitTestResult(hitTestResult)) {
             immediateActionResult.detectedDataActionContext = WTFMove(result->actionContext);
             immediateActionResult.detectedDataBoundingBox = result->boundingBox;
-            immediateActionResult.detectedDataTextIndicator = TextIndicator::createWithRange(result->range,
-                { TextIndicatorOption::UseBoundingRectAndPaintAllContentForComplexRanges }, TextIndicatorPresentationTransition::FadeIn);
+            immediateActionResult.detectedDataTextIndicator = TextIndicator::createWithRange(result->range, indicatorOptions(result->range), TextIndicatorPresentationTransition::FadeIn);
         }
     }
 
@@ -952,16 +966,18 @@ void WebPage::performImmediateActionHitTestAtLocation(WebCore::FloatPoint locati
     send(Messages::WebPageProxy::DidPerformImmediateActionHitTest(immediateActionResult, immediateActionHitTestPreventsDefault, UserData(WebProcess::singleton().transformObjectsToHandles(userData.get()).get())));
 }
 
-Optional<std::tuple<WebCore::SimpleRange, NSDictionary *>> WebPage::lookupTextAtLocation(FloatPoint locationInViewCoordinates)
+std::optional<std::tuple<WebCore::SimpleRange, NSDictionary *>> WebPage::lookupTextAtLocation(FloatPoint locationInViewCoordinates)
 {
     auto& mainFrame = corePage()->mainFrame();
     if (!mainFrame.view() || !mainFrame.view()->renderView())
-        return WTF::nullopt;
+        return std::nullopt;
 
-    auto point = roundedIntPoint(locationInViewCoordinates);
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::DisallowUserAgentShadowContent, HitTestRequest::AllowChildFrameContent };
-    auto result = mainFrame.eventHandler().hitTestResultAtPoint(m_page->mainFrame().view()->windowToContents(point), hitType);
-    return DictionaryLookup::rangeAtHitTestResult(result);
+    return DictionaryLookup::rangeAtHitTestResult(mainFrame.eventHandler().hitTestResultAtPoint(m_page->mainFrame().view()->windowToContents(roundedIntPoint(locationInViewCoordinates)), {
+        HitTestRequest::Type::ReadOnly,
+        HitTestRequest::Type::Active,
+        HitTestRequest::Type::DisallowUserAgentShadowContentExceptForImageOverlays,
+        HitTestRequest::Type::AllowChildFrameContent,
+    }));
 }
 
 void WebPage::immediateActionDidUpdate()

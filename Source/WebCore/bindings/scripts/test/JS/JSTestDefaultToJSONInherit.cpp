@@ -35,6 +35,7 @@
 #include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObject.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMOperation.h"
 #include "JSDOMWrapperCache.h"
 #include "JSTestDefaultToJSONIndirectInheritance.h"
@@ -167,17 +168,7 @@ JSObject* JSTestDefaultToJSONInherit::prototype(VM& vm, JSDOMGlobalObject& globa
 
 JSValue JSTestDefaultToJSONInherit::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSTestDefaultToJSONInheritDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
-}
-
-template<> inline JSTestDefaultToJSONInherit* IDLAttribute<JSTestDefaultToJSONInherit>::cast(JSGlobalObject& lexicalGlobalObject, EncodedJSValue thisValue)
-{
-    return jsDynamicCast<JSTestDefaultToJSONInherit*>(JSC::getVM(&lexicalGlobalObject), JSValue::decode(thisValue));
-}
-
-template<> inline JSTestDefaultToJSONInherit* IDLOperation<JSTestDefaultToJSONInherit>::cast(JSGlobalObject& lexicalGlobalObject, CallFrame& callFrame)
-{
-    return jsDynamicCast<JSTestDefaultToJSONInherit*>(JSC::getVM(&lexicalGlobalObject), callFrame.thisValue());
+    return getDOMConstructor<JSTestDefaultToJSONInheritDOMConstructor, DOMConstructorID::TestDefaultToJSONInherit>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 JSC_DEFINE_CUSTOM_GETTER(jsTestDefaultToJSONInheritConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName))

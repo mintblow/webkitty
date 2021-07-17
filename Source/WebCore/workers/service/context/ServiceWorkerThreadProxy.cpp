@@ -116,6 +116,9 @@ ServiceWorkerThreadProxy::ServiceWorkerThreadProxy(PageConfiguration&& pageConfi
     m_remoteDebuggable->setRemoteDebuggingAllowed(true);
     m_remoteDebuggable->init();
 #endif
+
+    if (data.lastNavigationWasAppInitiated)
+        setLastNavigationWasAppInitiated(data.lastNavigationWasAppInitiated == LastNavigationWasAppInitiated::Yes);
 }
 
 ServiceWorkerThreadProxy::~ServiceWorkerThreadProxy()
@@ -124,10 +127,15 @@ ServiceWorkerThreadProxy::~ServiceWorkerThreadProxy()
     allServiceWorkerThreadProxies().remove(this);
 }
 
-void ServiceWorkerThreadProxy::setLastNavigationWasAppBound(bool wasAppBound)
+void ServiceWorkerThreadProxy::setLastNavigationWasAppInitiated(bool wasAppInitiated)
 {
     if (m_document->loader())
-        m_document->loader()->setLastNavigationWasAppBound(wasAppBound);
+        m_document->loader()->setLastNavigationWasAppInitiated(wasAppInitiated);
+}
+
+bool ServiceWorkerThreadProxy::lastNavigationWasAppInitiated()
+{
+    return m_document->loader() ? m_document->loader()->lastNavigationWasAppInitiated() : true;
 }
 
 bool ServiceWorkerThreadProxy::postTaskForModeToWorkerOrWorkletGlobalScope(ScriptExecutionContext::Task&& task, const String& mode)
@@ -205,7 +213,7 @@ void ServiceWorkerThreadProxy::notifyNetworkStateChange(bool isOnline)
     }, WorkerRunLoop::defaultMode());
 }
 
-void ServiceWorkerThreadProxy::startFetch(SWServerConnectionIdentifier connectionIdentifier, FetchIdentifier fetchIdentifier, Ref<ServiceWorkerFetch::Client>&& client, Optional<ServiceWorkerClientIdentifier>&& clientId, ResourceRequest&& request, String&& referrer, FetchOptions&& options)
+void ServiceWorkerThreadProxy::startFetch(SWServerConnectionIdentifier connectionIdentifier, FetchIdentifier fetchIdentifier, Ref<ServiceWorkerFetch::Client>&& client, std::optional<ServiceWorkerClientIdentifier>&& clientId, ResourceRequest&& request, String&& referrer, FetchOptions&& options)
 {
     RELEASE_LOG(ServiceWorker, "ServiceWorkerThreadProxy::startFetch %llu", fetchIdentifier.toUInt64());
 

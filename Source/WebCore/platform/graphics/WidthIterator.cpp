@@ -107,6 +107,7 @@ inline float WidthIterator::applyFontTransforms(GlyphBuffer& glyphBuffer, unsign
 
     font.applyTransforms(glyphBuffer, lastGlyphCount, m_currentCharacterIndex, m_enableKerning, m_requiresShaping, m_font.fontDescription().computedLocale(), m_run.text(), m_run.direction());
     glyphBufferSize = glyphBuffer.size();
+    advances = glyphBuffer.advances(0);
 
     GlyphBufferOrigin* origins = glyphBuffer.origins(0);
     for (unsigned i = lastGlyphCount; i < glyphBufferSize; ++i) {
@@ -203,6 +204,8 @@ inline void WidthIterator::advanceInternal(TextIterator& textIterator, GlyphBuff
 
     auto currentCharacterIndex = textIterator.currentIndex();
     UChar32 character = 0;
+    float width = 0;
+    float previousWidth = 0;
     unsigned clusterLength = 0;
     CharactersTreatedAsSpace charactersTreatedAsSpace;
     float widthOfCurrentFontRange = 0;
@@ -233,7 +236,8 @@ inline void WidthIterator::advanceInternal(TextIterator& textIterator, GlyphBuff
         const Font* font = glyphData.font ? glyphData.font : &m_font.primaryFont();
         ASSERT(font);
 
-        float width = font->widthForGlyph(glyph);
+        previousWidth = width;
+        width = font->widthForGlyph(glyph);
 
         if (font != lastFontData) {
             commitCurrentFontRange(glyphBuffer, lastGlyphCount, currentCharacterIndex, *lastFontData, primaryFont, character, widthOfCurrentFontRange, charactersTreatedAsSpace);
@@ -248,7 +252,7 @@ inline void WidthIterator::advanceInternal(TextIterator& textIterator, GlyphBuff
             charactersTreatedAsSpace.constructAndAppend(
                 currentCharacterIndex,
                 character == ' ',
-                glyphBuffer.size() ? WebCore::width(glyphBuffer.advanceAt(glyphBuffer.size() - 1)) : 0,
+                previousWidth,
                 width);
         }
 
@@ -392,7 +396,7 @@ void WidthIterator::applyAdditionalWidth(GlyphBuffer& glyphBuffer, GlyphIndexRan
 
 void WidthIterator::applyExtraSpacingAfterShaping(GlyphBuffer& glyphBuffer, unsigned characterStartIndex, unsigned glyphBufferStartIndex, unsigned characterDestinationIndex, float startingRunWidth)
 {
-    Vector<Optional<GlyphIndexRange>> characterIndexToGlyphIndexRange(m_run.length(), WTF::nullopt);
+    Vector<std::optional<GlyphIndexRange>> characterIndexToGlyphIndexRange(m_run.length(), std::nullopt);
     Vector<float> advanceWidths(m_run.length(), 0);
     for (unsigned i = glyphBufferStartIndex; i < glyphBuffer.size(); ++i) {
         auto stringOffset = glyphBuffer.checkedStringOffsetAt(i, m_run.length());

@@ -79,13 +79,13 @@ void SharedRoutingArbitrator::beginRoutingArbitrationForToken(const Token& token
 
     AVAudioRoutingArbitrationCategory arbitrationCategory = AVAudioRoutingArbitrationCategoryPlayback;
     switch (requestedCategory) {
-    case AudioSession::MediaPlayback:
+    case AudioSession::CategoryType::MediaPlayback:
         arbitrationCategory = AVAudioRoutingArbitrationCategoryPlayback;
         break;
-    case AudioSession::RecordAudio:
+    case AudioSession::CategoryType::RecordAudio:
         arbitrationCategory = AVAudioRoutingArbitrationCategoryPlayAndRecord;
         break;
-    case AudioSession::PlayAndRecord:
+    case AudioSession::CategoryType::PlayAndRecord:
         arbitrationCategory = AVAudioRoutingArbitrationCategoryPlayAndRecordVoice;
         break;
     default:
@@ -120,7 +120,6 @@ void SharedRoutingArbitrator::beginRoutingArbitrationForToken(const Token& token
 
 void SharedRoutingArbitrator::endRoutingArbitrationForToken(const Token& token)
 {
-    ASSERT(isInRoutingArbitrationForToken(token));
     m_tokens.remove(token);
 
     if (!m_tokens.computesEmpty())

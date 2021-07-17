@@ -19,7 +19,9 @@ fast/scrolling/mac [ Pass ]
 fast/visual-viewport/tiled-drawing [ Pass ]
 fast/web-share [ Pass ]
 imported/w3c/web-platform-tests/web-share [ Pass ]
-media/modern-media-controls/tracks-support [ Pass ]
+[ BigSur+ ] media/modern-media-controls/overflow-support [ Pass ]
+http/tests/media/modern-media-controls/overflow-support [ Pass ]
+[ BigSur+ ] media/modern-media-controls/tracks-support [ Pass ]
 scrollingcoordinator [ Pass ]
 scrollingcoordinator/ios [ Skip ]
 swipe [ Pass ]
@@ -52,6 +54,13 @@ fast/visual-viewport/rubberbanding-viewport-rects.html [ Pass ]
 fast/visual-viewport/rubberbanding-viewport-rects-header-footer.html  [ Pass ]
 
 http/tests/paymentrequest [ Pass ]
+http/tests/paymentrequest/ApplePayModifier-additionalLineItems.https.html [ Skip ]
+http/tests/paymentrequest/ApplePayModifier-additionalShippingMethods.https.html [ Skip ]
+http/tests/paymentrequest/ApplePayModifier-total.https.html [ Skip ]
+http/tests/paymentrequest/paymentmethodchange-couponCode.https.html [ Skip ]
+http/tests/paymentrequest/paymentrequest-couponCode.https.html [ Skip ]
+http/tests/paymentrequest/paymentrequest-shippingContactEditingMode.https.html [ Skip ]
+http/tests/paymentrequest/paymentrequest-supportsCouponCode.https.html [ Skip ]
 http/tests/inspector/paymentrequest [ Pass ]
 imported/w3c/web-platform-tests/payment-request [ Pass ]
 webkit.org/b/175611 imported/w3c/web-platform-tests/payment-request/allowpaymentrequest/allowpaymentrequest-attribute-cross-origin-bc-containers.https.html [ Skip ]
@@ -296,7 +305,7 @@ webkit.org/b/105960 plugins/navigator-plugins.html [ Failure ]
 webkit.org/b/104954 http/tests/canvas/canvas-slow-font-loading.html [ ImageOnlyFailure ]
 
 # Flaky everywhere.
-webkit.org/b/114302 platform/mac-wk2/plugins/mouse-events-scaled-iframe.html [ Pass Failure ]
+webkit.org/b/114302 platform/mac-wk2/plugins/mouse-events-scaled-iframe.html [ Pass Failure Crash ]
 
 webkit.org/b/114572 platform/mac-wk2/plugins/mouse-events-scaled.html [ Pass Failure ]
 
@@ -606,8 +615,6 @@ webkit.org/b/171763 compositing/tiling/non-active-window-tiles-size.html [ Pass 
 
 webkit.org/b/171837 [ Debug ] http/tests/security/storage-blocking-loosened-plugin.html [ Pass Failure ]
 
-webkit.org/b/170699 [ Release ] imported/w3c/web-platform-tests/html/webappapis/timers/negative-settimeout.html [ Pass Failure ]
-
 webkit.org/b/168937  tiled-drawing/scrolling/fast-scroll-iframe-latched-mainframe.html [ Pass Failure ]
 
 webkit.org/b/172454 http/tests/navigation/statistics.html [ Pass Failure ]
@@ -641,8 +648,6 @@ webkit.org/b/172148 tiled-drawing/scrolling/scroll-snap/scroll-snap-mandatory-ma
 webkit.org/b/172044 [ Debug ] imported/w3c/web-platform-tests/IndexedDB/open-request-queue.html [ Pass Timeout ]
 
 webkit.org/b/173779 [ Debug ] fast/scrolling/arrow-key-scroll-in-rtl-document.html [ Pass Failure ]
-
-webkit.org/b/173672 imported/w3c/web-platform-tests/fetch/http-cache/invalidate.html [ Pass Failure ]
 
 webkit.org/b/173500 http/tests/loading/basic-auth-remove-credentials.html [ Pass Failure ]
 
@@ -831,8 +836,6 @@ webkit.org/b/206708 fast/animation/request-animation-frame-iframe.html [ Pass Fa
 
 webkit.org/b/206961 [ Mojave ] media/media-fragments/TC0035.html [ Pass Failure ]
 
-webkit.org/b/207060 imported/w3c/web-platform-tests/html/webappapis/timers/type-long-setinterval.html [ Pass Failure ]
-
 webkit.org/b/207078 webgpu/whlsl/textures-sample-level.html [ Pass ImageOnlyFailure Crash ]
 
 webkit.org/b/207117 webgpu/whlsl/nested-loop.html [ Pass ImageOnlyFailure ]
@@ -841,7 +844,7 @@ webkit.org/b/207127 webgpu/whlsl/buffer-vertex.html [ Pass ImageOnlyFailure ]
 
 webkit.org/b/206903 inspector/heap/getRemoteObject.html [ Pass Crash Failure ]
 
-webkit.org/b/207141 [ Release ] inspector/canvas/create-context-bitmaprenderer.html [ Pass Failure ]
+webkit.org/b/207141 [ Debug ] inspector/canvas/create-context-bitmaprenderer.html [ Pass Failure ]
 
 webkit.org/b/207166 http/wpt/mediarecorder/MediaRecorder-AV-audio-video-dataavailable-gpuprocess.html [ Pass Failure ]
 
@@ -872,8 +875,6 @@ webkit.org/b/207460 webgpu/whlsl/separate-shader-modules/separate-shader-modules
 webkit.org/b/207465 [ Debug ] storage/indexeddb/intversion-long-queue.html [ Pass Failure ]
 
 webkit.org/b/207466 http/wpt/service-workers/service-worker-networkprocess-crash.html [ Pass Failure ]
-
-webkit.org/b/207474 http/tests/cache-storage/cache-records-persistency.https.html [ Pass Failure ]
 
 webkit.org/b/207476 webgpu/whlsl/store-to-property-updates-properly.html [ Pass ImageOnlyFailure ]
 
@@ -926,8 +927,6 @@ webkit.org/b/208340 webgpu/whlsl/textures-sample.html [ Pass ImageOnlyFailure ]
 webkit.org/b/208390 [ Debug ] fast/css-custom-paint/delay-repaint.html [ Pass Failure ]
 
 webkit.org/b/208396 http/tests/misc/object-embedding-svg-delayed-size-negotiation-2.htm [ Pass Failure ]
-
-webkit.org/b/208394 imported/w3c/web-platform-tests/dom/nodes/Document-characterSet-normalization.html [ Pass Failure ]
 
 webkit.org/b/208577 [ Release ] fast/hidpi/image-srcset-relative-svg-canvas.html [ Pass ImageOnlyFailure ]
 
@@ -1100,43 +1099,6 @@ webkit.org/b/179796 http/tests/cache/disk-cache/disk-cache-validation-back-navig
 # rdar://66811185 (imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-videoDetectorTest.html is a constant failure)
 [ BigSur+ Catalina ] imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-videoDetectorTest.html [ Failure ]
 
-# Disable plug-in tests on Apple Silicon
-[ arm64 ] compositing/plugins [ Skip ]
-[ arm64 ] http/tests/plugins [ Skip ]
-[ arm64 ] imported/blink/plugins [ Skip ]
-[ arm64 ] platform/mac-wk2/plugins [ Skip ]
-[ arm64 ] platform/mac/plugins [ Skip ]
-[ arm64 ] plugins [ Skip ]
-[ arm64 ] fullscreen/full-screen-plugin.html [ Skip ]
-[ arm64 ] http/tests/contentextensions/plugin-doesnt-crash.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/1.1/plugintypes-affects-child.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/1.1/plugintypes-invalid.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/1.1/plugintypes-url-01.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/block-all-mixed-content/insecure-plugin-in-iframe.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/block-all-mixed-content/insecure-plugin-in-main-frame.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/cross-origin-plugin-document-allowed-in-child-window.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/embed-with-no-url-allowed-by-default-src-star.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/embed-with-no-url-allowed-by-star.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/object-src-none-allowed.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/object-with-no-url-allowed-by-default-src-star.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/object-with-no-url-allowed-by-star.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/same-origin-plugin-document-allowed-in-child-window.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/same-origin-plugin-document-blocked-in-child-window-report.py [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/same-origin-plugin-document-blocked-in-child-window.html [ Skip ]
-[ arm64 ] http/tests/security/contentSecurityPolicy/same-origin-plugin-document-with-csp-blocked-in-child-window.html [ Skip ]
-[ arm64 ] http/tests/security/cross-origin-plugin-allowed.html [ Skip ]
-[ arm64 ] http/tests/security/cross-origin-plugin.html [ Skip ]
-[ arm64 ] http/tests/security/mixedContent/insecure-plugin-in-iframe.html [ Skip ]
-[ arm64 ] http/tests/security/storage-blocking-loosened-plugin.html [ Skip ]
-[ arm64 ] http/tests/security/storage-blocking-strengthened-plugin.html [ Skip ]
-[ arm64 ] tiled-drawing/scrolling/non-fast-region/wheel-event-plugin.html [ Skip ]
-[ arm64 ] userscripts/user-script-plugin-document.html [ Skip ]
-[ arm64 ] fast/frames/sandboxed-iframe-about-blank.html [ Skip ]
-[ arm64 ] fast/frames/sandboxed-iframe-navigation-allowed.html [ Skip ]
-[ arm64 ] fast/replaced/invalid-object-with-fallback.html [ Skip ]
-[ arm64 ] fast/replaced/no-focus-ring-embed.html [ Skip ]
-[ arm64 ] fast/replaced/no-focus-ring-object.html [ Skip ]
-
 # rdar://66703773 (REGRESSION (20A2316-20A2348b): http/tests/security/contentSecurityPolicy/plugin-blocked-in-about-blank-window.html is a constant failure)
 [ arm64 ] http/tests/security/contentSecurityPolicy/plugin-blocked-in-about-blank-window.html [ Skip ]
 
@@ -1156,9 +1118,6 @@ webkit.org/b/179796 http/tests/cache/disk-cache/disk-cache-validation-back-navig
 [ arm64 ] fast/forms/hidpi-fieldset-on-subpixel-position-when-legend-is-present.html [ ImageOnlyFailure ]
 [ arm64 ] fast/inline-block/hidpi-margin-top-with-subpixel-value-and-overflow-hidden.html [ ImageOnlyFailure ]
 [ arm64 ] fast/inline/hidpi-inline-block-is-subpixel-while-line-is-not.html [ ImageOnlyFailure ]
-
-# rdar://66807554
-webkit.org/b/216155 [ Mojave+ Debug ] imported/w3c/web-platform-tests/css/css-transitions/transition-base-response-002.html [ Pass Failure ]
 
 webkit.org/b/215581 imported/w3c/web-platform-tests/webrtc/RTCRtpReceiver-getStats.https.html [ Pass Failure ]
 
@@ -1232,7 +1191,7 @@ fast/layoutformattingcontext/table-basic-row-baseline-align.html [ ImageOnlyFail
 fast/layoutformattingcontext/table-basic-row-baseline-with-nested-table.html [ ImageOnlyFailure ]
 fast/layoutformattingcontext/table-basic-row-vertical-align-baseline.html [ ImageOnlyFailure ]
 fast/layoutformattingcontext/table-fixed-width-colspans.html [ ImageOnlyFailure ]
-fast/layoutformattingcontext/table-fixed-width-with-max-distribution.html [ ImageOnlyFailure ]
+[ Release ] fast/layoutformattingcontext/table-fixed-width-with-max-distribution.html [ ImageOnlyFailure ]
 fast/layoutformattingcontext/table-flex-width-border-collapse.html [ ImageOnlyFailure ]
 fast/layoutformattingcontext/table-flex-width-colspans.html [ ImageOnlyFailure ]
 fast/layoutformattingcontext/table-simple-border-collapse-with-padding.html [ ImageOnlyFailure ]
@@ -1261,7 +1220,7 @@ webkit.org/b/218725 inspector/debugger/tail-deleted-frames/tail-deleted-frames-i
 
 webkit.org/b/219516 http/wpt/service-workers/service-worker-spinning-install.https.html [ Pass Failure ]
 
-webanimations/multiple-transform-properties-and-multiple-transform-properties-animation-with-delay-on-forced-layer.html [ Pass ]
+[ BigSur Release ] webanimations/multiple-transform-properties-and-multiple-transform-properties-animation-with-delay-on-forced-layer.html [ Pass ImageOnlyFailure ]
 webanimations/rotate-property-and-rotate-animation-with-delay-on-forced-layer.html [ Pass ]
 webanimations/scale-property-and-scale-animation-with-delay-on-forced-layer.html [ Pass ]
 webanimations/transform-property-and-transform-animation-with-delay-on-forced-layer.html [ Pass ]
@@ -1291,7 +1250,7 @@ imported/w3c/web-platform-tests/mediacapture-record/MediaRecorder-peerconnection
 imported/w3c/web-platform-tests/mediacapture-record/idlharness.window.html [ Skip ]
 imported/w3c/web-platform-tests/mediacapture-record/MediaRecorder-error.html [ Pass Failure ]
 
-webkit.org/b/222500 fast/canvas/webgl/texImage2D-video-flipY-false.html [ Timeout ]
+webkit.org/b/222500 fast/canvas/webgl/texImage2D-video-flipY-false.html [ Pass Timeout ]
 
 webkit.org/b/222677 inspector/model/auditTestCase.html [ Pass Timeout ]
 
@@ -1320,7 +1279,6 @@ webkit.org/b/223292 [ arm64 ] fast/table/multiple-captions-crash4.html [ Pass Im
 webkit.org/b/223293 media/media-fullscreen-return-to-inline.html [ Pass Failure Timeout ]
 
 # webkit.org/b/223385 Two imported webrtc tests are flakey text failing only on Apple Silicon
-[ arm64 ] imported/w3c/web-platform-tests/webrtc/RTCDtlsTransport-state.html [ Pass Failure ]
 [ arm64 ] imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-addIceCandidate-connectionSetup.html [ Pass Failure ]
 
 webkit.org/b/223387 media/track/track-cue-css.html [ Pass ImageOnlyFailure ]
@@ -1348,8 +1306,6 @@ webkit.org/b/219214 inspector/canvas/console-record-2d.html [ Pass Timeout ]
 
 webkit.org/b/224032 [ arm64 ] tiled-drawing/top-content-inset-fixed-attachment-cover-local.html [ Pass ImageOnlyFailure ]
 
-webkit.org/b/222277 media/media-fragments [ Skip ]
-
 webkit.org/b/224135 media/modern-media-controls/macos-fullscreen-media-controls/macos-fullscreen-media-controls-drag-is-prevented-over-button.html [ Pass Timeout ]
 
 webkit.org/b/224294 [ Debug ] inspector/indexeddb/requestDatabaseNames.html [ Pass Failure ]
@@ -1360,17 +1316,11 @@ webkit.org/b/224463 [ BigSur arm64 ] webrtc/disable-encryption.html [ Pass Timeo
 webrtc/peerconnection-new-candidate-page-cache.html [ Pass Crash ]
 http/tests/navigation/page-cache-mediastream.html [ Pass Crash ]
 
-webkit.org/b/221985 fast/mediastream/audio-track-enabled.html [ Pass Failure ]
-
 webkit.org/b/224633 media/presentationmodechanged-fired-once.html [ Pass Timeout ]
 
 webkit.org/b/224690 compositing/video/video-border-radius-clipping.html [ Pass ImageOnlyFailure ]
 
-webkit.org/b/224696 [ arm64 ] http/wpt/webrtc/change-encoded-transform.html [ Pass Crash ]
-
 webkit.org/b/224698 [ BigSur Release arm64 ] inspector/console/console-oom.html [ Pass Crash ]
-
-webkit.org/b/224845 [ BigSur Debug arm64 ] http/wpt/preload/change-link-rel-attribute.html [ Pass Crash ]
 
 webkit.org/b/224257 [ Debug ] webgl/2.0.0/conformance/glsl/misc/shader-uniform-packing-restrictions.html [ Slow ]
 
@@ -1391,3 +1341,66 @@ webkit.org/b/225527 [ BigSur Release arm64 ] http/tests/workers/service/self_reg
 webkit.org/b/224788 [ BugSur Release arm64 ] inspector/css/node-styles-refreshed.html [ Pass Failure ]
 
 webkit.org/b/224784 [ BigSur Release arm64 ] imported/w3c/web-platform-tests/navigation-timing/test_performance_attributes.sub.html [ Pass Failure ]
+
+webkit.org/b/207474 http/tests/cache-storage/cache-records-persistency.https.html [ Pass Failure ]
+
+webkit.org/b/225529 [ BigSur Release arm64 ] scrollingcoordinator/mac/fixed-backgrounds/fixed-background-in-overflow-in-iframe.html [ Pass Failure ]
+
+webkit.org/b/225534 [ BigSur Debug arm64 ] imported/w3c/web-platform-tests/webrtc-encoded-transform/sframe-transform-readable.html [ Pass Crash ]
+
+webkit.org/b/225533 [ BigSur Release arm64 ] mathml/scripts-removeChild.html [ Pass ImageOnlyFailure ]
+
+webkit.org/b/224783 [ BigSur arm64 ] http/tests/privateClickMeasurement/store-private-click-measurement-with-source-nonce.html [ Pass Failure ]
+
+webkit.org/b/225666 http/tests/cache/disk-cache/redirect-chain-limits.html [ Slow ]
+
+webkit.org/b/225665 [ Release arm64 ] http/tests/appcache/fail-on-update-2.html [ DumpJSConsoleLogInStdErr Slow ]
+
+webkit.org/b/225664 editing/selection/move-by-character-brute-force.html [ Slow ]
+
+webkit.org/b/225669 imported/w3c/web-platform-tests/css/css-transitions/transition-base-response-002.html [ Pass Failure ]
+
+webkit.org/b/225667 http/tests/webAPIStatistics/screen-functions-accessed-data-collection.html [ Slow ]
+
+webkit.org/b/225668 http/tests/xmlhttprequest/redirect-cross-origin-tripmine.html [ Slow ]
+
+webkit.org/b/225521 [ Release ] media/modern-media-controls/pip-support/pip-support-enabled.html [ Pass Failure ]
+
+webkit.org/b/226783 [ arm64 ] http/tests/contentextensions/plugin-doesnt-crash.html [ Skip ]
+webkit.org/b/226783 [ arm64 ] tiled-drawing/scrolling/non-fast-region/wheel-event-plugin.html [ Skip ]
+
+webkit.org/b/227273 [ Catalina Debug ] fast/css-custom-paint/out-of-memory-while-adding-worklet-module.html [ Pass Timeout DumpJSConsoleLogInStdErr ]
+
+webkit.org/b/227467 [ BigSur arm64 Release ] fast/css/sticky/sticky-left.html [ Pass ImageOnlyFailure ]
+
+webkit.org/b/227504 [ BigSur+ Debug ] accessibility/table-title.html [ Pass Timeout ]
+
+webkit.org/b/227536 [ BigSur ] imported/w3c/web-platform-tests/webrtc/simplecall-no-ssrcs.https.html [ Pass Failure ]
+
+webkit.org/b/227639 [ BigSur Release ] fast/history/visited-href-mutation.html [ Pass ImageOnlyFailure ]
+
+webkit.org/b/226054 [ BigSur Release ] imported/w3c/web-platform-tests/webrtc/RTCRtpSender-encode-same-track-twice.https.html [ Pass Failure ]
+
+webkit.org/b/224085 fullscreen/full-screen-remove-ancestor.html [ Skip ]
+
+webkit.org/b/227776 [ BigSur Release arm64 ] scrollbars/corner-resizer-window-inactive.html [ Pass ImageOnlyFailure ]
+
+webkit.org/b/227776 [ Catalina Release ] scrollbars/corner-resizer-window-inactive.html [ Pass ImageOnlyFailure ]
+
+webkit.org/b/227805 [ Debug ] fast/canvas/canvas-composite-image.html [ Pass Crash ]
+
+webkit.org/b/226828 [ BigSur+ ] media/modern-media-controls/overflow-support/chapters.html [ Pass Failure Timeout ]
+
+webkit.org/b/227922 inspector/canvas/setShaderProgramDisabled.html [ Pass Failure Timeout ]
+
+webkit.org/b/227874 [ BigSur Release ] fullscreen/full-screen-remove-children.html [ Pass Crash ]
+
+webkit.org/b/227890 fast/canvas/canvas-path-addPath.html [ Pass Timeout ]
+
+webkit.org/b/227881 fast/canvas/canvas-overloads-strokeText.html [ Pass Crash ]
+
+webkit.org/b/227881 inspector/canvas/requestClientNodes-css.html [ Pass Timeout ]
+
+webkit.org/b/228030 inspector/canvas/setShaderProgramHighlighted.html [ Pass Failure Timeout ]
+
+webkit.org/b/228034 inspector/canvas/recording-bitmaprenderer-frameCount.html [ Pass Failure Timeout ]

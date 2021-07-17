@@ -1,3 +1,4 @@
 
-PASS XRFrame getViewerPose has emulatedPosition set properly.
+PASS XRFrame getViewerPose has emulatedPosition set properly. - webgl
+PASS XRFrame getViewerPose has emulatedPosition set properly. - webgl2
 

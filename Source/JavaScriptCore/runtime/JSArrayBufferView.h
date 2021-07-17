@@ -188,9 +188,10 @@ public:
 
     bool hasVector() const { return !!m_vector; }
     void* vector() const { return m_vector.getMayBeNull(length()); }
+    void* vectorWithoutPACValidation() const { return m_vector.getUnsafe(); }
     
     inline unsigned byteOffset();
-    inline Optional<unsigned> byteOffsetConcurrently();
+    inline std::optional<unsigned> byteOffsetConcurrently();
 
     unsigned length() const { return m_length; }
     unsigned byteLength() const;

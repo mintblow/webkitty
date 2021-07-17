@@ -29,6 +29,7 @@
 #include "DragActions.h"
 #include "FocusDirection.h"
 #include "HitTestRequest.h"
+#include "KeyboardScroll.h"
 #include "LayoutPoint.h"
 #include "PlatformMouseEvent.h"
 #include "RenderObject.h"
@@ -155,7 +156,7 @@ public:
     WEBCORE_EXPORT void dispatchFakeMouseMoveEventSoon();
     void dispatchFakeMouseMoveEventSoonInQuad(const FloatQuad&);
 
-    WEBCORE_EXPORT HitTestResult hitTestResultAtPoint(const LayoutPoint&, OptionSet<HitTestRequest::RequestType>, const LayoutSize& padding = LayoutSize()) const;
+    WEBCORE_EXPORT HitTestResult hitTestResultAtPoint(const LayoutPoint&, OptionSet<HitTestRequest::Type>) const;
 
     bool mousePressed() const { return m_mousePressed; }
     Node* mousePressNode() const { return m_mousePressNode.get(); }
@@ -166,7 +167,7 @@ public:
 #if ENABLE(DRAG_SUPPORT)
     struct DragTargetResponse {
         bool accept { false };
-        Optional<OptionSet<DragOperation>> operationMask;
+        std::optional<OptionSet<DragOperation>> operationMask;
     };
     DragTargetResponse updateDragAndDrop(const PlatformMouseEvent&, const std::function<std::unique_ptr<Pasteboard>()>&, OptionSet<DragOperation>, bool draggingFiles);
     void cancelDragAndDrop(const PlatformMouseEvent&, std::unique_ptr<Pasteboard>&&, OptionSet<DragOperation>, bool draggingFiles);
@@ -342,10 +343,10 @@ public:
     WEBCORE_EXPORT void cancelSelectionAutoscroll();
 #endif
 
-    WEBCORE_EXPORT Optional<Cursor> selectCursor(const HitTestResult&, bool shiftKey);
+    WEBCORE_EXPORT std::optional<Cursor> selectCursor(const HitTestResult&, bool shiftKey);
 
 #if ENABLE(KINETIC_SCROLLING)
-    Optional<WheelScrollGestureState> wheelScrollGestureState() const { return m_wheelScrollGestureState; }
+    std::optional<WheelScrollGestureState> wheelScrollGestureState() const { return m_wheelScrollGestureState; }
 #endif
 
 #if ENABLE(DRAG_SUPPORT)
@@ -375,6 +376,9 @@ private:
     bool handleMousePressEventDoubleClick(const MouseEventWithHitTestResults&);
     bool handleMousePressEventTripleClick(const MouseEventWithHitTestResults&);
 
+    float scrollDistance(ScrollDirection, ScrollGranularity);
+    bool handleKeyboardScrolling(KeyboardEvent&);
+
 #if ENABLE(DRAG_SUPPORT)
     bool handleMouseDraggedEvent(const MouseEventWithHitTestResults&, CheckDragHysteresis = ShouldCheckDragHysteresis);
     bool shouldAllowMouseDownToStartDrag() const;
@@ -388,8 +392,8 @@ private:
 
     void hoverTimerFired();
 
-#if ENABLE(IMAGE_EXTRACTION)
-    void imageExtractionTimerFired();
+#if ENABLE(IMAGE_ANALYSIS)
+    void m_textRecognitionHoverTimerFired();
 #endif
 
     bool logicalScrollOverflow(ScrollLogicalDirection, ScrollGranularity, Node* startingNode = nullptr);
@@ -470,7 +474,7 @@ private:
     bool handleWheelEventInAppropriateEnclosingBox(Node* startNode, const WheelEvent&, const FloatSize& filteredPlatformDelta, const FloatSize& filteredVelocity, OptionSet<EventHandling>);
 
     bool handleWheelEventInScrollableArea(const PlatformWheelEvent&, ScrollableArea&, OptionSet<EventHandling>);
-    Optional<WheelScrollGestureState> updateWheelGestureState(const PlatformWheelEvent&, OptionSet<EventHandling>);
+    std::optional<WheelScrollGestureState> updateWheelGestureState(const PlatformWheelEvent&, OptionSet<EventHandling>);
 
     bool platformCompletePlatformWidgetWheelEvent(const PlatformWheelEvent&, const Widget&, const WeakPtr<ScrollableArea>&);
 
@@ -519,6 +523,7 @@ private:
 #endif
 
     void clearLatchedState();
+    void clearElementUnderMouse();
 
     bool shouldSendMouseEventsToInactiveWindows() const;
 
@@ -528,8 +533,8 @@ private:
     Frame& m_frame;
     RefPtr<Node> m_mousePressNode;
     Timer m_hoverTimer;
-#if ENABLE(IMAGE_EXTRACTION)
-    DeferrableOneShotTimer m_imageExtractionTimer;
+#if ENABLE(IMAGE_ANALYSIS)
+    DeferrableOneShotTimer m_textRecognitionHoverTimer;
 #endif
     std::unique_ptr<AutoscrollController> m_autoscrollController;
     RenderLayer* m_resizeLayer { nullptr };
@@ -567,9 +572,8 @@ private:
     LayoutSize m_offsetFromResizeCorner; // In the coords of m_resizeLayer.
     
     int m_clickCount { 0 };
-    bool m_mousePositionIsUnknown { true }; // FIXME: Use Optional<> instead.
 
-    IntPoint m_lastKnownMousePosition; // Same coordinates as PlatformMouseEvent::position().
+    std::optional<IntPoint> m_lastKnownMousePosition; // Same coordinates as PlatformMouseEvent::position().
     IntPoint m_lastKnownMouseGlobalPosition;
     IntPoint m_mouseDownContentsPosition;
     WallTime m_mouseDownTimestamp;
@@ -597,7 +601,7 @@ private:
 #endif
 
 #if ENABLE(KINETIC_SCROLLING)
-    Optional<WheelScrollGestureState> m_wheelScrollGestureState;
+    std::optional<WheelScrollGestureState> m_wheelScrollGestureState;
 #endif
 
 #if ENABLE(TOUCH_EVENTS) && !ENABLE(IOS_TOUCH_EVENTS)
@@ -641,7 +645,7 @@ private:
     bool m_shouldAllowMouseDownToStartDrag { false };
     bool m_isAutoscrolling { false };
     IntPoint m_targetAutoscrollPositionInUnscrolledRootViewCoordinates;
-    Optional<IntPoint> m_initialTargetAutoscrollPositionInUnscrolledRootViewCoordinates;
+    std::optional<IntPoint> m_initialTargetAutoscrollPositionInUnscrolledRootViewCoordinates;
 #endif
 };
 

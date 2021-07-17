@@ -29,6 +29,7 @@
 #if ENABLE(DFG_JIT)
 
 #include "CodeBlock.h"
+#include "CodeBlockWithJITType.h"
 #include "DFGFailedFinalizer.h"
 #include "DFGInlineCacheWrapperInlines.h"
 #include "DFGJITCode.h"
@@ -137,6 +138,7 @@ void JITCompiler::compileBody()
 
 void JITCompiler::compileExceptionHandlers()
 {
+#if !ENABLE(EXTRA_CTI_THUNKS)
     if (!m_exceptionChecksWithCallFrameRollback.empty()) {
         m_exceptionChecksWithCallFrameRollback.link(this);
 
@@ -165,6 +167,7 @@ void JITCompiler::compileExceptionHandlers()
 
         jumpToExceptionHandler(vm());
     }
+#endif // ENABLE(EXTRA_CTI_THUNKS)
 }
 
 void JITCompiler::link(LinkBuffer& linkBuffer)
@@ -252,36 +255,31 @@ void JITCompiler::link(LinkBuffer& linkBuffer)
     finalizeInlineCaches(m_delByIds, linkBuffer);
     finalizeInlineCaches(m_delByVals, linkBuffer);
     finalizeInlineCaches(m_inByIds, linkBuffer);
+    finalizeInlineCaches(m_inByVals, linkBuffer);
     finalizeInlineCaches(m_instanceOfs, linkBuffer);
     finalizeInlineCaches(m_privateBrandAccesses, linkBuffer);
 
-    auto linkCallThunk = FunctionPtr<NoPtrTag>(vm().getCTIStub(linkCallThunkGenerator).retaggedCode<NoPtrTag>());
     for (auto& record : m_jsCalls) {
         CallLinkInfo& info = *record.info;
-        linkBuffer.link(record.slowCall, linkCallThunk);
-        info.setCallLocations(
-            CodeLocationLabel<JSInternalPtrTag>(linkBuffer.locationOfNearCall<JSInternalPtrTag>(record.slowCall)),
-            CodeLocationLabel<JSInternalPtrTag>(linkBuffer.locationOf<JSInternalPtrTag>(record.targetToCheck)),
-            linkBuffer.locationOfNearCall<JSInternalPtrTag>(record.fastCall));
+        info.setCodeLocations(
+            linkBuffer.locationOf<JSInternalPtrTag>(record.slowPathStart),
+            linkBuffer.locationOf<JSInternalPtrTag>(record.doneLocation));
     }
     
-    for (JSDirectCallRecord& record : m_jsDirectCalls) {
+    for (auto& record : m_jsDirectCalls) {
         CallLinkInfo& info = *record.info;
-        linkBuffer.link(record.call, linkBuffer.locationOf<NoPtrTag>(record.slowPath));
-        info.setCallLocations(
-            CodeLocationLabel<JSInternalPtrTag>(),
+        info.setCodeLocations(
             linkBuffer.locationOf<JSInternalPtrTag>(record.slowPath),
-            linkBuffer.locationOfNearCall<JSInternalPtrTag>(record.call));
+            CodeLocationLabel<JSInternalPtrTag>());
     }
-    
-    for (JSDirectTailCallRecord& record : m_jsDirectTailCalls) {
-        CallLinkInfo& info = *record.info;
-        info.setCallLocations(
-            linkBuffer.locationOf<JSInternalPtrTag>(record.patchableJump),
-            linkBuffer.locationOf<JSInternalPtrTag>(record.slowPath),
-            linkBuffer.locationOfNearCall<JSInternalPtrTag>(record.call));
-    }
-    
+
+#if ENABLE(EXTRA_CTI_THUNKS)
+    if (!m_exceptionChecks.empty())
+        linkBuffer.link(m_exceptionChecks, CodeLocationLabel(vm().getCTIStub(handleExceptionGenerator).retaggedCode<NoPtrTag>()));
+    if (!m_exceptionChecksWithCallFrameRollback.empty())
+        linkBuffer.link(m_exceptionChecksWithCallFrameRollback, CodeLocationLabel(vm().getCTIStub(handleExceptionWithCallFrameRollbackGenerator).retaggedCode<NoPtrTag>()));
+#endif // ENABLE(EXTRA_CTI_THUNKS)
+
     MacroAssemblerCodeRef<JITThunkPtrTag> osrExitThunk = vm().getCTIStub(osrExitGenerationThunkGenerator);
     auto target = CodeLocationLabel<JITThunkPtrTag>(osrExitThunk.code());
     for (unsigned i = 0; i < m_osrExit.size(); ++i) {
@@ -391,7 +389,7 @@ void JITCompiler::compile()
     m_speculative->createOSREntries();
     setEndOfCode();
 
-    auto linkBuffer = makeUnique<LinkBuffer>(*this, m_codeBlock, JITCompilationCanFail);
+    auto linkBuffer = makeUnique<LinkBuffer>(*this, m_codeBlock, LinkBuffer::Profile::DFG, JITCompilationCanFail);
     if (linkBuffer->didFailToAllocate()) {
         m_graph.m_plan.setFinalizer(makeUnique<FailedFinalizer>(m_graph.m_plan));
         return;
@@ -402,8 +400,11 @@ void JITCompiler::compile()
 
     disassemble(*linkBuffer);
 
-    m_graph.m_plan.setFinalizer(makeUnique<JITFinalizer>(
-        m_graph.m_plan, m_jitCode.releaseNonNull(), WTFMove(linkBuffer)));
+    auto codeRef = FINALIZE_DFG_CODE(*linkBuffer, JSEntryPtrTag, "DFG JIT code for %s", toCString(CodeBlockWithJITType(m_codeBlock, JITType::DFGJIT)).data());
+    m_jitCode->initializeCodeRefForDFG(codeRef, codeRef.code());
+
+    auto finalizer = makeUnique<JITFinalizer>(m_graph.m_plan, m_jitCode.releaseNonNull(), WTFMove(linkBuffer));
+    m_graph.m_plan.setFinalizer(WTFMove(finalizer));
 }
 
 void JITCompiler::compileFunction()
@@ -491,7 +492,7 @@ void JITCompiler::compileFunction()
     setEndOfCode();
 
     // === Link ===
-    auto linkBuffer = makeUnique<LinkBuffer>(*this, m_codeBlock, JITCompilationCanFail);
+    auto linkBuffer = makeUnique<LinkBuffer>(*this, m_codeBlock, LinkBuffer::Profile::DFG, JITCompilationCanFail);
     if (linkBuffer->didFailToAllocate()) {
         m_graph.m_plan.setFinalizer(makeUnique<FailedFinalizer>(m_graph.m_plan));
         return;
@@ -506,8 +507,12 @@ void JITCompiler::compileFunction()
 
     MacroAssemblerCodePtr<JSEntryPtrTag> withArityCheck = linkBuffer->locationOf<JSEntryPtrTag>(arityCheck);
 
-    m_graph.m_plan.setFinalizer(makeUnique<JITFinalizer>(
-        m_graph.m_plan, m_jitCode.releaseNonNull(), WTFMove(linkBuffer), withArityCheck));
+    m_jitCode->initializeCodeRefForDFG(
+        FINALIZE_DFG_CODE(*linkBuffer, JSEntryPtrTag, "DFG JIT code for %s", toCString(CodeBlockWithJITType(m_codeBlock, JITType::DFGJIT)).data()),
+        withArityCheck);
+
+    auto finalizer = makeUnique<JITFinalizer>(m_graph.m_plan, m_jitCode.releaseNonNull(), WTFMove(linkBuffer), withArityCheck);
+    m_graph.m_plan.setFinalizer(WTFMove(finalizer));
 }
 
 void JITCompiler::disassemble(LinkBuffer& linkBuffer)

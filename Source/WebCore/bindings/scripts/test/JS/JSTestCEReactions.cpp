@@ -34,6 +34,7 @@
 #include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObject.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMOperation.h"
 #include "JSDOMWrapperCache.h"
 #include "JSTestCEReactionsStringifier.h"
@@ -175,23 +176,13 @@ JSObject* JSTestCEReactions::prototype(VM& vm, JSDOMGlobalObject& globalObject)
 
 JSValue JSTestCEReactions::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSTestCEReactionsDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+    return getDOMConstructor<JSTestCEReactionsDOMConstructor, DOMConstructorID::TestCEReactions>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 void JSTestCEReactions::destroy(JSC::JSCell* cell)
 {
     JSTestCEReactions* thisObject = static_cast<JSTestCEReactions*>(cell);
     thisObject->JSTestCEReactions::~JSTestCEReactions();
-}
-
-template<> inline JSTestCEReactions* IDLAttribute<JSTestCEReactions>::cast(JSGlobalObject& lexicalGlobalObject, EncodedJSValue thisValue)
-{
-    return jsDynamicCast<JSTestCEReactions*>(JSC::getVM(&lexicalGlobalObject), JSValue::decode(thisValue));
-}
-
-template<> inline JSTestCEReactions* IDLOperation<JSTestCEReactions>::cast(JSGlobalObject& lexicalGlobalObject, CallFrame& callFrame)
-{
-    return jsDynamicCast<JSTestCEReactions*>(JSC::getVM(&lexicalGlobalObject), callFrame.thisValue());
 }
 
 JSC_DEFINE_CUSTOM_GETTER(jsTestCEReactionsConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName))

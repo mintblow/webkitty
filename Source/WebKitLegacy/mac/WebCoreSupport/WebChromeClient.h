@@ -112,8 +112,8 @@ private:
     PlatformPageClient platformPageClient() const final;
     void contentsSizeChanged(WebCore::Frame&, const WebCore::IntSize&) const final;
     void intrinsicContentsSizeChanged(const WebCore::IntSize&) const final { }
-    void scrollRectIntoView(const WebCore::IntRect&) const final;
 
+    void scrollContainingScrollViewsToRevealRect(const WebCore::IntRect&) const final;
     void setStatusbarText(const String&) override;
 
     bool shouldUnavailablePluginMessageBeButton(WebCore::RenderEmbeddedObject::PluginUnavailabilityReason) const final;
@@ -155,6 +155,8 @@ private:
     void storeAppHighlight(WebCore::AppHighlight&&) const final;
 #endif
 
+    void setTextIndicator(const WebCore::TextIndicatorData&) const final;
+
 #if ENABLE(POINTER_LOCK)
     bool requestPointerLock() final;
     void requestPointerUnlock() final;
@@ -164,7 +166,7 @@ private:
 
     bool hoverSupportedByPrimaryPointingDevice() const override { return true; }
     bool hoverSupportedByAnyAvailablePointingDevice() const override { return true; }
-    Optional<WebCore::PointerCharacteristics> pointerCharacteristicsOfPrimaryPointingDevice() const override { return WebCore::PointerCharacteristics::Fine; }
+    std::optional<WebCore::PointerCharacteristics> pointerCharacteristicsOfPrimaryPointingDevice() const override { return WebCore::PointerCharacteristics::Fine; }
     OptionSet<WebCore::PointerCharacteristics> pointerCharacteristicsOfAllAvailablePointingDevices() const override { return WebCore::PointerCharacteristics::Fine; }
 
     NSResponder *firstResponder() final;

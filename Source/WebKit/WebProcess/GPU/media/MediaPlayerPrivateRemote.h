@@ -87,7 +87,7 @@ public:
     WebCore::MediaPlayerEnums::MediaEngineIdentifier remoteEngineIdentifier() const { return m_remoteEngineIdentifier; }
     WebCore::MediaPlayerIdentifier itentifier() const { return m_id; }
     IPC::Connection& connection() const { return m_manager.gpuProcessConnection().connection(); }
-    WebCore::MediaPlayer* player() const { return m_player; }
+    WebCore::MediaPlayer* player() const { return m_player.get(); }
 
     WebCore::MediaPlayer::ReadyState readyState() const final { return m_cachedState.readyState; }
     void setReadyState(WebCore::MediaPlayer::ReadyState);
@@ -110,7 +110,7 @@ public:
     void setVideoInlineSizeFenced(const WebCore::FloatSize&, const WTF::MachSendRight&);
 #endif
 
-    void currentTimeChanged(const MediaTime&, const MonotonicTime&);
+    void currentTimeChanged(const MediaTime&, const MonotonicTime&, bool);
 
     void addRemoteAudioTrack(TrackPrivateRemoteIdentifier, TrackPrivateRemoteConfiguration&&);
     void removeRemoteAudioTrack(TrackPrivateRemoteIdentifier);
@@ -280,6 +280,7 @@ private:
 
     unsigned long long totalBytes() const final;
     bool didLoadingProgress() const final;
+    void didLoadingProgressAsync(WebCore::MediaPlayer::DidLoadingProgressCompletionHandler&&) const final;
 
     void paint(WebCore::GraphicsContext&, const WebCore::FloatRect&) final;
     void paintCurrentFrameInContext(WebCore::GraphicsContext&, const WebCore::FloatRect&) final;
@@ -317,7 +318,7 @@ private:
 
     bool hasSingleSecurityOrigin() const final;
     bool didPassCORSAccessCheck() const final;
-    Optional<bool> wouldTaintOrigin(const WebCore::SecurityOrigin&) const final;
+    std::optional<bool> wouldTaintOrigin(const WebCore::SecurityOrigin&) const final;
 
     WebCore::MediaPlayer::MovieLoadType movieLoadType() const final;
 
@@ -370,7 +371,7 @@ private:
 
     size_t extraMemoryCost() const final;
 
-    Optional<WebCore::VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() final;
+    std::optional<WebCore::VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() final;
     void updateVideoPlaybackMetricsUpdateInterval(const Seconds&);
 
 #if ENABLE(AVF_CAPTIONS)
@@ -383,6 +384,7 @@ private:
 
     void applicationWillResignActive() final;
     void applicationDidBecomeActive() final;
+    void setPreferredDynamicRangeMode(WebCore::DynamicRangeMode) final;
 
 #if USE(AVFOUNDATION)
     AVPlayer *objCAVFoundationAVPlayer() const final { return nullptr; }
@@ -390,7 +392,13 @@ private:
 
     bool performTaskAtMediaTime(Function<void()>&&, const MediaTime&) final;
 
-    WebCore::MediaPlayer* m_player { nullptr };
+    bool supportsPlayAtHostTime() const final { return m_configuration.supportsPlayAtHostTime; }
+    bool supportsPauseAtHostTime() const final { return m_configuration.supportsPauseAtHostTime; }
+    bool playAtHostTime(const MonotonicTime&) final;
+    bool pauseAtHostTime(const MonotonicTime&) final;
+
+
+    WeakPtr<WebCore::MediaPlayer> m_player;
     Ref<WebCore::PlatformMediaResourceLoader> m_mediaResourceLoader;
 #if PLATFORM(COCOA)
     UniqueRef<WebCore::VideoLayerManager> m_videoLayerManager;
@@ -419,11 +427,12 @@ private:
     HashMap<TrackPrivateRemoteIdentifier, Ref<TextTrackPrivateRemote>> m_textTracks;
 
     WebCore::SecurityOriginData m_documentSecurityOrigin;
-    mutable HashMap<WebCore::SecurityOriginData, Optional<bool>> m_wouldTaintOriginCache;
+    mutable HashMap<WebCore::SecurityOriginData, std::optional<bool>> m_wouldTaintOriginCache;
 
     MediaTime m_cachedMediaTime;
     MonotonicTime m_cachedMediaTimeQueryTime;
 
+    WebCore::MediaPlayer::VideoGravity m_videoFullscreenGravity { WebCore::MediaPlayer::VideoGravity::ResizeAspect };
     MonotonicTime m_lastPlaybackQualityMetricsQueryTime;
     Seconds m_videoPlaybackMetricsUpdateInterval;
     double m_volume { 1 };
@@ -434,6 +443,7 @@ private:
     bool m_isCurrentPlaybackTargetWireless { false };
     bool m_invalid { false };
     bool m_waitingForKey { false };
+    bool m_timeIsProgressing { false };
 };
 
 } // namespace WebKit

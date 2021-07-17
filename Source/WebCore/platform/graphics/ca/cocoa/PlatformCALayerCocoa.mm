@@ -53,6 +53,7 @@
 #import <objc/runtime.h>
 #import <wtf/BlockObjCExceptions.h>
 #import <wtf/BlockPtr.h>
+#import <wtf/Lock.h>
 #import <wtf/RetainPtr.h>
 #import <wtf/cocoa/VectorCocoa.h>
 
@@ -75,7 +76,8 @@ namespace WebCore {
 
 using LayerToPlatformCALayerMap = HashMap<void*, PlatformCALayer*>;
 
-static LayerToPlatformCALayerMap& layerToPlatformLayerMap()
+static Lock layerToPlatformLayerMapLock;
+static LayerToPlatformCALayerMap& layerToPlatformLayerMap() WTF_REQUIRES_LOCK(layerToPlatformLayerMapLock)
 {
     static NeverDestroyed<LayerToPlatformCALayerMap> layerMap;
     return layerMap;
@@ -87,8 +89,7 @@ RefPtr<PlatformCALayer> PlatformCALayer::platformCALayerForLayer(void* platformL
     if (!platformLayer)
         return nullptr;
 
-    static Lock lock;
-    LockHolder lockHolder(lock);
+    Locker locker { layerToPlatformLayerMapLock };
     return layerToPlatformLayerMap().get(platformLayer);
 }
 
@@ -312,7 +313,10 @@ void PlatformCALayerCocoa::commonInit()
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS
 
-    layerToPlatformLayerMap().add(m_layer.get(), this);
+    {
+        Locker locker { layerToPlatformLayerMapLock };
+        layerToPlatformLayerMap().add(m_layer.get(), this);
+    }
     
     // Clear all the implicit animations on the CALayer
     if (m_layerType == LayerTypeAVPlayerLayer || m_layerType == LayerTypeContentsProvidedLayer || m_layerType == LayerTypeScrollContainerLayer || m_layerType == LayerTypeCustom)
@@ -392,7 +396,10 @@ Ref<PlatformCALayer> PlatformCALayerCocoa::clone(PlatformCALayerClient* owner) c
 
 PlatformCALayerCocoa::~PlatformCALayerCocoa()
 {
-    layerToPlatformLayerMap().remove(m_layer.get());
+    {
+        Locker locker { layerToPlatformLayerMapLock };
+        layerToPlatformLayerMap().remove(m_layer.get());
+    }
     
     // Remove the owner pointer from the delegate in case there is a pending animationStarted event.
     [static_cast<WebAnimationDelegate*>(m_delegate.get()) setOwner:nil];
@@ -1065,12 +1072,36 @@ bool PlatformCALayerCocoa::isSeparated() const
     return m_layer.get().isSeparated;
 }
 
-void PlatformCALayerCocoa::setSeparated(bool value)
+void PlatformCALayerCocoa::setIsSeparated(bool value)
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS
     [m_layer setSeparated:value];
     END_BLOCK_OBJC_EXCEPTIONS
 }
+
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+bool PlatformCALayerCocoa::isSeparatedPortal() const
+{
+    ASSERT_NOT_REACHED();
+    return false;
+}
+
+void PlatformCALayerCocoa::setIsSeparatedPortal(bool)
+{
+    ASSERT_NOT_REACHED();
+}
+
+bool PlatformCALayerCocoa::isDescendentOfSeparatedPortal() const
+{
+    ASSERT_NOT_REACHED();
+    return false;
+}
+
+void PlatformCALayerCocoa::setIsDescendentOfSeparatedPortal(bool)
+{
+    ASSERT_NOT_REACHED();
+}
+#endif
 #endif
 
 static NSString *layerContentsFormat(bool acceleratesDrawing, bool wantsDeepColor, bool supportsSubpixelAntialiasedFonts)
@@ -1189,9 +1220,9 @@ void PlatformCALayer::drawLayerContents(GraphicsContext& graphicsContext, WebCor
 
     {
         GraphicsContextStateSaver saver(graphicsContext);
-        WTF::Optional<LocalCurrentGraphicsContext> platformContextSaver;
+        std::optional<LocalCurrentGraphicsContext> platformContextSaver;
 #if PLATFORM(IOS_FAMILY)
-        WTF::Optional<FontAntialiasingStateSaver> fontAntialiasingState;
+        std::optional<FontAntialiasingStateSaver> fontAntialiasingState;
 #endif
 
         // We never use CompositingCoordinatesOrientation::BottomUp on Mac.

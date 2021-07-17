@@ -34,7 +34,6 @@
 #import <JavaScriptCore/JSStringRefCF.h>
 #import <WebKit/WebFrame.h>
 #import <WebKit/WebHTMLView.h>
-#import <WebKit/WebTypesInternal.h>
 #import <wtf/RetainPtr.h>
 #import <wtf/Vector.h>
 #import <wtf/cocoa/VectorCocoa.h>
@@ -81,12 +80,12 @@ typedef void (*AXPostedNotificationCallback)(id element, NSString* notification,
 - (void)_accessibilitySetValue:(id)value forAttribute:(NSString*)attributeName;
 @end
 
-static Optional<AccessibilityUIElement> makeVectorElement(const AccessibilityUIElement*, id element)
+static std::optional<AccessibilityUIElement> makeVectorElement(const AccessibilityUIElement*, id element)
 {
     return { { element } };
 }
 
-static Optional<AccessibilityTextMarkerRange> makeVectorElement(const AccessibilityTextMarkerRange*, id element)
+static std::optional<AccessibilityTextMarkerRange> makeVectorElement(const AccessibilityTextMarkerRange*, id element)
 {
     return { { element } };
 }

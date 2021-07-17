@@ -101,7 +101,6 @@ static bool dumpPixelsForAllTests = false;
 static bool dumpPixelsForCurrentTest = false;
 static bool threaded = false;
 static bool dumpTree = true;
-static bool useTimeoutWatchdog = true;
 static bool forceComplexText = false;
 static bool dumpAllPixels;
 static bool useAcceleratedDrawing = true; // Not used
@@ -133,6 +132,7 @@ HWND webViewWindow;
 RefPtr<TestRunner> gTestRunner;
 
 UINT_PTR waitToDumpWatchdog = 0;
+bool useTimeoutWatchdog = true;
 
 void setPersistentUserStyleSheetLocation(CFStringRef url)
 {
@@ -1106,7 +1106,7 @@ static void sizeWebViewForCurrentTest()
 
 static String findFontFallback(const char* pathOrUrl)
 {
-    String pathToFontFallback = FileSystem::directoryName(pathOrUrl);
+    String pathToFontFallback = FileSystem::parentPath(pathOrUrl);
 
     wchar_t fullPath[_MAX_PATH];
     if (!_wfullpath(fullPath, pathToFontFallback.wideCharacters().data(), _MAX_PATH))

@@ -91,6 +91,9 @@ void SourceBufferPrivateRemote::abort()
     if (!m_gpuProcessConnection)
         return;
 
+    // When abort() is being issued; this will force the RemoteSourceBufferProxy to abort the current remote source buffer operation
+    // The totalTrackBufferSizeInBytes will be recalculated after the next operation which allows for potentially having
+    // m_totalTrackBufferSizeInBytes being temporarily stale as it won't be used until then.
     m_gpuProcessConnection->connection().send(Messages::RemoteSourceBufferProxy::Abort(), m_remoteSourceBufferIdentifier);
 }
 
@@ -188,20 +191,24 @@ void SourceBufferPrivateRemote::removeCodedFrames(const MediaTime& start, const 
     if (!m_gpuProcessConnection)
         return;
 
-    m_gpuProcessConnection->connection().sendWithAsyncReply(Messages::RemoteSourceBufferProxy::RemoveCodedFrames(start, end, currentMediaTime, isEnded), [this, protectedThis = makeRef(*this), completionHandler = WTFMove(completionHandler)](auto&& buffered) mutable {
-        setBufferedRanges(buffered);
-        completionHandler();
-    }, m_remoteSourceBufferIdentifier);
+    m_gpuProcessConnection->connection().sendWithAsyncReply(
+        Messages::RemoteSourceBufferProxy::RemoveCodedFrames(start, end, currentMediaTime, isEnded), [this, protectedThis = makeRef(*this), completionHandler = WTFMove(completionHandler)](auto&& buffered, uint64_t totalTrackBufferSizeInBytes) mutable {
+            setBufferedRanges(buffered);
+            m_totalTrackBufferSizeInBytes = totalTrackBufferSizeInBytes;
+            completionHandler();
+        },
+        m_remoteSourceBufferIdentifier);
 }
 
-void SourceBufferPrivateRemote::evictCodedFrames(uint64_t newDataSize, uint64_t pendingAppendDataCapacity, uint64_t maximumBufferSize, const MediaTime& currentTime, const MediaTime& duration, bool isEnded)
+void SourceBufferPrivateRemote::evictCodedFrames(uint64_t newDataSize, uint64_t maximumBufferSize, const MediaTime& currentTime, const MediaTime& duration, bool isEnded)
 {
     if (!m_gpuProcessConnection)
         return;
 
-    bool bufferFull = false;
-    if (m_gpuProcessConnection->connection().sendSync(Messages::RemoteSourceBufferProxy::EvictCodedFrames(newDataSize, pendingAppendDataCapacity, maximumBufferSize, currentTime, duration, isEnded), Messages::RemoteSourceBufferProxy::EvictCodedFrames::Reply(bufferFull), m_remoteSourceBufferIdentifier))
-        setBufferFull(bufferFull);
+    uint64_t totalBufferSizeInBytes = 0;
+    if (m_gpuProcessConnection->connection().sendSync(Messages::RemoteSourceBufferProxy::EvictCodedFrames(newDataSize, maximumBufferSize, currentTime, duration, isEnded), Messages::RemoteSourceBufferProxy::EvictCodedFrames::Reply(totalBufferSizeInBytes), m_remoteSourceBufferIdentifier)) {
+        m_totalTrackBufferSizeInBytes = totalBufferSizeInBytes;
+    }
 }
 
 void SourceBufferPrivateRemote::addTrackBuffer(const AtomString& trackId, RefPtr<MediaDescription>&&)
@@ -227,6 +234,7 @@ void SourceBufferPrivateRemote::clearTrackBuffers()
         return;
 
     m_gpuProcessConnection->connection().send(Messages::RemoteSourceBufferProxy::ClearTrackBuffers(), m_remoteSourceBufferIdentifier);
+    m_totalTrackBufferSizeInBytes = 0;
 }
 
 void SourceBufferPrivateRemote::setAllTrackBuffersNeedRandomAccess()
@@ -261,14 +269,12 @@ void SourceBufferPrivateRemote::setShouldGenerateTimestamps(bool shouldGenerateT
     m_gpuProcessConnection->connection().send(Messages::RemoteSourceBufferProxy::SetShouldGenerateTimestamps(shouldGenerateTimestamps), m_remoteSourceBufferIdentifier);
 }
 
-void SourceBufferPrivateRemote::reenqueueMediaIfNeeded(const MediaTime& currentMediaTime, uint64_t pendingAppendDataCapacity, uint64_t maximumBufferSize)
+void SourceBufferPrivateRemote::reenqueueMediaIfNeeded(const MediaTime& currentMediaTime)
 {
     if (!m_gpuProcessConnection)
         return;
 
-    m_gpuProcessConnection->connection().sendWithAsyncReply(Messages::RemoteSourceBufferProxy::ReenqueueMediaIfNeeded(currentMediaTime, pendingAppendDataCapacity, maximumBufferSize), [this, protectedThis = makeRef(*this)](auto bufferFull) mutable {
-        setBufferFull(bufferFull);
-    }, m_remoteSourceBufferIdentifier);
+    m_gpuProcessConnection->connection().send(Messages::RemoteSourceBufferProxy::ReenqueueMediaIfNeeded(currentMediaTime), m_remoteSourceBufferIdentifier);
 }
 
 void SourceBufferPrivateRemote::resetTimestampOffsetInTrackBuffers()
@@ -408,11 +414,14 @@ void SourceBufferPrivateRemote::sourceBufferPrivateAppendError(bool decodeError)
         m_client->sourceBufferPrivateAppendError(decodeError);
 }
 
-void SourceBufferPrivateRemote::sourceBufferPrivateAppendComplete(SourceBufferPrivateClient::AppendResult appendResult, const PlatformTimeRanges& buffered)
+void SourceBufferPrivateRemote::sourceBufferPrivateAppendComplete(SourceBufferPrivateClient::AppendResult appendResult, const PlatformTimeRanges& buffered, uint64_t totalTrackBufferSizeInBytes, const MediaTime& timestampOffset)
 {
     setBufferedRanges(buffered);
-    if (m_client)
+    m_totalTrackBufferSizeInBytes = totalTrackBufferSizeInBytes;
+    if (m_client) {
+        setTimestampOffset(timestampOffset);
         m_client->sourceBufferPrivateAppendComplete(appendResult);
+    }
 }
 
 void SourceBufferPrivateRemote::sourceBufferPrivateHighestPresentationTimestampChanged(const MediaTime& timestamp)
@@ -455,6 +464,11 @@ void SourceBufferPrivateRemote::sourceBufferPrivateReportExtraMemoryCost(uint64_
 {
     if (m_client)
         m_client->sourceBufferPrivateReportExtraMemoryCost(extraMemory);
+}
+
+uint64_t SourceBufferPrivateRemote::totalTrackBufferSizeInBytes() const
+{
+    return m_totalTrackBufferSizeInBytes;
 }
 
 #if !RELEASE_LOG_DISABLED

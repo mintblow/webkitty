@@ -28,6 +28,7 @@
 #if ENABLE(WEBASSEMBLY)
 
 #include "JSFunction.h"
+#include "WasmFormat.h"
 
 namespace JSC {
 
@@ -50,6 +51,8 @@ public:
     WasmToWasmImportableFunction importableFunction() const { return m_importableFunction; }
 
     static ptrdiff_t offsetOfInstance() { return OBJECT_OFFSETOF(WebAssemblyFunctionBase, m_instance); }
+
+    static ptrdiff_t offsetOfSignatureIndex() { return OBJECT_OFFSETOF(WebAssemblyFunctionBase, m_importableFunction) + WasmToWasmImportableFunction::offsetOfSignatureIndex(); }
 
     static ptrdiff_t offsetOfEntrypointLoadLocation() { return OBJECT_OFFSETOF(WebAssemblyFunctionBase, m_importableFunction) + WasmToWasmImportableFunction::offsetOfEntrypointLoadLocation(); }
 

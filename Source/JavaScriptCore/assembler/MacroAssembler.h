@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2008-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -75,14 +75,12 @@ class ScopedLambda;
 
 namespace JSC {
 
-#if ENABLE(MASM_PROBE)
 namespace Probe {
 
 class Context;
 typedef void (*Function)(Context&);
 
 } // namespace Probe
-#endif // ENABLE(MASM_PROBE)
 
 namespace Printer {
 
@@ -339,7 +337,7 @@ public:
         addPtr(TrustedImm32(sizeof(double)), stackPointerRegister);
     }
     
-    static ptrdiff_t pushToSaveByteOffset() { return sizeof(void*); }
+    static constexpr ptrdiff_t pushToSaveByteOffset() { return sizeof(void*); }
 #endif // !CPU(ARM64)
 
 #if CPU(X86_64) || CPU(ARM64)
@@ -1927,7 +1925,6 @@ public:
     // If the result jump is taken that means the assert passed.
     void jitAssert(const WTF::ScopedLambda<Jump(void)>&);
 
-#if ENABLE(MASM_PROBE)
     // This function emits code to preserve the CPUState (e.g. registers),
     // call a user supplied probe function, and restore the CPUState before
     // continuing with other JIT generated code.
@@ -1988,7 +1985,6 @@ public:
     void print(Arguments&&... args);
 
     void print(Printer::PrintRecordList*);
-#endif // ENABLE(MASM_PROBE)
 };
 
 } // namespace JSC

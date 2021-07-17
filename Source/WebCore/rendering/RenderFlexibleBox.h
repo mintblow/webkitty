@@ -53,8 +53,8 @@ public:
     void layoutBlock(bool relayoutChildren, LayoutUnit pageLogicalHeight = 0_lu) final;
 
     LayoutUnit baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
-    Optional<LayoutUnit> firstLineBaseline() const override;
-    Optional<LayoutUnit> inlineBlockBaseline(LineDirectionMode) const override;
+    std::optional<LayoutUnit> firstLineBaseline() const override;
+    std::optional<LayoutUnit> inlineBlockBaseline(LineDirectionMode) const override;
 
     void styleDidChange(StyleDifference, const RenderStyle*) override;
     bool hitTestChildren(const HitTestRequest&, HitTestResult&, const HitTestLocation&, const LayoutPoint& adjustedLocation, HitTestAction) override;
@@ -116,16 +116,16 @@ private:
     Length crossSizeLengthForChild(SizeType, const RenderBox&) const;
     bool shouldApplyMinSizeAutoForChild(const RenderBox&) const;
     LayoutUnit crossAxisExtentForChild(const RenderBox& child) const;
-    LayoutUnit crossAxisIntrinsicExtentForChild(const RenderBox& child);
-    LayoutUnit childIntrinsicLogicalHeight(const RenderBox& child) const;
-    LayoutUnit childIntrinsicLogicalWidth(const RenderBox& child);
+    LayoutUnit crossAxisIntrinsicExtentForChild(RenderBox& child);
+    LayoutUnit childIntrinsicLogicalHeight(RenderBox& child) const;
+    LayoutUnit childIntrinsicLogicalWidth(RenderBox& child);
     LayoutUnit mainAxisExtentForChild(const RenderBox& child) const;
     LayoutUnit mainAxisContentExtentForChildIncludingScrollbar(const RenderBox& child) const;
     LayoutUnit crossAxisExtent() const;
     LayoutUnit mainAxisExtent() const;
     LayoutUnit crossAxisContentExtent() const;
     LayoutUnit mainAxisContentExtent(LayoutUnit contentLogicalHeight);
-    Optional<LayoutUnit> computeMainAxisExtentForChild(RenderBox& child, SizeType, const Length& size);
+    std::optional<LayoutUnit> computeMainAxisExtentForChild(RenderBox& child, SizeType, const Length& size);
     WritingMode transformedWritingMode() const;
     LayoutUnit flowAwareBorderStart() const;
     LayoutUnit flowAwareBorderEnd() const;
@@ -142,8 +142,11 @@ private:
     LayoutUnit crossAxisScrollbarExtent() const;
     LayoutUnit crossAxisScrollbarExtentForChild(const RenderBox& child) const;
     LayoutPoint flowAwareLocationForChild(const RenderBox& child) const;
-    bool useChildAspectRatio(const RenderBox& child);
+    bool childHasComputableAspectRatio(const RenderBox&) const;
+    bool childHasComputableAspectRatioAndCrossSizeIsConsideredDefinite(const RenderBox&);
     bool childCrossSizeShouldUseContainerCrossSize(const RenderBox& child) const;
+    LayoutUnit computeCrossSizeForChildUsingContainerCrossSize(const RenderBox& child) const;
+    void computeChildIntrinsicLogicalWidths(RenderObject&, LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const override;
     LayoutUnit computeMainSizeFromAspectRatioUsing(const RenderBox& child, Length crossSizeLength) const;
     void setFlowAwareLocationForChild(RenderBox& child, const LayoutPoint&);
     LayoutUnit computeInnerFlexBaseSizeForChild(RenderBox& child, LayoutUnit mainAxisBorderAndPadding);
@@ -173,9 +176,9 @@ private:
     
     LayoutUnit computeChildMarginValue(Length margin);
     void prepareOrderIteratorAndMargins();
-    LayoutUnit adjustChildSizeForMinAndMax(RenderBox& child, LayoutUnit childSize);
+    std::pair<LayoutUnit, LayoutUnit> computeFlexItemMinMaxSizes(RenderBox& child);
     LayoutUnit adjustChildSizeForAspectRatioCrossAxisMinAndMax(const RenderBox& child, LayoutUnit childSize);
-    Vector<FlexItem> constructFlexItems(bool relayoutChildren);
+    FlexItem constructFlexItem(RenderBox&, bool relayoutChildren);
     
     void freezeInflexibleItems(FlexSign, Vector<FlexItem>& children, LayoutUnit& remainingFreeSpace, double& totalFlexGrow, double& totalFlexShrink, double& totalWeightedFlexShrink);
     bool resolveFlexibleLengths(FlexSign, Vector<FlexItem>&, LayoutUnit initialFreeSpace, LayoutUnit& remainingFreeSpace, double& totalFlexGrow, double& totalFlexShrink, double& totalWeightedFlexShrink);
@@ -220,7 +223,7 @@ private:
     
     // This is SizeIsUnknown outside of layoutBlock()
     SizeDefiniteness m_hasDefiniteHeight { SizeDefiniteness::Unknown };
-    bool m_inFlexItemConstruction { false };
+    bool m_inLayout { false };
     bool m_shouldResetChildLogicalHeightBeforeLayout { false };
 };
 

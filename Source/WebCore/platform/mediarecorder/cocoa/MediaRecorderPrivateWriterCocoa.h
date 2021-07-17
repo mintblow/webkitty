@@ -75,7 +75,7 @@ public:
     void pause();
     void resume();
 
-    void appendData(const char*, size_t);
+    void appendData(const uint8_t*, size_t);
 
     const String& mimeType() const;
     unsigned audioBitRate() const;
@@ -83,10 +83,8 @@ public:
 
 private:
     MediaRecorderPrivateWriter(bool hasAudio, bool hasVideo);
-    void clear();
 
-    bool initialize();
-    void setOptions(const MediaRecorderPrivateOptions&);
+    bool initialize(const MediaRecorderPrivateOptions&);
 
     static void compressedVideoOutputBufferCallback(void*, CMBufferQueueTriggerToken);
     static void compressedAudioOutputBufferCallback(void*, CMBufferQueueTriggerToken);
@@ -119,7 +117,7 @@ private:
     RetainPtr<AVAssetWriter> m_writer;
 
     Lock m_dataLock;
-    RefPtr<SharedBuffer> m_data;
+    RefPtr<SharedBuffer> m_data WTF_GUARDED_BY_LOCK(m_dataLock);
     CompletionHandler<void(RefPtr<SharedBuffer>&&, double)> m_fetchDataCompletionHandler;
 
     RetainPtr<CMFormatDescriptionRef> m_audioFormatDescription;
@@ -129,8 +127,8 @@ private:
     RetainPtr<CMFormatDescriptionRef> m_videoFormatDescription;
     std::unique_ptr<VideoSampleBufferCompressor> m_videoCompressor;
     RetainPtr<AVAssetWriterInput> m_videoAssetWriterInput;
-    CMTime m_lastVideoPresentationTime { kCMTimeInvalid };
-    CMTime m_lastVideoDecodingTime { kCMTimeInvalid };
+    CMTime m_lastVideoPresentationTime;
+    CMTime m_lastVideoDecodingTime;
     bool m_hasEncodedVideoSamples { false };
 
     RetainPtr<WebAVAssetWriterDelegate> m_writerDelegate;
@@ -140,10 +138,10 @@ private:
     bool m_isFlushingSamples { false };
     bool m_shouldStopAfterFlushingSamples { false };
     bool m_firstVideoFrame { false };
-    Optional<CGAffineTransform> m_videoTransform;
-    CMTime m_resumedVideoTime { kCMTimeZero };
-    CMTime m_currentVideoDuration { kCMTimeZero };
-    CMTime m_currentAudioSampleTime { kCMTimeZero };
+    std::optional<CGAffineTransform> m_videoTransform;
+    CMTime m_resumedVideoTime;
+    CMTime m_currentVideoDuration;
+    CMTime m_currentAudioSampleTime;
     double m_timeCode { 0 };
 };
 

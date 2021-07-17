@@ -292,6 +292,7 @@ namespace JSC { namespace DFG {
     macro(CheckNotJSCast, NodeMustGenerate) \
     macro(ParseInt, NodeMustGenerate | NodeResultJS) \
     macro(GetPrototypeOf, NodeMustGenerate | NodeResultJS) \
+    macro(ObjectAssign, NodeMustGenerate) \
     macro(ObjectCreate, NodeMustGenerate | NodeResultJS) \
     macro(ObjectKeys, NodeMustGenerate | NodeResultJS) \
     macro(ObjectGetOwnPropertyNames, NodeMustGenerate | NodeResultJS) \
@@ -428,9 +429,12 @@ namespace JSC { namespace DFG {
     macro(CallNumberConstructor, NodeResultJS | NodeMustGenerate) \
     macro(NumberToStringWithRadix, NodeResultJS | NodeMustGenerate) \
     macro(NumberToStringWithValidRadixConstant, NodeResultJS) \
+    macro(FunctionToString, NodeResultJS) \
     macro(MakeRope, NodeResultJS) \
     macro(InByVal, NodeResultBoolean | NodeMustGenerate) \
     macro(InById, NodeResultBoolean | NodeMustGenerate) \
+    macro(HasPrivateName, NodeResultBoolean | NodeMustGenerate) \
+    macro(HasPrivateBrand, NodeResultBoolean | NodeMustGenerate) \
     macro(ProfileType, NodeMustGenerate) \
     macro(ProfileControlFlow, NodeMustGenerate) \
     macro(SetFunctionName, NodeMustGenerate) \
@@ -544,7 +548,7 @@ namespace JSC { namespace DFG {
     /* Used to provide feedback to the IC profiler. */ \
     macro(FilterCallLinkStatus, NodeMustGenerate) \
     macro(FilterGetByStatus, NodeMustGenerate) \
-    macro(FilterInByIdStatus, NodeMustGenerate) \
+    macro(FilterInByStatus, NodeMustGenerate) \
     macro(FilterPutByIdStatus, NodeMustGenerate) \
     macro(FilterDeleteByStatus, NodeMustGenerate) \
     macro(FilterCheckPrivateBrandStatus, NodeMustGenerate) \

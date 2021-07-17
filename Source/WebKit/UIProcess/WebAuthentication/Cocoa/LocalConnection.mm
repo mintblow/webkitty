@@ -152,25 +152,41 @@ void LocalConnection::verifyUser(SecAccessControlRef accessControl, LAContext *c
         reply(@{ @"UserPresence": @YES }, nullptr);
         return;
     }
+
+#if PLATFORM(IOS_FAMILY_SIMULATOR)
+    // Simulator doesn't support LAAccessControlOperationUseKeySign, but does support alternate attributes.
+    if (shouldUseAlternateAttributes()) {
+        reply(@{ }, nullptr);
+        return;
+    }
 #endif
+#endif // USE(APPLE_INTERNAL_SDK)
 
     [context evaluateAccessControl:accessControl operation:LAAccessControlOperationUseKeySign options:options.get() reply:reply.get()];
 }
 
 RetainPtr<SecKeyRef> LocalConnection::createCredentialPrivateKey(LAContext *context, SecAccessControlRef accessControlRef, const String& secAttrLabel, NSData *secAttrApplicationTag) const
 {
+    NSDictionary *privateKeyAttributes = @{
+        (id)kSecAttrAccessControl: (id)accessControlRef,
+        (id)kSecAttrIsPermanent: @YES,
+        (id)kSecAttrAccessGroup: (id)String(LocalAuthenticatiorAccessGroup),
+        (id)kSecAttrLabel: secAttrLabel,
+        (id)kSecAttrApplicationTag: secAttrApplicationTag,
+    };
+
+    if (context) {
+        privateKeyAttributes = [privateKeyAttributes mutableCopy];
+        ((NSMutableDictionary *)privateKeyAttributes)[(id)kSecUseAuthenticationContext] = context;
+    }
+
     NSDictionary *attributes = @{
         (id)kSecAttrTokenID: (id)kSecAttrTokenIDSecureEnclave,
         (id)kSecAttrKeyType: (id)kSecAttrKeyTypeECSECPrimeRandom,
         (id)kSecAttrKeySizeInBits: @256,
-        (id)kSecPrivateKeyAttrs: @{
-            (id)kSecUseAuthenticationContext: context,
-            (id)kSecAttrAccessControl: (id)accessControlRef,
-            (id)kSecAttrIsPermanent: @YES,
-            (id)kSecAttrAccessGroup: (id)String(LocalAuthenticatiorAccessGroup),
-            (id)kSecAttrLabel: secAttrLabel,
-            (id)kSecAttrApplicationTag: secAttrApplicationTag,
-        }};
+        (id)kSecPrivateKeyAttrs: privateKeyAttributes,
+    };
+
     LOCAL_CONNECTION_ADDITIONS
     CFErrorRef errorRef = nullptr;
     auto credentialPrivateKey = adoptCF(SecKeyCreateRandomKey((__bridge CFDictionaryRef)attributes, &errorRef));

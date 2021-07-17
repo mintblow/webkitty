@@ -185,7 +185,7 @@ Path* RenderSVGShape::nonScalingStrokePath(const Path* path, const AffineTransfo
 
 bool RenderSVGShape::setupNonScalingStrokeContext(AffineTransform& strokeTransform, GraphicsContextStateSaver& stateSaver)
 {
-    Optional<AffineTransform> inverse = strokeTransform.inverse();
+    std::optional<AffineTransform> inverse = strokeTransform.inverse();
     if (!inverse)
         return false;
 
@@ -346,7 +346,7 @@ bool RenderSVGShape::nodeAtFloatPoint(const HitTestRequest& request, HitTestResu
     if (hitTestAction != HitTestForeground)
         return false;
 
-    FloatPoint localPoint = m_localTransform.inverse().valueOr(AffineTransform()).mapPoint(pointInParent);
+    FloatPoint localPoint = m_localTransform.inverse().value_or(AffineTransform()).mapPoint(pointInParent);
 
     if (!SVGRenderSupport::pointInClippingArea(*this, localPoint))
         return false;
@@ -364,7 +364,7 @@ bool RenderSVGShape::nodeAtFloatPoint(const HitTestRequest& request, HitTestResu
             || (hitRules.canHitFill && (svgStyle.hasFill() || !hitRules.requireFill) && fillContains(localPoint, hitRules.requireFill, fillRule))
             || (hitRules.canHitBoundingBox && objectBoundingBox().contains(localPoint))) {
             updateHitTestResult(result, LayoutPoint(localPoint));
-            if (result.addNodeToListBasedTestResult(nodeForHitTest(), request, localPoint) == HitTestProgress::Stop)
+            if (result.addNodeToListBasedTestResult(nodeForHitTest(), request, flooredLayoutPoint(localPoint)) == HitTestProgress::Stop)
                 return true;
         }
     }
@@ -420,7 +420,7 @@ FloatRect RenderSVGShape::calculateStrokeBoundingBox() const
     if (style().svgStyle().hasStroke()) {
         if (hasNonScalingStroke()) {
             AffineTransform nonScalingTransform = nonScalingStrokeTransform();
-            if (Optional<AffineTransform> inverse = nonScalingTransform.inverse()) {
+            if (std::optional<AffineTransform> inverse = nonScalingTransform.inverse()) {
                 Path* usePath = nonScalingStrokePath(m_path.get(), nonScalingTransform);
                 FloatRect strokeBoundingRect = usePath->strokeBoundingRect(Function<void(GraphicsContext&)> { [this] (GraphicsContext& context) {
                     SVGRenderSupport::applyStrokeStyleToContext(context, style(), *this);

@@ -27,6 +27,7 @@
 #include "JSDOMBinding.h"
 #include "JSDOMConstructorNotConstructable.h"
 #include "JSDOMExceptionHandling.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMWrapperCache.h"
 #include "JSWorkletGlobalScope.h"
 #include "ScriptExecutionContext.h"
@@ -130,12 +131,7 @@ JSObject* JSWorkletGlobalScope::prototype(VM& vm, JSDOMGlobalObject& globalObjec
 
 JSValue JSWorkletGlobalScope::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSWorkletGlobalScopeDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
-}
-
-template<> inline JSWorkletGlobalScope* IDLAttribute<JSWorkletGlobalScope>::cast(JSGlobalObject& lexicalGlobalObject, EncodedJSValue thisValue)
-{
-    return jsDynamicCast<JSWorkletGlobalScope*>(JSC::getVM(&lexicalGlobalObject), JSValue::decode(thisValue));
+    return getDOMConstructor<JSWorkletGlobalScopeDOMConstructor, DOMConstructorID::WorkletGlobalScope>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 JSC_DEFINE_CUSTOM_GETTER(jsWorkletGlobalScopeConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName))
@@ -185,44 +181,6 @@ void JSWorkletGlobalScope::analyzeHeap(JSCell* cell, HeapAnalyzer& analyzer)
     if (thisObject->scriptExecutionContext())
         analyzer.setLabelForCell(cell, "url " + thisObject->scriptExecutionContext()->url().string());
     Base::analyzeHeap(cell, analyzer);
-}
-
-#if ENABLE(BINDING_INTEGRITY)
-#if PLATFORM(WIN)
-#pragma warning(disable: 4483)
-extern "C" { extern void (*const __identifier("??_7WorkletGlobalScope@WebCore@@6B@")[])(); }
-#else
-extern "C" { extern void* _ZTVN7WebCore18WorkletGlobalScopeE[]; }
-#endif
-#endif
-
-JSC::JSValue toJSNewlyCreated(JSC::JSGlobalObject*, JSDOMGlobalObject* globalObject, Ref<WorkletGlobalScope>&& impl)
-{
-
-#if ENABLE(BINDING_INTEGRITY)
-    const void* actualVTablePointer = getVTablePointer(impl.ptr());
-#if PLATFORM(WIN)
-    void* expectedVTablePointer = __identifier("??_7WorkletGlobalScope@WebCore@@6B@");
-#else
-    void* expectedVTablePointer = &_ZTVN7WebCore18WorkletGlobalScopeE[2];
-#endif
-
-    // If this fails WorkletGlobalScope does not have a vtable, so you need to add the
-    // ImplementationLacksVTable attribute to the interface definition
-    static_assert(std::is_polymorphic<WorkletGlobalScope>::value, "WorkletGlobalScope is not polymorphic");
-
-    // If you hit this assertion you either have a use after free bug, or
-    // WorkletGlobalScope has subclasses. If WorkletGlobalScope has subclasses that get passed
-    // to toJS() we currently require WorkletGlobalScope you to opt out of binding hardening
-    // by adding the SkipVTableValidation attribute to the interface IDL definition
-    RELEASE_ASSERT(actualVTablePointer == expectedVTablePointer);
-#endif
-    return createWrapper<WorkletGlobalScope>(globalObject, WTFMove(impl));
-}
-
-JSC::JSValue toJS(JSC::JSGlobalObject* lexicalGlobalObject, JSDOMGlobalObject* globalObject, WorkletGlobalScope& impl)
-{
-    return wrap(lexicalGlobalObject, globalObject, impl);
 }
 
 WorkletGlobalScope* JSWorkletGlobalScope::toWrapped(JSC::VM& vm, JSC::JSValue value)

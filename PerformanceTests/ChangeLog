@@ -1,3 +1,91 @@
+2021-07-16  Manuel Rego Casasnovas  <rego@igalia.com>
+
+        Remove CSS Regions perf tests
+        https://bugs.webkit.org/show_bug.cgi?id=228016
+
+        Reviewed by Ryosuke Niwa.
+
+        The feature has been removed long time ago, so let's do the same with the associated perf tests.
+
+        * Layout/RegionsAuto.html: Removed.
+        * Layout/RegionsAutoMaxHeight.html: Removed.
+        * Layout/RegionsExtendingSelectionMixedContent.html: Removed.
+        * Layout/RegionsFixed.html: Removed.
+        * Layout/RegionsFixedShort.html: Removed.
+        * Layout/RegionsSelectAllMixedContent.html: Removed.
+        * Layout/RegionsSelection.html: Removed.
+        * Layout/RegionsShapes.html: Removed.
+        * Layout/Shapes/RegionsShapesNoShapes.html: Removed.
+        * Layout/Shapes/resources/RegionsShapesContent.html: Removed.
+        * Layout/Shapes/resources/RegionsShapesContentNoShapes.html: Removed.
+        * Layout/resources/regions.css: Removed.
+        * Layout/resources/regions.js: Removed.
+
+2021-06-03  Said Abou-Hallawa  <said@apple.com>
+
+        [MotionMark] Controller.filterOutOutliers() sorts the frameLengths array incorrectly
+        https://bugs.webkit.org/show_bug.cgi?id=226605
+
+        Reviewed by Myles C. Maxfield.
+
+        Controller.filterOutOutliers must pass a compare function to Array.sort()
+        because it filters an array of numbers.
+
+        * MotionMark/tests/resources/main.js:
+        (filterOutOutliers):
+
+2021-06-03  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        [MotionMark] Update version number of local development version of the benchmark to match the currently-being-released version
+        https://bugs.webkit.org/show_bug.cgi?id=226592
+
+        Reviewed by Darin Adler.
+
+        We are currently in the process of releasing MotionMark 1.2. http://browserbench.org/MotionMark1.2/
+
+        * MotionMark/about.html:
+        * MotionMark/resources/strings.js:
+
+2021-05-21  Sam Sneddon  <gsnedders@apple.com>
+
+        Fix Python 3.6+ DeprecationWarnings about unknown escapes
+        https://bugs.webkit.org/show_bug.cgi?id=226018
+
+        Reviewed by Jonathan Bedard.
+
+        Fix Python 3.6+ DeprecationWarnings about unknown escapes
+
+        * JetStream2/RAMification.py:
+        * JetStream2/RexBench/FlightPlanner/convert-nfdc.py:
+        * RexBench/FlightPlanner/convert-nfdc.py:
+
+2021-05-12  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        [MotionMark] Temporarily remove the focus test
+        https://bugs.webkit.org/show_bug.cgi?id=225714
+
+        Reviewed by Geoffrey Garen.
+
+        The focus test is causing unacceptably high variance on test results. Initial investigation
+        indicates that this is related to secondary and tertiary interactions between the browser's
+        runloop and the compositor's runloop. Not only that, but the variable cost of the focus test
+        seems to affect the variance on the subtests which run after it.
+
+        This patch temporarily removes the focus test, just so we can get a stronger signal of
+        browsers' true performance, while we do a deeper analysis of the focus test.
+
+        Because the focus test's score is lower than the average score of the subtests, removing it
+        causes scores in all browsers to increase:
+
+                             | WebKit | Chrome | Firefox
+        ================================================
+        Score with Focus     |   1020 |    550 |    962
+        Score without Focus  |   1623 |    874 |   1101
+        Stddev with Focus    |   9.3% |   2.3% |   2.9%
+        Stddev without Focus |   0.7% |   0.5% |   7.9%
+
+        * MotionMark/resources/runner/tests.js:
+
 2021-04-19  Kimmo Kinnunen  <kkinnunen@apple.com>
 
         Enable -Wthread-safety, add attributes to custom lock classes, and provide macros to declare guards

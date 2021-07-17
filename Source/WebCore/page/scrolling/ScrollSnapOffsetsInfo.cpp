@@ -27,8 +27,6 @@
 #include "config.h"
 #include "ScrollSnapOffsetsInfo.h"
 
-#if ENABLE(CSS_SCROLL_SNAP)
-
 #include "ElementChildIterator.h"
 #include "LayoutRect.h"
 #include "Length.h"
@@ -43,123 +41,126 @@
 namespace WebCore {
 
 template <typename UnitType>
-static bool isNearEnoughToOffsetForProximity(ScrollSnapStrictness strictness, UnitType scrollDestination, UnitType candidateSnapOffset, UnitType viewportLength)
+struct PotentialSnapPointSearchResult {
+    std::optional<std::pair<UnitType, unsigned>> previous;
+    std::optional<std::pair<UnitType, unsigned>> next;
+    std::optional<std::pair<UnitType, unsigned>> snapStop;
+    bool landedInsideSnapAreaThatConsumesViewport;
+};
+
+template <typename InfoType, typename UnitType>
+static PotentialSnapPointSearchResult<UnitType> searchForPotentialSnapPoints(const InfoType& info, ScrollEventAxis axis, UnitType viewportLength, UnitType destinationOffset, std::optional<UnitType> originalOffset)
 {
-    if (strictness != ScrollSnapStrictness::Proximity)
-        return true;
+    const auto& snapOffsets = info.offsetsForAxis(axis);
+    std::optional<std::pair<UnitType, unsigned>> previous, next, exact, snapStop;
+    bool landedInsideSnapAreaThatConsumesViewport = false;
 
-    // This is an arbitrary choice for what it means to be "in proximity" of a snap offset. We should play around with
-    // this and see what feels best.
-    static const float ratioOfScrollPortAxisLengthToBeConsideredForProximity = 0.3;
-    return std::abs(float {candidateSnapOffset - scrollDestination}) <= (viewportLength * ratioOfScrollPortAxisLengthToBeConsideredForProximity);
-}
-
-template <typename LayoutType>
-static void indicesOfNearestSnapOffsets(LayoutType offset, const Vector<SnapOffset<LayoutType>>& snapOffsets, unsigned& lowerIndex, unsigned& upperIndex)
-{
-    lowerIndex = 0;
-    upperIndex = snapOffsets.size() - 1;
-    while (lowerIndex < upperIndex - 1) {
-        int middleIndex = (lowerIndex + upperIndex) / 2;
-        auto middleOffset = snapOffsets[middleIndex].offset;
-        if (offset == middleOffset) {
-            upperIndex = middleIndex;
-            lowerIndex = middleIndex;
-            break;
-        }
-
-        if (offset > middleOffset)
-            lowerIndex = middleIndex;
-        else
-            upperIndex = middleIndex;
-    }
-}
-
-template <typename LayoutType>
-static Optional<unsigned> findFirstSnapStopOffsetBetweenOriginAndDestination(const Vector<SnapOffset<LayoutType>>& snapOffsets, LayoutType scrollOriginOffset, LayoutType scrollDestinationOffset)
-{
-    LayoutType difference = scrollDestinationOffset - scrollOriginOffset;
-    if (!difference)
-        return WTF::nullopt;
-
-    unsigned searchStartOffset = 0;
-    size_t iteration = 1;
-    if (difference < 0) {
-        searchStartOffset = snapOffsets.size() - 1;
-        iteration = -1;
-    }
-
-    auto isPast = [difference](LayoutType mark, LayoutType candidate) {
-        return (difference > 0 && candidate > mark) || (difference < 0 && candidate < mark);
+    // A particular snap stop is better if it's between the original offset and destination offset and closer original
+    // offset than the previously selected snap stop. We always want to stop at the snap stop closest to the original offset.
+    auto isBetterSnapStop = [&](UnitType candidate) {
+        if (!originalOffset)
+            return false;
+        auto original = *originalOffset;
+        if (candidate <= std::min(destinationOffset, original) || candidate >= std::max(destinationOffset, original))
+            return false;
+        return !snapStop || std::abs(float { candidate - original }) < std::abs(float { (*snapStop).first - original });
     };
 
-    for (int i = searchStartOffset; i >= 0 && static_cast<size_t>(i) < snapOffsets.size(); i += iteration) {
-        auto offset = snapOffsets[i].offset;
-        if (isPast(scrollDestinationOffset, offset))
-            break;
-        if (snapOffsets[i].stop != ScrollSnapStop::Always)
-            continue;
-        if (isPast(scrollOriginOffset, offset))
-            return i;
+    for (unsigned i = 0; i < snapOffsets.size(); i++) {
+        UnitType potentialSnapOffset = snapOffsets[i].offset;
+
+        const auto& snapArea = info.snapAreas[snapOffsets[i].snapAreaIndex];
+        auto snapAreaMin = axis == ScrollEventAxis::Horizontal ? snapArea.x() : snapArea.y();
+        auto snapAreaMax = axis == ScrollEventAxis::Horizontal ? snapArea.maxX() : snapArea.maxY();
+        landedInsideSnapAreaThatConsumesViewport |= snapAreaMin <= destinationOffset && snapAreaMax >= (destinationOffset + viewportLength);
+
+        if (potentialSnapOffset == destinationOffset)
+            exact = std::make_pair(potentialSnapOffset, i);
+        else if (potentialSnapOffset < destinationOffset)
+            previous = std::make_pair(potentialSnapOffset, i);
+        else if (!next && potentialSnapOffset > destinationOffset)
+            next = std::make_pair(potentialSnapOffset, i);
+
+        if (snapOffsets[i].stop == ScrollSnapStop::Always && isBetterSnapStop(potentialSnapOffset))
+            snapStop = std::make_pair(potentialSnapOffset, i);
     }
 
-    return WTF::nullopt;
+    if (exact)
+        return { exact, exact, snapStop, landedInsideSnapAreaThatConsumesViewport };
+    return { previous, next, snapStop, landedInsideSnapAreaThatConsumesViewport };
 }
 
 template <typename InfoType, typename SizeType, typename LayoutType>
-static std::pair<LayoutType, unsigned> closestSnapOffsetWithInfoAndAxis(const InfoType& info, ScrollEventAxis axis, const SizeType& viewportSize, LayoutType scrollDestinationOffset, float velocity, Optional<LayoutType> originalOffsetForDirectionalSnapping)
+static std::pair<LayoutType, std::optional<unsigned>> closestSnapOffsetWithInfoAndAxis(const InfoType& info, ScrollEventAxis axis, const SizeType& viewportSize, LayoutType scrollDestinationOffset, float velocity, std::optional<LayoutType> originalOffsetForDirectionalSnapping)
 {
     const auto& snapOffsets = info.offsetsForAxis(axis);
+    auto pairForNoSnapping = std::make_pair(scrollDestinationOffset, std::nullopt);
     if (snapOffsets.isEmpty())
-        return std::make_pair(scrollDestinationOffset, invalidSnapOffsetIndex);
-
-    if (originalOffsetForDirectionalSnapping.hasValue()) {
-        auto firstSnapStopOffsetIndex = findFirstSnapStopOffsetBetweenOriginAndDestination(snapOffsets, *originalOffsetForDirectionalSnapping, scrollDestinationOffset);
-        if (firstSnapStopOffsetIndex.hasValue())
-            return std::make_pair(snapOffsets[*firstSnapStopOffsetIndex].offset, *firstSnapStopOffsetIndex);
-    }
-
-    if (scrollDestinationOffset <= snapOffsets.first().offset)
-        return std::make_pair(snapOffsets.first().offset, 0u);
-
-    if (scrollDestinationOffset >= snapOffsets.last().offset)
-        return std::make_pair(snapOffsets.last().offset, snapOffsets.size() - 1);
-
-    unsigned lowerIndex;
-    unsigned upperIndex;
-    indicesOfNearestSnapOffsets<LayoutType>(scrollDestinationOffset, snapOffsets, lowerIndex, upperIndex);
-    LayoutType lowerSnapPosition = snapOffsets[lowerIndex].offset;
-    LayoutType upperSnapPosition = snapOffsets[upperIndex].offset;
+        return pairForNoSnapping;
 
     auto viewportLength = axis == ScrollEventAxis::Horizontal ? viewportSize.width() : viewportSize.height();
-    if (!isNearEnoughToOffsetForProximity<LayoutType>(info.strictness, scrollDestinationOffset, lowerSnapPosition, viewportLength)) {
-        lowerSnapPosition = scrollDestinationOffset;
-        lowerIndex = invalidSnapOffsetIndex;
+    auto [previous, next, snapStop, landedInsideSnapAreaThatConsumesViewport] = searchForPotentialSnapPoints(info, axis, viewportLength, scrollDestinationOffset, originalOffsetForDirectionalSnapping);
+    if (snapStop)
+        return *snapStop;
+
+    // From https://www.w3.org/TR/css-scroll-snap-1/#snap-overflow
+    // "If the snap area is larger than the snapport in a particular axis, then any scroll position
+    // in which the snap area covers the snapport, and the distance between the geometrically
+    // previous and subsequent snap positions in that axis is larger than size of the snapport in
+    // that axis, is a valid snap position in that axis. The UA may use the specified alignment as a
+    // more precise target for certain scroll operations (e.g. explicit paging)."
+    if (landedInsideSnapAreaThatConsumesViewport && (!previous || !next || ((*next).first - (*previous).first) >= viewportLength))
+        return pairForNoSnapping;
+
+    auto isNearEnoughToOffsetForProximity = [&](LayoutType candidateSnapOffset) {
+        if (info.strictness != ScrollSnapStrictness::Proximity)
+            return true;
+
+        // This is an arbitrary choice for what it means to be "in proximity" of a snap offset. We should play around with
+        // this and see what feels best.
+        static const float ratioOfScrollPortAxisLengthToBeConsideredForProximity = 0.3;
+        return std::abs(float {candidateSnapOffset - scrollDestinationOffset}) <= (viewportLength * ratioOfScrollPortAxisLengthToBeConsideredForProximity);
+    };
+
+    if (scrollDestinationOffset <= snapOffsets.first().offset)
+        return isNearEnoughToOffsetForProximity(snapOffsets.first().offset) ? std::make_pair(snapOffsets.first().offset, std::make_optional(0u)) : pairForNoSnapping;
+
+    if (scrollDestinationOffset >= snapOffsets.last().offset) {
+        unsigned lastIndex = static_cast<unsigned>(snapOffsets.size() - 1);
+        return isNearEnoughToOffsetForProximity(snapOffsets.last().offset) ? std::make_pair(snapOffsets.last().offset, std::make_optional(lastIndex)) : pairForNoSnapping;
     }
 
-    if (!isNearEnoughToOffsetForProximity<LayoutType>(info.strictness, scrollDestinationOffset, upperSnapPosition, viewportLength)) {
-        upperSnapPosition = scrollDestinationOffset;
-        upperIndex = invalidSnapOffsetIndex;
-    }
-    if (!std::abs(velocity)) {
-        bool isCloserToLowerSnapPosition = (upperIndex == invalidSnapOffsetIndex)
-            || (lowerIndex != invalidSnapOffsetIndex && scrollDestinationOffset - lowerSnapPosition <= upperSnapPosition - scrollDestinationOffset);
-        return isCloserToLowerSnapPosition ? std::make_pair(lowerSnapPosition, lowerIndex) : std::make_pair(upperSnapPosition, upperIndex);
+    if (previous && !isNearEnoughToOffsetForProximity((*previous).first))
+        previous.reset();
+    if (next && !isNearEnoughToOffsetForProximity((*next).first))
+        next.reset();
+
+    if (originalOffsetForDirectionalSnapping) {
+        // From https://www.w3.org/TR/css-scroll-snap-1/#choosing
+        // "User agents must ensure that a user can “escape” a snap position, regardless of the scroll
+        // method. For example, if the snap type is mandatory and the next snap position is more than
+        // two screen-widths away, a naïve “always snap to nearest” selection algorithm might “trap” the
+        //
+        // For a directional scroll, we never snap back to the original scroll position or before it,
+        // always preferring the snap offset in the scroll direction.
+        auto& originalOffset = *originalOffsetForDirectionalSnapping;
+        if (originalOffset < scrollDestinationOffset && previous && (*previous).first <= originalOffset)
+            previous.reset();
+        if (originalOffset > scrollDestinationOffset && next && (*next).first >= originalOffset)
+            next.reset();
     }
 
-    // Non-zero velocity indicates a flick gesture. Even if another snap point is closer, we should choose the one in the direction of the flick gesture
-    // as long as a scroll snap offset is close enough for proximity (or we aren't using proximity). If we are doing directional
-    // snapping, we should never snap to a point that was on the other side of the original position in the opposite direction of this scroll.
-    // This allows directional scrolling to escape snap points.
-    if (velocity < 0)  {
-        if (upperIndex != invalidSnapOffsetIndex && (!originalOffsetForDirectionalSnapping || *originalOffsetForDirectionalSnapping > upperSnapPosition))
-            return std::make_pair(upperSnapPosition, upperIndex);
-        return std::make_pair(lowerSnapPosition, lowerIndex);
-    }
+    if (!previous && !next)
+        return pairForNoSnapping;
+    if (!previous)
+        return *next;
+    if (!next)
+        return *previous;
 
-    if (lowerIndex != invalidSnapOffsetIndex && (!originalOffsetForDirectionalSnapping || *originalOffsetForDirectionalSnapping < lowerSnapPosition))
-        return std::make_pair(lowerSnapPosition, lowerIndex);
-    return std::make_pair(upperSnapPosition, upperIndex);
+    // If this scroll isn't directional, then choose whatever snap point is closer, otherwise pick the offset in the scroll direction.
+    if (!std::abs(velocity))
+        return (scrollDestinationOffset - (*previous).first) <= ((*next).first - scrollDestinationOffset) ? *previous : *next;
+    return velocity < 0 ? *previous : *next;
 }
 
 enum class InsetOrOutset {
@@ -198,7 +199,17 @@ static LayoutUnit computeScrollSnapAlignOffset(LayoutUnit minLocation, LayoutUni
     }
 }
 
-void updateSnapOffsetsForScrollableArea(ScrollableArea& scrollableArea, const RenderBox& scrollingElementBox, const RenderStyle& scrollingElementStyle, LayoutRect viewportRectInBorderBoxCoordinates)
+static std::pair<bool, bool> axesFlippedForWritingModeAndDirection(WritingMode writingMode, TextDirection textDirection)
+{
+    // text-direction flips the inline axis and writing-mode can flip the block axis. Whether or
+    // not the writing-mode is vertical determines the physical orientation of the block and inline axes.
+    bool hasVerticalWritingMode = isVerticalWritingMode(writingMode);
+    bool blockAxisFlipped = isFlippedWritingMode(writingMode);
+    bool inlineAxisFlipped = textDirection == TextDirection::RTL;
+    return std::make_pair(hasVerticalWritingMode ? blockAxisFlipped : inlineAxisFlipped, hasVerticalWritingMode ? inlineAxisFlipped : blockAxisFlipped);
+}
+
+void updateSnapOffsetsForScrollableArea(ScrollableArea& scrollableArea, const RenderBox& scrollingElementBox, const RenderStyle& scrollingElementStyle, LayoutRect viewportRectInBorderBoxCoordinates, WritingMode writingMode, TextDirection textDirection)
 {
     auto scrollSnapType = scrollingElementStyle.scrollSnapType();
     const auto& boxesWithScrollSnapPositions = scrollingElementBox.view().boxesWithScrollSnapPositions();
@@ -218,12 +229,22 @@ void updateSnapOffsetsForScrollableArea(ScrollableArea& scrollableArea, const Re
     HashMap<float, SnapOffset<LayoutUnit>> verticalSnapOffsetsMap;
     HashMap<float, SnapOffset<LayoutUnit>> horizontalSnapOffsetsMap;
     Vector<LayoutRect> snapAreas;
-    bool hasHorizontalSnapOffsets = scrollSnapType.axis == ScrollSnapAxis::Both || scrollSnapType.axis == ScrollSnapAxis::XAxis || scrollSnapType.axis == ScrollSnapAxis::Inline;
-    bool hasVerticalSnapOffsets = scrollSnapType.axis == ScrollSnapAxis::Both || scrollSnapType.axis == ScrollSnapAxis::YAxis || scrollSnapType.axis == ScrollSnapAxis::Block;
 
     auto maxScrollOffset = scrollableArea.maximumScrollOffset();
     auto scrollPosition = LayoutPoint { scrollableArea.scrollPosition() };
-    bool scrollerIsRTL = !scrollingElementBox.style().isLeftToRightDirection();
+
+    auto [scrollerXAxisFlipped, scrollerYAxisFlipped] = axesFlippedForWritingModeAndDirection(writingMode, textDirection);
+    bool scrollerHasVerticalWritingMode = isVerticalWritingMode(writingMode);
+    bool hasHorizontalSnapOffsets = scrollSnapType.axis == ScrollSnapAxis::Both || scrollSnapType.axis == ScrollSnapAxis::XAxis;
+    bool hasVerticalSnapOffsets = scrollSnapType.axis == ScrollSnapAxis::Both || scrollSnapType.axis == ScrollSnapAxis::YAxis;
+    if (scrollSnapType.axis == ScrollSnapAxis::Block) {
+        hasHorizontalSnapOffsets = scrollerHasVerticalWritingMode;
+        hasVerticalSnapOffsets = !scrollerHasVerticalWritingMode;
+    }
+    if (scrollSnapType.axis == ScrollSnapAxis::Inline) {
+        hasHorizontalSnapOffsets = !scrollerHasVerticalWritingMode;
+        hasVerticalSnapOffsets = scrollerHasVerticalWritingMode;
+    }
 
     // The bounds of the scrolling container's snap port, where the top left of the scrolling container's border box is the origin.
     auto scrollSnapPort = computeScrollSnapPortOrAreaRect(viewportRectInBorderBoxCoordinates, scrollingElementStyle.scrollPadding(), InsetOrOutset::Inset);
@@ -234,7 +255,6 @@ void updateSnapOffsetsForScrollableArea(ScrollableArea& scrollableArea, const Re
 
         // The bounds of the child element's snap area, where the top left of the scrolling container's border box is the origin.
         // The snap area is the bounding box of the child element's border box, after applying transformations.
-        // FIXME: For now, just consider whether the scroller is RTL. The behavior of LTR boxes inside a RTL scroller is poorly defined: https://github.com/w3c/csswg-drafts/issues/5361.
         auto scrollSnapArea = LayoutRect(child->localToContainerQuad(FloatQuad(child->borderBoundingBox()), &scrollingElementBox).boundingBox());
 
         // localToContainerQuad will transform the scroll snap area by the scroll position, except in the case that this position is
@@ -247,23 +267,35 @@ void updateSnapOffsetsForScrollableArea(ScrollableArea& scrollableArea, const Re
         auto alignment = child->style().scrollSnapAlign();
         auto stop = child->style().scrollSnapStop();
 
-        bool snapsHorizontally = hasHorizontalSnapOffsets && alignment.x != ScrollSnapAxisAlignType::None;
-        bool snapsVertically = hasVerticalSnapOffsets && alignment.y != ScrollSnapAxisAlignType::None;
+        // From https://drafts.csswg.org/css-scroll-snap-1/#scroll-snap-align:
+        // "Start and end alignments are resolved with respect to the writing mode of the snap container unless the
+        // scroll snap area is larger than the snapport, in which case they are resolved with respect to the writing
+        // mode of the box itself."
+        bool areaXAxisFlipped = scrollerXAxisFlipped;
+        bool areaYAxisFlipped = scrollerYAxisFlipped;
+        bool areaHasVerticalWritingMode = isVerticalWritingMode(child->style().writingMode());
+        if ((areaHasVerticalWritingMode && scrollSnapArea.height() > scrollSnapPort.height()) || (!areaHasVerticalWritingMode && scrollSnapArea.width() > scrollSnapPort.width()))
+            std::tie(areaXAxisFlipped, areaYAxisFlipped) = axesFlippedForWritingModeAndDirection(child->style().writingMode(), child->style().direction());
+
+        ScrollSnapAxisAlignType xAlign = scrollerHasVerticalWritingMode ? alignment.blockAlign : alignment.inlineAlign;
+        ScrollSnapAxisAlignType yAlign = scrollerHasVerticalWritingMode ? alignment.inlineAlign : alignment.blockAlign;
+        bool snapsHorizontally = hasHorizontalSnapOffsets && xAlign != ScrollSnapAxisAlignType::None;
+        bool snapsVertically = hasVerticalSnapOffsets && yAlign != ScrollSnapAxisAlignType::None;
+
         if (!snapsHorizontally && !snapsVertically)
             continue;
-
         // The scroll snap area is defined via its scroll position, so convert the snap area rectangle to be relative to scroll offsets.
         auto snapAreaOriginRelativeToBorderEdge = scrollSnapArea.location() - scrollSnapPort.location();
         LayoutRect scrollSnapAreaAsOffsets(scrollableArea.scrollOffsetFromPosition(roundedIntPoint(snapAreaOriginRelativeToBorderEdge)), scrollSnapArea.size());
         snapAreas.append(scrollSnapAreaAsOffsets);
 
         if (snapsHorizontally) {
-            auto absoluteScrollXPosition = computeScrollSnapAlignOffset(scrollSnapArea.x(), scrollSnapArea.maxX(), alignment.x, scrollerIsRTL) - computeScrollSnapAlignOffset(scrollSnapPort.x(), scrollSnapPort.maxX(), alignment.x, scrollerIsRTL);
+            auto absoluteScrollXPosition = computeScrollSnapAlignOffset(scrollSnapArea.x(), scrollSnapArea.maxX(), xAlign, areaXAxisFlipped) - computeScrollSnapAlignOffset(scrollSnapPort.x(), scrollSnapPort.maxX(), xAlign, areaXAxisFlipped);
             auto absoluteScrollOffset = clampTo<int>(scrollableArea.scrollOffsetFromPosition({ roundToInt(absoluteScrollXPosition), 0 }).x(), 0, maxScrollOffset.x());
             addOrUpdateStopForSnapOffset(horizontalSnapOffsetsMap, { absoluteScrollOffset, stop, snapAreas.size() - 1 });
         }
         if (snapsVertically) {
-            auto absoluteScrollYPosition = computeScrollSnapAlignOffset(scrollSnapArea.y(), scrollSnapArea.maxY(), alignment.y, false) - computeScrollSnapAlignOffset(scrollSnapPort.y(), scrollSnapPort.maxY(), alignment.y, false);
+            auto absoluteScrollYPosition = computeScrollSnapAlignOffset(scrollSnapArea.y(), scrollSnapArea.maxY(), yAlign, areaYAxisFlipped) - computeScrollSnapAlignOffset(scrollSnapPort.y(), scrollSnapPort.maxY(), yAlign, areaYAxisFlipped);
             auto absoluteScrollOffset = clampTo<int>(scrollableArea.scrollOffsetFromPosition({ 0, roundToInt(absoluteScrollYPosition) }).y(), 0, maxScrollOffset.y());
             addOrUpdateStopForSnapOffset(verticalSnapOffsetsMap, { absoluteScrollOffset, stop, snapAreas.size() - 1 });
         }
@@ -356,17 +388,15 @@ FloatScrollSnapOffsetsInfo LayoutScrollSnapOffsetsInfo::convertUnits(float devic
 }
 
 template <> template <>
-std::pair<LayoutUnit, unsigned> LayoutScrollSnapOffsetsInfo::closestSnapOffset(ScrollEventAxis axis, const LayoutSize& viewportSize, LayoutUnit scrollDestinationOffset, float velocity, Optional<LayoutUnit> originalPositionForDirectionalSnapping) const
+std::pair<LayoutUnit, std::optional<unsigned>> LayoutScrollSnapOffsetsInfo::closestSnapOffset(ScrollEventAxis axis, const LayoutSize& viewportSize, LayoutUnit scrollDestinationOffset, float velocity, std::optional<LayoutUnit> originalPositionForDirectionalSnapping) const
 {
     return closestSnapOffsetWithInfoAndAxis(*this, axis, viewportSize, scrollDestinationOffset, velocity, originalPositionForDirectionalSnapping);
 }
 
 template <> template<>
-std::pair<float, unsigned> FloatScrollSnapOffsetsInfo::closestSnapOffset(ScrollEventAxis axis, const FloatSize& viewportSize, float scrollDestinationOffset, float velocity, Optional<float> originalPositionForDirectionalSnapping) const
+std::pair<float, std::optional<unsigned>> FloatScrollSnapOffsetsInfo::closestSnapOffset(ScrollEventAxis axis, const FloatSize& viewportSize, float scrollDestinationOffset, float velocity, std::optional<float> originalPositionForDirectionalSnapping) const
 {
     return closestSnapOffsetWithInfoAndAxis(*this, axis, viewportSize, scrollDestinationOffset, velocity, originalPositionForDirectionalSnapping);
 }
 
 }
-
-#endif // ENABLE(CSS_SCROLL_SNAP)

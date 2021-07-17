@@ -48,6 +48,8 @@ class RegistrableDomain;
 
 namespace WebKit {
 
+enum class TapHandlingResult : uint8_t;
+
 class UIDelegate : public CanMakeWeakPtr<UIDelegate> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
@@ -117,7 +119,7 @@ private:
         float footerHeight(WebPageProxy&, WebFrameProxy&) final;
         void drawHeader(WebPageProxy&, WebFrameProxy&, WebCore::FloatRect&&) final;
         void drawFooter(WebPageProxy&, WebFrameProxy&, WebCore::FloatRect&&) final;
-        void decidePolicyForNotificationPermissionRequest(WebPageProxy&, API::SecurityOrigin&, Function<void(bool)>&&) final;
+        void decidePolicyForNotificationPermissionRequest(WebPageProxy&, API::SecurityOrigin&, CompletionHandler<void(bool allowed)>&&) final;
         void unavailablePluginButtonClicked(WebPageProxy&, WKPluginUnavailabilityReason, API::Dictionary&) final;
         void mouseDidMoveOverElement(WebPageProxy&, const WebHitTestResultData&, OptionSet<WebEvent::Modifier>, API::Object*);
         void didClickAutoFillButton(WebPageProxy&, API::Object*) final;
@@ -144,7 +146,7 @@ private:
 #endif
         RetainPtr<NSArray> actionsForElement(_WKActivatedElementInfo *, RetainPtr<NSArray> defaultActions) final;
         void didNotHandleTapAsClick(const WebCore::IntPoint&) final;
-        void didNotHandleTapAsMeaningfulClickAtPoint(const WebCore::IntPoint&) final;
+        void didTapAtPoint(const WebCore::IntPoint&, WebKit::TapHandlingResult) final;
         UIViewController *presentingViewController() final;
 #endif // PLATFORM(IOS_FAMILY)
 
@@ -238,7 +240,7 @@ private:
 #endif
         bool webViewActionsForElementDefaultActions : 1;
         bool webViewDidNotHandleTapAsClickAtPoint : 1;
-        bool webViewDidNotHandleTapAsMeaningfulClickAtPoint : 1;
+        bool webViewDidTapAtPointWithResult : 1;
         bool presentingViewControllerForWebView : 1;
 #endif
         bool dataDetectionContextForWebView : 1;

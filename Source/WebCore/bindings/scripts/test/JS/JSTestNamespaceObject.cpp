@@ -33,6 +33,7 @@
 #include "JSDOMConvertNumbers.h"
 #include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMOperation.h"
 #include "JSDOMWrapperCache.h"
 #include "JSTestObj.h"
@@ -145,23 +146,13 @@ void JSTestNamespaceObject::finishCreation(VM& vm)
 
 JSValue JSTestNamespaceObject::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSTestNamespaceObjectDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+    return getDOMConstructor<JSTestNamespaceObjectDOMConstructor, DOMConstructorID::TestNamespaceObject>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 void JSTestNamespaceObject::destroy(JSC::JSCell* cell)
 {
     JSTestNamespaceObject* thisObject = static_cast<JSTestNamespaceObject*>(cell);
     thisObject->JSTestNamespaceObject::~JSTestNamespaceObject();
-}
-
-template<> inline JSTestNamespaceObject* IDLAttribute<JSTestNamespaceObject>::cast(JSGlobalObject& lexicalGlobalObject, EncodedJSValue thisValue)
-{
-    return jsDynamicCast<JSTestNamespaceObject*>(JSC::getVM(&lexicalGlobalObject), JSValue::decode(thisValue));
-}
-
-template<> inline JSTestNamespaceObject* IDLOperation<JSTestNamespaceObject>::cast(JSGlobalObject& lexicalGlobalObject, CallFrame& callFrame)
-{
-    return jsDynamicCast<JSTestNamespaceObject*>(JSC::getVM(&lexicalGlobalObject), callFrame.thisValue());
 }
 
 static inline JSValue jsTestNamespaceObjectConstructor_namespaceAttributeGetter(JSGlobalObject& lexicalGlobalObject)
@@ -216,7 +207,7 @@ static inline JSC::EncodedJSValue jsTestNamespaceObjectConstructorFunction_overl
     auto objArg = convert<IDLNullable<IDLInterface<TestObj>>>(*lexicalGlobalObject, argument0.value(), [](JSC::JSGlobalObject& lexicalGlobalObject, JSC::ThrowScope& scope) { throwArgumentTypeError(lexicalGlobalObject, scope, 0, "objArg", "TestInterfaceName", "overloadedNamespaceOperation", "TestObj"); });
     RETURN_IF_EXCEPTION(throwScope, encodedJSValue());
     EnsureStillAliveScope argument1 = callFrame->argument(1);
-    auto longArg = argument1.value().isUndefined() ? Optional<Converter<IDLLong>::ReturnType>() : Optional<Converter<IDLLong>::ReturnType>(convert<IDLLong>(*lexicalGlobalObject, argument1.value()));
+    auto longArg = argument1.value().isUndefined() ? std::optional<Converter<IDLLong>::ReturnType>() : std::optional<Converter<IDLLong>::ReturnType>(convert<IDLLong>(*lexicalGlobalObject, argument1.value()));
     RETURN_IF_EXCEPTION(throwScope, encodedJSValue());
     RELEASE_AND_RETURN(throwScope, JSValue::encode(toJS<IDLBoolean>(*lexicalGlobalObject, throwScope, TestNamespaceObject::overloadedNamespaceOperation(WTFMove(objArg), WTFMove(longArg)))));
 }

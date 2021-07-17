@@ -67,6 +67,7 @@
 #import <pal/spi/cocoa/NSAttributedStringSPI.h>
 #import <wtf/ASCIICType.h>
 #import <wtf/text/StringBuilder.h>
+#import <wtf/text/StringToIntegerConversion.h>
 
 #if ENABLE(DATA_DETECTION)
 #import "DataDetection.h"
@@ -261,7 +262,7 @@ public:
 
 private:
     HashMap<Element*, std::unique_ptr<ComputedStyleExtractor>> m_computedStyles;
-    HashSet<Node*> m_ancestorsUnderCommonAncestor;
+    HashSet<Ref<Node>> m_ancestorsUnderCommonAncestor;
 };
 
 @interface NSTextList (WebCoreNSTextListDetails)
@@ -923,8 +924,6 @@ static PlatformFont *_font(Element& element)
     return (__bridge PlatformFont *)renderer->style().fontCascade().primaryFont().getCTFont();
 }
 
-#define UIFloatIsZero(number) (fabs(number - 0) < FLT_EPSILON)
-
 NSDictionary *HTMLConverter::computedAttributesForElement(Element& element)
 {
     NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
@@ -978,7 +977,7 @@ NSDictionary *HTMLConverter::computedAttributesForElement(Element& element)
         }
 
         String fontWeight = _caches->propertyValueForNode(element, CSSPropertyFontStyle);
-        if (fontWeight.startsWith("bold") || fontWeight.toInt() >= 700) {
+        if (fontWeight.startsWith("bold") || parseIntegerAllowingTrailingJunk<int>(fontWeight).value_or(0) >= 700) {
             // ??? handle weight properly using NSFontManager
             PlatformFont *originalFont = font;
 #if PLATFORM(IOS_FAMILY)
@@ -1021,7 +1020,7 @@ NSDictionary *HTMLConverter::computedAttributesForElement(Element& element)
             [attrs setObject:@0.0 forKey:NSKernAttributeName];
         else {
             double kernVal = letterSpacing.length() ? letterSpacing.toDouble() : 0.0;
-            if (UIFloatIsZero(kernVal))
+            if (fabs(kernVal - 0) < FLT_EPSILON)
                 [attrs setObject:@0.0 forKey:NSKernAttributeName]; // auto and normal, the other possible values, are both "kerning enabled"
             else
                 [attrs setObject:@(kernVal) forKey:NSKernAttributeName];
@@ -2215,7 +2214,7 @@ void HTMLConverter::_traverseNode(Node& node, unsigned depth, bool embedded)
                         child = nextSiblingInComposedTreeIgnoringUserAgentShadow(*child);
                     }
                 }
-                _exitElement(element, depth, startIndex);
+                _exitElement(element, depth, std::min(startIndex, [_attrStr length]));
             }
         }
     } else if (node.nodeType() == Node::TEXT_NODE)
@@ -2283,7 +2282,7 @@ Node* HTMLConverterCaches::cacheAncestorsOfStartToBeConverted(const Position& st
     Node* ancestor = start.containerNode();
 
     while (ancestor) {
-        m_ancestorsUnderCommonAncestor.add(ancestor);
+        m_ancestorsUnderCommonAncestor.add(*ancestor);
         if (ancestor == commonAncestor)
             break;
         ancestor = ancestor->parentInComposedTree();

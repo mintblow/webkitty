@@ -44,6 +44,11 @@ public:
         return adoptRef(*new InbandTextTrackPrivateGStreamer(index, pad));
     }
 
+    static Ref<InbandTextTrackPrivateGStreamer> create(WeakPtr<MediaPlayerPrivateGStreamer>, gint index, GRefPtr<GstPad> pad)
+    {
+        return create(index, pad);
+    }
+
     static Ref<InbandTextTrackPrivateGStreamer> create(gint index, GRefPtr<GstStream> stream)
     {
         return adoptRef(*new InbandTextTrackPrivateGStreamer(index, stream));
@@ -71,7 +76,7 @@ private:
     void notifyTrackOfStreamChanged();
 
     gulong m_eventProbe;
-    Vector<GRefPtr<GstSample>> m_pendingSamples;
+    Vector<GRefPtr<GstSample>> m_pendingSamples WTF_GUARDED_BY_LOCK(m_sampleMutex);
     String m_streamId;
     Kind m_kind;
     Lock m_sampleMutex;

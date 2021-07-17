@@ -30,9 +30,9 @@
 #import "WebKitTestRunnerDraggingInfo.h"
 #import <WebKit/WKUIDelegatePrivate.h>
 #import <WebKit/WKWebViewPrivateForTesting.h>
+#import <WebKit/_WKInputDelegate.h>
 #import <wtf/Assertions.h>
 #import <wtf/BlockPtr.h>
-#import <wtf/Optional.h>
 #import <wtf/RetainPtr.h>
 
 #if PLATFORM(IOS_FAMILY)
@@ -60,7 +60,7 @@ struct CustomMenuActionInfo {
     BlockPtr<void()> callback;
 };
 
-@interface TestRunnerWKWebView () <WKUIDelegatePrivate
+@interface TestRunnerWKWebView () <WKUIDelegatePrivate, _WKInputDelegate
 #if PLATFORM(IOS_FAMILY)
     , UIGestureRecognizerDelegate
 #endif
@@ -68,7 +68,7 @@ struct CustomMenuActionInfo {
     RetainPtr<NSNumber> m_stableStateOverride;
     BOOL _isInteractingWithFormControl;
     BOOL _scrollingUpdatesDisabled;
-    Optional<CustomMenuActionInfo> _customMenuActionInfo;
+    std::optional<CustomMenuActionInfo> _customMenuActionInfo;
     RetainPtr<NSArray<NSString *>> _allowedMenuActions;
 #if PLATFORM(IOS_FAMILY)
     RetainPtr<UITapGestureRecognizer> _windowTapGestureRecognizer;
@@ -117,6 +117,7 @@ IGNORE_WARNINGS_END
         [center addObserver:self selector:@selector(_willPresentPopover) name:@"UIPopoverControllerWillPresentPopoverNotification" object:nil];
         [center addObserver:self selector:@selector(_didDismissPopover) name:@"UIPopoverControllerDidDismissPopoverNotification" object:nil];
         self.UIDelegate = self;
+        self._inputDelegate = self;
 #endif
     }
     return self;
@@ -208,6 +209,7 @@ IGNORE_WARNINGS_END
     self.didEndZoomingCallback = nil;
     self.didShowKeyboardCallback = nil;
     self.didHideKeyboardCallback = nil;
+    self.willStartInputSessionCallback = nil;
     self.willPresentPopoverCallback = nil;
     self.didDismissPopoverCallback = nil;
     self.didEndScrollingCallback = nil;
@@ -315,7 +317,7 @@ IGNORE_WARNINGS_END
     BOOL isCustomAction = action == @selector(performCustomAction:);
     BOOL canPerformActionByDefault = [super canPerformAction:action withSender:sender];
     if (isCustomAction)
-        canPerformActionByDefault = _customMenuActionInfo.hasValue();
+        canPerformActionByDefault = _customMenuActionInfo.has_value();
 
     if (canPerformActionByDefault && _allowedMenuActions && sender == UIMenuController.sharedMenuController) {
         BOOL isAllowed = NO;
@@ -397,9 +399,9 @@ IGNORE_WARNINGS_END
         self.didDismissPopoverCallback();
 }
 
-- (void)_didNotHandleTapAsMeaningfulClickAtPoint:(CGPoint)point
+- (void)_didTapAtPoint:(CGPoint)point withResult:(_WKTapHandlingResult)result
 {
-    WTR::TestController::singleton().didNotHandleTapAsMeaningfulClick();
+    WTR::TestController::singleton().didHandleTap(result == _WKTapHandlingResultMeaningfulClick);
 }
 
 - (void)scrollViewWillBeginZooming:(UIScrollView *)scrollView withView:(UIView *)view
@@ -568,6 +570,14 @@ static bool isQuickboardViewController(UIViewController *viewController)
     [self _invokeHideKeyboardCallbackIfNecessary];
 }
 
+#pragma mark - _WKInputDelegate
+
+- (void)_webView:(WKWebView *)webView willStartInputSession:(id <_WKFormInputSession>)inputSession
+{
+    if (self.willStartInputSessionCallback)
+        self.willStartInputSessionCallback();
+}
+
 #pragma mark - UIGestureRecognizerDelegate
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer
@@ -597,9 +607,14 @@ static bool isQuickboardViewController(UIViewController *viewController)
         self.didHideContactPickerCallback();
 }
 
-- (void)_appBoundNavigationDataForDomain:(NSString *)domain completionHandler:(void (^)(NSString * context))completionHandler
+- (void)_didLoadAppInitiatedRequest:(void (^)(BOOL result))completionHandler
 {
-    [super _appBoundNavigationDataForDomain:domain completionHandler:completionHandler];
+    [super _didLoadAppInitiatedRequest:completionHandler];
+}
+
+- (void)_didLoadNonAppInitiatedRequest:(void (^)(BOOL result))completionHandler
+{
+    [super _didLoadNonAppInitiatedRequest:completionHandler];
 }
 
 @end

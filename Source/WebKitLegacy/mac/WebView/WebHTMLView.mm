@@ -69,7 +69,6 @@
 #import "WebResourcePrivate.h"
 #import "WebSharingServicePickerController.h"
 #import "WebTextCompletionController.h"
-#import "WebTypesInternal.h"
 #import "WebUIDelegatePrivate.h"
 #import "WebViewInternal.h"
 #import <JavaScriptCore/InitializeThreading.h>
@@ -251,7 +250,7 @@ const auto WebEventMouseDown = NSEventTypeLeftMouseDown;
 - (void)forwardContextMenuAction:(id)sender;
 @end
 
-static Optional<WebCore::ContextMenuAction> toAction(NSInteger tag)
+static std::optional<WebCore::ContextMenuAction> toAction(NSInteger tag)
 {
     using namespace WebCore;
     if (tag >= ContextMenuItemBaseCustomTag && tag <= ContextMenuItemLastCustomTag) {
@@ -429,15 +428,15 @@ static Optional<WebCore::ContextMenuAction> toAction(NSInteger tag)
     case WebMenuItemTagTranslate:
         return ContextMenuItemTagTranslate;
     }
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
-static Optional<NSInteger> toTag(WebCore::ContextMenuAction action)
+static std::optional<NSInteger> toTag(WebCore::ContextMenuAction action)
 {
     using namespace WebCore;
     switch (action) {
     case ContextMenuItemTagNoAction:
-        return WTF::nullopt;
+        return std::nullopt;
 
     case ContextMenuItemTagOpenLinkInNewWindow:
         return WebMenuItemTagOpenLinkInNewWindow;
@@ -607,17 +606,17 @@ static Optional<NSInteger> toTag(WebCore::ContextMenuAction action)
         return WebMenuItemTagDictationAlternative;
     case ContextMenuItemTagToggleVideoFullscreen:
         return WebMenuItemTagToggleVideoFullscreen;
-    case ContextMenuItemTagAddHighlightToCurrentGroup:
-    case ContextMenuItemTagAddHighlightToNewGroup:
-        return WTF::nullopt;
+    case ContextMenuItemTagAddHighlightToCurrentQuickNote:
+    case ContextMenuItemTagAddHighlightToNewQuickNote:
+        return std::nullopt;
     case ContextMenuItemTagShareMenu:
         return WebMenuItemTagShareMenu;
     case ContextMenuItemTagToggleVideoEnhancedFullscreen:
         return WebMenuItemTagToggleVideoEnhancedFullscreen;
     case ContextMenuItemTagTranslate:
         return WebMenuItemTagTranslate;
-    case ContextMenuItemTagRevealImage:
-        return WTF::nullopt;
+    case ContextMenuItemTagQuickLookImage:
+        return std::nullopt;
 
     case ContextMenuItemBaseCustomTag ... ContextMenuItemLastCustomTag:
         // We just pass these through.
@@ -627,7 +626,7 @@ static Optional<NSInteger> toTag(WebCore::ContextMenuAction action)
         ASSERT_NOT_REACHED();
     }
 
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 @implementation WebMenuTarget
@@ -5953,7 +5952,7 @@ static BOOL writingDirectionKeyBindingsEnabled()
 
 - (void)quickLookWithEvent:(NSEvent *)event
 {
-    [[self _webView] _clearTextIndicatorWithAnimation:WebCore::TextIndicatorWindowDismissalAnimation::FadeOut];
+    [[self _webView] _clearTextIndicatorWithAnimation:WebCore::TextIndicatorDismissalAnimation::FadeOut];
     [super quickLookWithEvent:event];
 }
 
@@ -7069,9 +7068,9 @@ static CGImageRef selectionImage(WebCore::Frame* frame, bool forceBlackText)
     auto* coreFrame = core([self _frame]);
     if (!coreFrame)
         return nil;
-    OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::AllowChildFrameContent };
+    OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::AllowChildFrameContent };
     if (!allowShadowContent)
-        hitType.add(HitTestRequest::DisallowUserAgentShadowContent);
+        hitType.add(HitTestRequest::Type::DisallowUserAgentShadowContent);
     return adoptNS([[WebElementDictionary alloc] initWithHitTestResult:coreFrame->eventHandler().hitTestResultAtPoint(IntPoint { point }, hitType)]).autorelease();
 }
 

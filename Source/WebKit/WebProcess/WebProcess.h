@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "AccessibilityPreferences.h"
 #include "AuxiliaryProcess.h"
 #include "CacheModel.h"
 #include "PluginProcessConnectionManager.h"
@@ -70,6 +71,10 @@
 #include <WebCore/PlatformDisplayLibWPE.h>
 #endif
 
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+#include <WebCore/CaptionUserPreferences.h>
+#endif
+
 namespace API {
 class Object;
 }
@@ -109,6 +114,7 @@ struct ServiceWorkerContextData;
 
 namespace WebKit {
 
+class AudioMediaStreamTrackRendererInternalUnitManager;
 class EventDispatcher;
 class GamepadData;
 class GPUProcessConnection;
@@ -127,6 +133,7 @@ class UserData;
 class WaylandCompositorDisplay;
 class WebAuthnProcessConnection;
 class WebAutomationSessionProxy;
+class WebBroadcastChannelRegistry;
 class WebCacheStorageProvider;
 class WebCookieJar;
 class WebCompiledContentRuleListData;
@@ -201,13 +208,15 @@ public:
 
     bool fullKeyboardAccessEnabled() const { return m_fullKeyboardAccessEnabled; }
 
-#if HAVE(UIKIT_WITH_MOUSE_SUPPORT) && PLATFORM(IOS)
+#if HAVE(MOUSE_DEVICE_OBSERVATION)
     bool hasMouseDevice() const { return m_hasMouseDevice; }
     void setHasMouseDevice(bool);
 #endif
 
+#if HAVE(STYLUS_DEVICE_OBSERVATION)
     bool hasStylusDevice() const { return m_hasStylusDevice; }
     void setHasStylusDevice(bool);
+#endif
 
     WebFrame* webFrame(WebCore::FrameIdentifier) const;
     Vector<WebFrame*> webFrames() const;
@@ -242,6 +251,9 @@ public:
 
 #if PLATFORM(COCOA) && USE(LIBWEBRTC)
     LibWebRTCCodecs& libWebRTCCodecs();
+#endif
+#if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
+    AudioMediaStreamTrackRendererInternalUnitManager& audioMediaStreamTrackRendererInternalUnitManager();
 #endif
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA)
     RemoteLegacyCDMFactory& legacyCDMFactory();
@@ -324,6 +336,7 @@ public:
     WebAutomationSessionProxy* automationSessionProxy() { return m_automationSessionProxy.get(); }
 
     WebCacheStorageProvider& cacheStorageProvider() { return m_cacheStorageProvider.get(); }
+    WebBroadcastChannelRegistry& broadcastChannelRegistry() { return m_broadcastChannelRegistry.get(); }
     WebCookieJar& cookieJar() { return m_cookieJar.get(); }
     WebSocketChannelManager& webSocketChannelManager() { return m_webSocketChannelManager; }
 
@@ -342,7 +355,7 @@ public:
 #endif
     void unblockServicesRequiredByAccessibility(const SandboxExtension::HandleArray&);
 #if ENABLE(CFPREFS_DIRECT_MODE)
-    void notifyPreferencesChanged(const String& domain, const String& key, const Optional<String>& encodedValue);
+    void notifyPreferencesChanged(const String& domain, const String& key, const std::optional<String>& encodedValue);
     void unblockPreferenceService(SandboxExtension::HandleArray&&);
 #endif
     void powerSourceDidChange(bool);
@@ -399,7 +412,7 @@ private:
     void prewarmWithDomainInformation(const WebCore::PrewarmInformation&);
 
 #if USE(OS_STATE)
-    void registerWithStateDumper();
+    RetainPtr<NSDictionary> additionalStateForDiagnosticReport() const final;
 #endif
 
     void markAllLayersVolatile(CompletionHandler<void()>&&);
@@ -448,7 +461,6 @@ private:
     void garbageCollectJavaScriptObjects();
     void setJavaScriptGarbageCollectorTimerEnabled(bool flag);
 
-    void mainThreadPing();
     void backgroundResponsivenessPing();
 
 #if ENABLE(GAMEPAD)
@@ -560,6 +572,11 @@ private:
     void backlightLevelDidChange(float backlightLevel);
 #endif
 
+    void accessibilityPreferencesDidChange(const AccessibilityPreferences&);
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+    void setMediaAccessibilityPreferences(WebCore::CaptionUserPreferences::CaptionDisplayMode, const Vector<String>&);
+#endif
+
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
     void colorPreferencesDidChange();
 #endif
@@ -591,8 +608,6 @@ private:
     void setUseSystemAppearanceForScrollbars(bool);
 #endif
 
-    bool isAlwaysOnLoggingAllowed() { return m_sessionID ? m_sessionID->isAlwaysOnLoggingAllowed() : true; }
-
     RefPtr<WebConnectionToUIProcess> m_webConnection;
 
     HashMap<WebCore::PageIdentifier, RefPtr<WebPage>> m_pageMap;
@@ -614,11 +629,13 @@ private:
 
     bool m_fullKeyboardAccessEnabled { false };
 
-#if HAVE(UIKIT_WITH_MOUSE_SUPPORT) && PLATFORM(IOS)
+#if HAVE(MOUSE_DEVICE_OBSERVATION)
     bool m_hasMouseDevice { false };
 #endif
 
+#if HAVE(STYLUS_DEVICE_OBSERVATION)
     bool m_hasStylusDevice { false };
+#endif
 
     HashMap<WebCore::FrameIdentifier, WebFrame*> m_frameMap;
 
@@ -636,6 +653,9 @@ private:
 #if PLATFORM(COCOA) && USE(LIBWEBRTC)
     RefPtr<LibWebRTCCodecs> m_libWebRTCCodecs;
 #endif
+#if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
+    std::unique_ptr<AudioMediaStreamTrackRendererInternalUnitManager> m_audioMediaStreamTrackRendererInternalUnitManager;
+#endif
 #endif
 
 #if ENABLE(WEB_AUTHN)
@@ -643,6 +663,7 @@ private:
 #endif
 
     Ref<WebCacheStorageProvider> m_cacheStorageProvider;
+    Ref<WebBroadcastChannelRegistry> m_broadcastChannelRegistry;
     Ref<WebCookieJar> m_cookieJar;
     WebSocketChannelManager m_webSocketChannelManager;
 
@@ -681,7 +702,7 @@ private:
     bool m_suppressMemoryPressureHandler { false };
 #if PLATFORM(MAC)
     std::unique_ptr<WebCore::CPUMonitor> m_cpuMonitor;
-    Optional<double> m_cpuLimit;
+    std::optional<double> m_cpuLimit;
 
     String m_uiProcessName;
     WebCore::RegistrableDomain m_registrableDomain;
@@ -721,7 +742,7 @@ private:
     
     // Prewarmed WebProcesses do not have an associated sessionID yet, which is why this is an optional.
     // By the time the WebProcess gets a WebPage, it is guaranteed to have a sessionID.
-    Optional<PAL::SessionID> m_sessionID;
+    std::optional<PAL::SessionID> m_sessionID;
 
 #if ENABLE(RESOURCE_LOAD_STATISTICS)
     WebCore::ThirdPartyCookieBlockingMode m_thirdPartyCookieBlockingMode { WebCore::ThirdPartyCookieBlockingMode::All };

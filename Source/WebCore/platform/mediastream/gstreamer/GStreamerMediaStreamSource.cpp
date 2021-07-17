@@ -127,14 +127,18 @@ public:
         , m_track(track)
         , m_padName(padName)
     {
-        if (track.type() == RealtimeMediaSource::Type::Audio)
+        const char* elementName = nullptr;
+        if (track.type() == RealtimeMediaSource::Type::Audio) {
             m_audioTrack = AudioTrackPrivateMediaStream::create(track);
-        else if (track.type() == RealtimeMediaSource::Type::Video)
+            elementName = "audiosrc";
+        } else if (track.type() == RealtimeMediaSource::Type::Video) {
             m_videoTrack = VideoTrackPrivateMediaStream::create(track);
+            elementName = "videosrc";
+        } else
+            ASSERT_NOT_REACHED();
 
         bool isCaptureTrack = track.isCaptureTrack();
-        m_src = gst_element_factory_make("appsrc", nullptr);
-        RELEASE_ASSERT_WITH_MESSAGE(GST_IS_APP_SRC(m_src.get()), "GStreamer appsrc element not found. Please make sure to install gst-plugins-base");
+        m_src = makeGStreamerElement("appsrc", elementName);
 
         g_object_set(m_src.get(), "is-live", TRUE, "format", GST_FORMAT_TIME, "emit-signals", TRUE, "min-percent", 100,
             "do-timestamp", isCaptureTrack, nullptr);
@@ -163,6 +167,7 @@ public:
         if (m_isObserving)
             return;
 
+        GST_DEBUG_OBJECT(m_src.get(), "Starting track/source observation");
         m_track.addObserver(*this);
         switch (m_track.type()) {
         case RealtimeMediaSource::Type::Audio:
@@ -182,6 +187,7 @@ public:
         if (!m_isObserving)
             return;
 
+        GST_DEBUG_OBJECT(m_src.get(), "Stopping track/source observation");
         m_isObserving = false;
         switch (m_track.type()) {
         case RealtimeMediaSource::Type::Audio:
@@ -240,10 +246,21 @@ public:
 
     void trackStarted(MediaStreamTrackPrivate&) final { };
     void trackEnded(MediaStreamTrackPrivate&) final;
-    void trackEnabledChanged(MediaStreamTrackPrivate&) final { };
     void trackMutedChanged(MediaStreamTrackPrivate&) final { };
     void trackSettingsChanged(MediaStreamTrackPrivate&) final { };
     void readyStateChanged(MediaStreamTrackPrivate&) final { };
+
+    void trackEnabledChanged(MediaStreamTrackPrivate&) final
+    {
+        GST_INFO_OBJECT(m_src.get(), "Track enabled: %s", boolForPrinting(m_track.enabled()));
+        if (m_blackFrame && !m_track.enabled()) {
+            m_enoughData = false;
+            m_needsDiscont = true;
+            gst_element_send_event(m_src.get(), gst_event_new_flush_start());
+            gst_element_send_event(m_src.get(), gst_event_new_flush_stop(FALSE));
+            pushBlackFrame();
+        }
+    }
 
     void videoSampleAvailable(MediaSample& sample) final
     {
@@ -251,29 +268,25 @@ public:
             return;
 
         auto* gstSample = static_cast<MediaSampleGStreamer*>(&sample)->platformSample().sample.gstSample;
+        auto* caps = gst_sample_get_caps(gstSample);
+        GstVideoInfo info;
+        gst_video_info_from_caps(&info, caps);
+
+        int width = GST_VIDEO_INFO_WIDTH(&info);
+        int height = GST_VIDEO_INFO_HEIGHT(&info);
+        if (m_lastKnownSize != IntSize(width, height)) {
+            m_lastKnownSize.setWidth(width);
+            m_lastKnownSize.setHeight(height);
+            updateBlackFrame(caps);
+        }
+
         if (m_track.enabled()) {
+            GST_TRACE_OBJECT(m_src.get(), "Pushing video frame from enabled track");
             pushSample(gstSample);
             return;
         }
 
-        // In case the track is disabled, emit a black I420 frame.
-        auto caps = adoptGRef(gst_caps_copy(gst_sample_get_caps(gstSample)));
-        gst_caps_set_simple(caps.get(), "format", G_TYPE_STRING, "I420", nullptr);
-
-        GstVideoInfo info;
-        gst_video_info_from_caps(&info, caps.get());
-
-        auto buffer = adoptGRef(gst_buffer_new_allocate(nullptr, GST_VIDEO_INFO_SIZE(&info), nullptr));
-        {
-            GstMappedBuffer data(buffer, GST_MAP_WRITE);
-            auto yOffset = GST_VIDEO_INFO_PLANE_OFFSET(&info, 1);
-            auto uOffset = GST_VIDEO_INFO_PLANE_OFFSET(&info, 2);
-            memset(data.data(), 0, yOffset);
-            memset(data.data() + yOffset, 128, uOffset);
-        }
-        gst_buffer_add_video_meta_full(buffer.get(), GST_VIDEO_FRAME_FLAG_NONE, GST_VIDEO_FORMAT_I420, GST_VIDEO_INFO_WIDTH(&info), GST_VIDEO_INFO_HEIGHT(&info), 3, info.offset, info.stride);
-        auto blackSample = adoptGRef(gst_sample_new(buffer.get(), caps.get(), nullptr, nullptr));
-        pushSample(blackSample.get());
+        pushBlackFrame();
     }
 
     void audioSamplesAvailable(const MediaTime&, const PlatformAudioData& audioData, const AudioStreamDescription&, size_t) final
@@ -288,6 +301,32 @@ public:
     }
 
 private:
+    void updateBlackFrame(const GstCaps* sampleCaps)
+    {
+        GST_DEBUG_OBJECT(m_src.get(), "Updating black video frame");
+        auto caps = adoptGRef(gst_caps_copy(sampleCaps));
+        gst_caps_set_simple(caps.get(), "format", G_TYPE_STRING, "I420", nullptr);
+
+        GstVideoInfo info;
+        gst_video_info_from_caps(&info, caps.get());
+
+        auto buffer = adoptGRef(gst_buffer_new_allocate(nullptr, GST_VIDEO_INFO_SIZE(&info), nullptr));
+        {
+            GstMappedBuffer data(buffer, GST_MAP_WRITE);
+            auto yOffset = GST_VIDEO_INFO_PLANE_OFFSET(&info, 1);
+            memset(data.data(), 0, yOffset);
+            memset(data.data() + yOffset, 128, data.size() - yOffset);
+        }
+        gst_buffer_add_video_meta_full(buffer.get(), GST_VIDEO_FRAME_FLAG_NONE, GST_VIDEO_FORMAT_I420, m_lastKnownSize.width(), m_lastKnownSize.height(), 3, info.offset, info.stride);
+        m_blackFrame = adoptGRef(gst_sample_new(buffer.get(), caps.get(), nullptr, nullptr));
+    }
+
+    void pushBlackFrame()
+    {
+        GST_TRACE_OBJECT(m_src.get(), "Pushing black video frame");
+        pushSample(m_blackFrame.get());
+    }
+
     GstElement* m_parent { nullptr };
     MediaStreamTrackPrivate& m_track;
     GRefPtr<GstElement> m_src;
@@ -298,6 +337,8 @@ private:
     bool m_isObserving { false };
     RefPtr<AudioTrackPrivateMediaStream> m_audioTrack;
     RefPtr<VideoTrackPrivateMediaStream> m_videoTrack;
+    IntSize m_lastKnownSize;
+    GRefPtr<GstSample> m_blackFrame;
 };
 
 struct _WebKitMediaStreamSrcPrivate {
@@ -318,15 +359,30 @@ enum {
     PROP_LAST
 };
 
+static void webkitMediaStreamSrcTrackEnded(WebKitMediaStreamSrc*, InternalSource&);
+
 void WebKitMediaStreamObserver::didRemoveTrack(MediaStreamTrackPrivate& track)
 {
     if (!m_src)
         return;
 
     auto* element = WEBKIT_MEDIA_STREAM_SRC_CAST(m_src);
-    element->priv->sources.removeFirstMatching([&](auto& item) {
+    auto* priv = element->priv;
+
+    // Lookup the corresponding InternalSource and take it from the storage.
+    auto index = priv->sources.findMatching([&](auto& item) {
         return item->track().id() == track.id();
     });
+    std::unique_ptr<InternalSource> source = WTFMove(priv->sources[index]);
+    priv->sources.remove(index);
+
+    // Remove track from internal storage, so that the new stream collection will not reference it.
+    priv->tracks.removeFirstMatching([&](auto& item) {
+        return item->id() == track.id();
+    });
+
+    // Remove corresponding source pad, emit new stream collection.
+    webkitMediaStreamSrcTrackEnded(element, *source);
 }
 
 static GstURIType webkitMediaStreamSrcUriGetType(GType)

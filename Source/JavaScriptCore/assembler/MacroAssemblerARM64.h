@@ -30,7 +30,6 @@
 #include "ARM64Assembler.h"
 #include "AbstractMacroAssembler.h"
 #include <wtf/MathExtras.h>
-#include <wtf/Optional.h>
 
 namespace JSC {
 
@@ -449,6 +448,167 @@ public:
         m_assembler.and_<64>(dest, dest, dataTempRegister);
     }
 
+    // Bit operations:
+    void extractUnsignedBitfield32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.ubfx<32>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void extractUnsignedBitfield64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.ubfx<64>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void insertUnsignedBitfieldInZero32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.ubfiz<32>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void insertUnsignedBitfieldInZero64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.ubfiz<64>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void insertBitField32(RegisterID source, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.bfi<32>(dest, source, lsb.m_value, width.m_value);
+    }
+
+    void insertBitField64(RegisterID source, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.bfi<64>(dest, source, lsb.m_value, width.m_value);
+    }
+
+    void clearBitField32(TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.bfc<32>(dest, lsb.m_value, width.m_value);
+    }
+
+    void clearBitField64(TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.bfc<64>(dest, lsb.m_value, width.m_value);
+    }
+
+    void clearBitsWithMask32(RegisterID src, RegisterID mask, RegisterID dest)
+    {
+        m_assembler.bic<32>(dest, src, mask);
+    }
+
+    void clearBitsWithMask64(RegisterID src, RegisterID mask, RegisterID dest)
+    {
+        m_assembler.bic<64>(dest, src, mask);
+    }
+
+    void orNot32(RegisterID src, RegisterID mask, RegisterID dest)
+    {
+        m_assembler.orn<32>(dest, src, mask);
+    }
+
+    void orNot64(RegisterID src, RegisterID mask, RegisterID dest)
+    {
+        m_assembler.orn<64>(dest, src, mask);
+    }
+
+    void extractInsertBitfieldAtLowEnd32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.bfxil<32>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void extractInsertBitfieldAtLowEnd64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.bfxil<64>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void insertSignedBitfieldInZero32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.sbfiz<32>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void insertSignedBitfieldInZero64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.sbfiz<64>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void extractSignedBitfield32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.sbfx<32>(dest, src, lsb.m_value, width.m_value);
+    }
+
+    void extractSignedBitfield64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
+    {
+        m_assembler.sbfx<64>(dest, src, lsb.m_value, width.m_value);
+    }    
+
+    void extractRegister32(RegisterID n, RegisterID m, TrustedImm32 lsb, RegisterID d)
+    {
+        m_assembler.extr<32>(d, n, m, lsb.m_value);
+    }
+
+    void extractRegister64(RegisterID n, RegisterID m, TrustedImm32 lsb, RegisterID d)
+    {
+        m_assembler.extr<64>(d, n, m, lsb.m_value);
+    } 
+
+    void addLeftShift32(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.add<32>(d, n, m, Assembler::LSL, amount.m_value);
+    }
+
+    void addRightShift32(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.add<32>(d, n, m, Assembler::ASR, amount.m_value);
+    }
+
+    void addUnsignedRightShift32(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.add<32>(d, n, m, Assembler::LSR, amount.m_value);
+    }
+
+    void addLeftShift64(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.add<64>(d, n, m, Assembler::LSL, amount.m_value);
+    }
+
+    void addRightShift64(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.add<64>(d, n, m, Assembler::ASR, amount.m_value);
+    }
+
+    void addUnsignedRightShift64(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.add<64>(d, n, m, Assembler::LSR, amount.m_value);
+    }
+
+    void subLeftShift32(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.sub<32>(d, n, m, Assembler::LSL, amount.m_value);
+    }
+
+    void subRightShift32(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.sub<32>(d, n, m, Assembler::ASR, amount.m_value);
+    }
+
+    void subUnsignedRightShift32(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.sub<32>(d, n, m, Assembler::LSR, amount.m_value);
+    }
+
+    void subLeftShift64(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.sub<64>(d, n, m, Assembler::LSL, amount.m_value);
+    }
+
+    void subRightShift64(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.sub<64>(d, n, m, Assembler::ASR, amount.m_value);
+    }
+
+    void subUnsignedRightShift64(RegisterID n, RegisterID m, TrustedImm32 amount, RegisterID d)
+    {
+        m_assembler.sub<64>(d, n, m, Assembler::LSR, amount.m_value);
+    }
+
     void clearBit64(RegisterID bitToClear, RegisterID dest, RegisterID scratchForMask = InvalidGPRReg)
     {
         if (scratchForMask == InvalidGPRReg)
@@ -610,7 +770,7 @@ public:
 
     void multiplyNeg32(RegisterID mulLeft, RegisterID mulRight, RegisterID dest)
     {
-        m_assembler.msub<32>(dest, mulLeft, mulRight, ARM64Registers::zr);
+        m_assembler.mneg<32>(dest, mulLeft, mulRight);
     }
 
     void multiplyAdd64(RegisterID mulLeft, RegisterID mulRight, RegisterID summand, RegisterID dest)
@@ -618,14 +778,44 @@ public:
         m_assembler.madd<64>(dest, mulLeft, mulRight, summand);
     }
 
+    void multiplyAddSignExtend32(RegisterID mulLeft, RegisterID mulRight, RegisterID summand, RegisterID dest)
+    {
+        m_assembler.smaddl(dest, mulLeft, mulRight, summand);
+    }
+
+    void multiplyAddZeroExtend32(RegisterID mulLeft, RegisterID mulRight, RegisterID summand, RegisterID dest)
+    {
+        m_assembler.umaddl(dest, mulLeft, mulRight, summand);
+    }
+
     void multiplySub64(RegisterID mulLeft, RegisterID mulRight, RegisterID minuend, RegisterID dest)
     {
         m_assembler.msub<64>(dest, mulLeft, mulRight, minuend);
     }
 
+    void multiplySubSignExtend32(RegisterID mulLeft, RegisterID mulRight, RegisterID minuend, RegisterID dest)
+    {
+        m_assembler.smsubl(dest, mulLeft, mulRight, minuend);
+    }
+
+    void multiplySubZeroExtend32(RegisterID mulLeft, RegisterID mulRight, RegisterID minuend, RegisterID dest)
+    {
+        m_assembler.umsubl(dest, mulLeft, mulRight, minuend);
+    }
+
     void multiplyNeg64(RegisterID mulLeft, RegisterID mulRight, RegisterID dest)
     {
-        m_assembler.msub<64>(dest, mulLeft, mulRight, ARM64Registers::zr);
+        m_assembler.mneg<64>(dest, mulLeft, mulRight);
+    }
+
+    void multiplyNegSignExtend32(RegisterID mulLeft, RegisterID mulRight, RegisterID dest)
+    {
+        m_assembler.smnegl(dest, mulLeft, mulRight);
+    }
+
+    void multiplyNegZeroExtend32(RegisterID mulLeft, RegisterID mulRight, RegisterID dest)
+    {
+        m_assembler.umnegl(dest, mulLeft, mulRight);
     }
 
     void multiplySignExtend32(RegisterID left, RegisterID right, RegisterID dest)
@@ -894,17 +1084,24 @@ public:
 
     void sub32(TrustedImm32 imm, RegisterID dest)
     {
-        if (isUInt12(imm.m_value)) {
-            m_assembler.sub<32>(dest, dest, UInt12(imm.m_value));
+        sub32(dest, imm, dest);
+    }
+
+    void sub32(RegisterID left, TrustedImm32 imm, RegisterID dest)
+    {
+        intptr_t immediate = imm.m_value;
+
+        if (isUInt12(immediate)) {
+            m_assembler.sub<32>(dest, left, UInt12(immediate));
             return;
         }
-        if (isUInt12(-imm.m_value)) {
-            m_assembler.add<32>(dest, dest, UInt12(-imm.m_value));
+        if (isUInt12(-immediate)) {
+            m_assembler.add<32>(dest, left, UInt12(-immediate));
             return;
         }
 
         move(imm, getCachedDataTempRegisterIDAndInvalidate());
-        m_assembler.sub<32>(dest, dest, dataTempRegister);
+        m_assembler.sub<32>(dest, left, dataTempRegister);
     }
 
     void sub32(TrustedImm32 imm, Address address)
@@ -955,41 +1152,53 @@ public:
         m_assembler.sub<64>(dest, dest, src);
     }
 
-    void sub64(RegisterID a, RegisterID b, RegisterID dest)
+    void sub64(RegisterID left, RegisterID right, RegisterID dest)
     {
-        m_assembler.sub<64>(dest, a, b);
+        m_assembler.sub<64>(dest, left, right);
     }
-    
+
     void sub64(TrustedImm32 imm, RegisterID dest)
     {
-        if (isUInt12(imm.m_value)) {
-            m_assembler.sub<64>(dest, dest, UInt12(imm.m_value));
-            return;
-        }
-        if (isUInt12(-imm.m_value)) {
-            m_assembler.add<64>(dest, dest, UInt12(-imm.m_value));
-            return;
-        }
-
-        signExtend32ToPtr(imm, getCachedDataTempRegisterIDAndInvalidate());
-        m_assembler.sub<64>(dest, dest, dataTempRegister);
+        sub64(dest, imm, dest);
     }
-    
-    void sub64(TrustedImm64 imm, RegisterID dest)
+
+    void sub64(RegisterID left, TrustedImm32 imm, RegisterID dest)
     {
         intptr_t immediate = imm.m_value;
 
         if (isUInt12(immediate)) {
-            m_assembler.sub<64>(dest, dest, UInt12(static_cast<int32_t>(immediate)));
+            m_assembler.sub<64>(dest, left, UInt12(immediate));
             return;
         }
         if (isUInt12(-immediate)) {
-            m_assembler.add<64>(dest, dest, UInt12(static_cast<int32_t>(-immediate)));
+            m_assembler.add<64>(dest, left, UInt12(-immediate));
+            return;
+        }
+
+        signExtend32ToPtr(imm, getCachedDataTempRegisterIDAndInvalidate());
+        m_assembler.sub<64>(dest, left, dataTempRegister);
+    }
+
+    void sub64(TrustedImm64 imm, RegisterID dest)
+    {
+        sub64(dest, imm, dest);
+    }
+
+    void sub64(RegisterID left, TrustedImm64 imm, RegisterID dest)
+    {
+        intptr_t immediate = imm.m_value;
+
+        if (isUInt12(immediate)) {
+            m_assembler.sub<64>(dest, left, UInt12(static_cast<int32_t>(immediate)));
+            return;
+        }
+        if (isUInt12(-immediate)) {
+            m_assembler.add<64>(dest, left, UInt12(static_cast<int32_t>(-immediate)));
             return;
         }
 
         move(imm, getCachedDataTempRegisterIDAndInvalidate());
-        m_assembler.sub<64>(dest, dest, dataTempRegister);
+        m_assembler.sub<64>(dest, left, dataTempRegister);
     }
 
     void urshift32(RegisterID src, RegisterID shiftAmount, RegisterID dest)
@@ -1158,6 +1367,17 @@ public:
     }
 
     // Memory access operations:
+    Assembler::ExtendType indexExtendType(BaseIndex address)
+    {
+        switch (address.extend) {
+        case Extend::ZExt32:
+            return Assembler::UXTW;
+        case Extend::SExt32:
+            return Assembler::SXTW;
+        case Extend::None:
+            return Assembler::UXTX;
+        }
+    }
 
     void load64(ImplicitAddress address, RegisterID dest)
     {
@@ -1171,12 +1391,12 @@ public:
     void load64(BaseIndex address, RegisterID dest)
     {
         if (!address.offset && (!address.scale || address.scale == 3)) {
-            m_assembler.ldr<64>(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldr<64>(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldr<64>(dest, address.base, memoryTempRegister);
     }
 
@@ -1226,6 +1446,16 @@ public:
         m_assembler.ldnp<64>(dest1, dest2, src, offset.m_value);
     }
 
+    void loadPair64(RegisterID src, FPRegisterID dest1, FPRegisterID dest2)
+    {
+        loadPair64(src, TrustedImm32(0), dest1, dest2);
+    }
+
+    void loadPair64(RegisterID src, TrustedImm32 offset, FPRegisterID dest1, FPRegisterID dest2)
+    {
+        m_assembler.ldp<64>(dest1, dest2, src, offset.m_value);
+    }
+
     void abortWithReason(AbortReason reason)
     {
         // It is safe to use dataTempRegister directly since this is a crashing JIT Assert.
@@ -1260,12 +1490,12 @@ public:
     void load32(BaseIndex address, RegisterID dest)
     {
         if (!address.offset && (!address.scale || address.scale == 2)) {
-            m_assembler.ldr<32>(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldr<32>(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldr<32>(dest, address.base, memoryTempRegister);
     }
 
@@ -1307,12 +1537,12 @@ public:
     void load16(BaseIndex address, RegisterID dest)
     {
         if (!address.offset && (!address.scale || address.scale == 1)) {
-            m_assembler.ldrh(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldrh(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldrh(dest, address.base, memoryTempRegister);
     }
 
@@ -1351,12 +1581,12 @@ public:
     void load16SignedExtendTo32(BaseIndex address, RegisterID dest)
     {
         if (!address.offset && (!address.scale || address.scale == 1)) {
-            m_assembler.ldrsh<32>(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldrsh<32>(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldrsh<32>(dest, address.base, memoryTempRegister);
     }
 
@@ -1382,12 +1612,12 @@ public:
     void load8(BaseIndex address, RegisterID dest)
     {
         if (!address.offset && !address.scale) {
-            m_assembler.ldrb(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldrb(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldrb(dest, address.base, memoryTempRegister);
     }
     
@@ -1416,12 +1646,12 @@ public:
     void load8SignedExtendTo32(BaseIndex address, RegisterID dest)
     {
         if (!address.offset && !address.scale) {
-            m_assembler.ldrsb<32>(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldrsb<32>(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldrsb<32>(dest, address.base, memoryTempRegister);
     }
 
@@ -1455,12 +1685,12 @@ public:
     void store64(RegisterID src, BaseIndex address)
     {
         if (!address.offset && (!address.scale || address.scale == 3)) {
-            m_assembler.str<64>(src, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.str<64>(src, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.str<64>(src, address.base, memoryTempRegister);
     }
     
@@ -1512,16 +1742,6 @@ public:
         m_assembler.str<64>(src, dest, simm);
     }
     
-    void storeZero64(ImplicitAddress address)
-    {
-        store64(ARM64Registers::zr, address);
-    }
-    
-    void storeZero64(BaseIndex address)
-    {
-        store64(ARM64Registers::zr, address);
-    }
-    
     DataLabel32 store64WithAddressOffsetPatch(RegisterID src, Address address)
     {
         DataLabel32 label(this);
@@ -1550,6 +1770,16 @@ public:
         m_assembler.stnp<64>(src1, src2, dest, offset.m_value);
     }
 
+    void storePair64(FPRegisterID src1, FPRegisterID src2, RegisterID dest)
+    {
+        storePair64(src1, src2, dest, TrustedImm32(0));
+    }
+
+    void storePair64(FPRegisterID src1, FPRegisterID src2, RegisterID dest, TrustedImm32 offset)
+    {
+        m_assembler.stp<64>(src1, src2, dest, offset.m_value);
+    }
+
     void store32(RegisterID src, ImplicitAddress address)
     {
         if (tryStoreWithOffset<32>(src, address.base, address.offset))
@@ -1562,12 +1792,12 @@ public:
     void store32(RegisterID src, BaseIndex address)
     {
         if (!address.offset && (!address.scale || address.scale == 2)) {
-            m_assembler.str<32>(src, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.str<32>(src, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.str<32>(src, address.base, memoryTempRegister);
     }
 
@@ -1609,16 +1839,6 @@ public:
         store32(dataTempRegister, address);
     }
 
-    void storeZero32(ImplicitAddress address)
-    {
-        store32(ARM64Registers::zr, address);
-    }
-
-    void storeZero32(BaseIndex address)
-    {
-        store32(ARM64Registers::zr, address);
-    }
-
     DataLabel32 store32WithAddressOffsetPatch(RegisterID src, Address address)
     {
         DataLabel32 label(this);
@@ -1639,12 +1859,12 @@ public:
     void store16(RegisterID src, BaseIndex address)
     {
         if (!address.offset && (!address.scale || address.scale == 1)) {
-            m_assembler.strh(src, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.strh(src, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.strh(src, address.base, memoryTempRegister);
     }
 
@@ -1664,25 +1884,15 @@ public:
         store16(dataTempRegister, address);
     }
 
-    void storeZero16(ImplicitAddress address)
-    {
-        store16(ARM64Registers::zr, address);
-    }
-
-    void storeZero16(BaseIndex address)
-    {
-        store16(ARM64Registers::zr, address);
-    }
-
     void store8(RegisterID src, BaseIndex address)
     {
         if (!address.offset && !address.scale) {
-            m_assembler.strb(src, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.strb(src, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.strb(src, address.base, memoryTempRegister);
     }
 
@@ -1990,12 +2200,12 @@ public:
     void loadDouble(BaseIndex address, FPRegisterID dest)
     {
         if (!address.offset && (!address.scale || address.scale == 3)) {
-            m_assembler.ldr<64>(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldr<64>(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldr<64>(dest, address.base, memoryTempRegister);
     }
     
@@ -2017,12 +2227,12 @@ public:
     void loadFloat(BaseIndex address, FPRegisterID dest)
     {
         if (!address.offset && (!address.scale || address.scale == 2)) {
-            m_assembler.ldr<32>(dest, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.ldr<32>(dest, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.ldr<32>(dest, address.base, memoryTempRegister);
     }
 
@@ -2274,12 +2484,12 @@ public:
     void storeDouble(FPRegisterID src, BaseIndex address)
     {
         if (!address.offset && (!address.scale || address.scale == 3)) {
-            m_assembler.str<64>(src, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.str<64>(src, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.str<64>(src, address.base, memoryTempRegister);
     }
 
@@ -2295,12 +2505,12 @@ public:
     void storeFloat(FPRegisterID src, BaseIndex address)
     {
         if (!address.offset && (!address.scale || address.scale == 2)) {
-            m_assembler.str<32>(src, address.base, address.index, Assembler::UXTX, address.scale);
+            m_assembler.str<32>(src, address.base, address.index, indexExtendType(address), address.scale);
             return;
         }
 
         signExtend32ToPtr(TrustedImm32(address.offset), getCachedMemoryTempRegisterIDAndInvalidate());
-        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, Assembler::UXTX, address.scale);
+        m_assembler.add<64>(memoryTempRegister, memoryTempRegister, address.index, indexExtendType(address), address.scale);
         m_assembler.str<32>(src, address.base, memoryTempRegister);
     }
 
@@ -2466,7 +2676,7 @@ public:
         storeDouble(src, stackPointerRegister);
     }
 
-    static ptrdiff_t pushToSaveByteOffset() { return 16; }
+    static constexpr ptrdiff_t pushToSaveByteOffset() { return 16; }
 
     // Register move operations:
 
@@ -2682,15 +2892,6 @@ public:
     {
         m_assembler.tst<64>(left, right);
         m_assembler.fcsel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
-    }
-
-    // Bit field operations:
-
-    // destBitOffset is the top bit of the destination where the bits should be copied to. Zero is the lowest order bit.
-    void bitFieldInsert64(RegisterID source, unsigned destBitOffset, unsigned width, RegisterID dest)
-    {
-        ASSERT(width <= 64 - destBitOffset && destBitOffset < 64);
-        m_assembler.bfi<64>(dest, source, destBitOffset, width);
     }
 
     // Forwards / external control flow operations:
@@ -4044,7 +4245,7 @@ public:
         return static_cast<RelationalCondition>(Assembler::invert(static_cast<Assembler::Condition>(cond)));
     }
 
-    static Optional<ResultCondition> commuteCompareToZeroIntoTest(RelationalCondition cond)
+    static std::optional<ResultCondition> commuteCompareToZeroIntoTest(RelationalCondition cond)
     {
         switch (cond) {
         case Equal:
@@ -4057,7 +4258,7 @@ public:
             return PositiveOrZero;
             break;
         default:
-            return WTF::nullopt;
+            return std::nullopt;
         }
     }
 

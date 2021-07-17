@@ -126,7 +126,7 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
     WeakObjCPtr<WKWebView> _relatedWebView;
     WeakObjCPtr<WKWebView> _alternateWebViewForNavigationGestures;
     RetainPtr<NSString> _groupIdentifier;
-    Optional<RetainPtr<NSString>> _applicationNameForUserAgent;
+    std::optional<RetainPtr<NSString>> _applicationNameForUserAgent;
     NSTimeInterval _incrementalRenderingSuppressionTimeout;
     BOOL _respectsImageOrientation;
     BOOL _printsBackgrounds;
@@ -198,7 +198,7 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
     _allowsPictureInPictureMediaPlayback = YES;
 #endif
 
-    _allowsInlineMediaPlayback = WebKit::currentUserInterfaceIdiomIsPadOrMac();
+    _allowsInlineMediaPlayback = !WebKit::currentUserInterfaceIdiomIsPhoneOrWatch();
     _inlineMediaPlaybackRequiresPlaysInlineAttribute = !_allowsInlineMediaPlayback;
     _allowsInlineMediaPlaybackAfterFullscreen = !_allowsInlineMediaPlayback;
     _mediaDataLoadsAutomatically = _allowsInlineMediaPlayback;
@@ -302,7 +302,7 @@ static bool defaultShouldDecidePolicyBeforeLoadingQuickLookPreview()
 
     [coder encodeBool:self.suppressesIncrementalRendering forKey:@"suppressesIncrementalRendering"];
 
-    if (_applicationNameForUserAgent.hasValue())
+    if (_applicationNameForUserAgent)
         [coder encodeObject:self.applicationNameForUserAgent forKey:@"applicationNameForUserAgent"];
 
     [coder encodeBool:self.allowsAirPlayForMediaPlayback forKey:@"allowsAirPlayForMediaPlayback"];
@@ -537,12 +537,12 @@ static NSString *defaultApplicationNameForUserAgent()
 
 - (NSString *)_applicationNameForDesktopUserAgent
 {
-    return _applicationNameForUserAgent.valueOr(nil).get();
+    return _applicationNameForUserAgent.value_or(nil).get();
 }
 
 - (NSString *)applicationNameForUserAgent
 {
-    return _applicationNameForUserAgent.valueOr(defaultApplicationNameForUserAgent()).get();
+    return _applicationNameForUserAgent.value_or(defaultApplicationNameForUserAgent()).get();
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent
@@ -565,7 +565,7 @@ static NSString *defaultApplicationNameForUserAgent()
     if ([WKWebView handlesURLScheme:urlScheme])
         [NSException raise:NSInvalidArgumentException format:@"'%@' is a URL scheme that WKWebView handles natively", urlScheme];
 
-    auto canonicalScheme = WTF::URLParser::maybeCanonicalizeScheme(urlScheme);
+    auto canonicalScheme = WTF::URLParser::maybeCanonicalizeScheme(String(urlScheme));
     if (!canonicalScheme)
         [NSException raise:NSInvalidArgumentException format:@"'%@' is not a valid URL scheme", urlScheme];
 
@@ -577,7 +577,7 @@ static NSString *defaultApplicationNameForUserAgent()
 
 - (id <WKURLSchemeHandler>)urlSchemeHandlerForURLScheme:(NSString *)urlScheme
 {
-    auto canonicalScheme = WTF::URLParser::maybeCanonicalizeScheme(urlScheme);
+    auto canonicalScheme = WTF::URLParser::maybeCanonicalizeScheme(String(urlScheme));
     if (!canonicalScheme)
         return nil;
 
@@ -844,6 +844,35 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 {
     _pageConfiguration->setLimitsNavigationsToAppBoundDomains(limitsToAppBoundDomains);
 }
+
+static _WKAttributionOverrideTesting toWKAttributionOverrideTesting(WebKit::AttributionOverrideTesting value)
+{
+    if (value == WebKit::AttributionOverrideTesting::AppInitiated)
+        return _WKAttributionOverrideTestingAppInitiated;
+    if (value == WebKit::AttributionOverrideTesting::UserInitiated)
+        return _WKAttributionOverrideTestingUserInitiated;
+    return _WKAttributionOverrideTestingNoOverride;
+}
+
+static WebKit::AttributionOverrideTesting toAttributionOverrideTesting(_WKAttributionOverrideTesting value)
+{
+    if (value == _WKAttributionOverrideTestingAppInitiated)
+        return WebKit::AttributionOverrideTesting::AppInitiated;
+    if (value == _WKAttributionOverrideTestingUserInitiated)
+        return WebKit::AttributionOverrideTesting::UserInitiated;
+    return WebKit::AttributionOverrideTesting::NoOverride;
+}
+
+- (void)_setAppInitiatedOverrideValueForTesting:(_WKAttributionOverrideTesting)value
+{
+    _pageConfiguration->setAppInitiatedOverrideValueForTesting(toAttributionOverrideTesting(value));
+}
+
+- (_WKAttributionOverrideTesting)_appInitiatedOverrideValueForTesting
+{
+    return toWKAttributionOverrideTesting(_pageConfiguration->appInitiatedOverrideValueForTesting());
+}
+
 #endif // PLATFORM(IOS_FAMILY)
 
 - (BOOL)_ignoresAppBoundDomains
@@ -952,12 +981,33 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 
 - (void)_setLoadsFromNetwork:(BOOL)loads
 {
-    _pageConfiguration->setLoadsFromNetwork(loads);
+    _pageConfiguration->setAllowedNetworkHosts(loads ? std::nullopt : std::optional<HashSet<String>> { HashSet<String> { } });
 }
 
 - (BOOL)_loadsFromNetwork
 {
-    return _pageConfiguration->loadsFromNetwork();
+    return _pageConfiguration->allowedNetworkHosts() == std::nullopt;
+}
+
+- (void)_setAllowedNetworkHosts:(NSSet<NSString *> *)hosts
+{
+    if (!hosts)
+        return _pageConfiguration->setAllowedNetworkHosts(std::nullopt);
+    HashSet<String> set;
+    for (NSString *host in hosts)
+        set.add(host);
+    _pageConfiguration->setAllowedNetworkHosts(WTFMove(set));
+}
+
+- (NSSet<NSString *> *)_allowedNetworkHosts
+{
+    const auto& hosts = _pageConfiguration->allowedNetworkHosts();
+    if (!hosts)
+        return nil;
+    NSMutableSet<NSString *> *set = [NSMutableSet setWithCapacity:hosts->size()];
+    for (const auto& host : *hosts)
+        [set addObject:host];
+    return set;
 }
 
 - (void)_setLoadsSubresources:(BOOL)loads
@@ -1135,7 +1185,7 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 
 - (double)_cpuLimit
 {
-    return _pageConfiguration->cpuLimit().valueOr(0);
+    return _pageConfiguration->cpuLimit().value_or(0);
 }
 
 #endif // PLATFORM(MAC)
@@ -1299,6 +1349,19 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 - (double)_sampledPageTopColorMinHeight
 {
     return _sampledPageTopColorMinHeight;
+}
+
+- (void)_setAttributedBundleIdentifier:(NSString *)identifier
+{
+    _pageConfiguration->setAttributedBundleIdentifier(identifier);
+}
+
+- (NSString *)_attributedBundleIdentifier
+{
+    auto& identifier = _pageConfiguration->attributedBundleIdentifier();
+    if (!identifier)
+        return nil;
+    return identifier;
 }
 
 @end

@@ -29,7 +29,6 @@
 #include "HTMLNames.h"
 #include "HTMLOListElement.h"
 #include "HTMLUListElement.h"
-#include "InlineElementBox.h"
 #include "PseudoElement.h"
 #include "RenderStyleConstants.h"
 #include "RenderTreeBuilder.h"
@@ -239,7 +238,7 @@ void RenderListItem::updateValueNow() const
 void RenderListItem::updateValue()
 {
     if (!m_valueWasSetExplicitly) {
-        m_value = WTF::nullopt;
+        m_value = std::nullopt;
         if (m_marker)
             m_marker->setNeedsLayoutAndPrefWidthsRecalc();
     }
@@ -271,29 +270,24 @@ void RenderListItem::computePreferredLogicalWidths()
 
 void RenderListItem::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    if (!logicalHeight() && hasOverflowClip())
+    if (!logicalHeight() && hasNonVisibleOverflow())
         return;
 
     RenderBlockFlow::paint(paintInfo, paintOffset);
 }
 
-const String& RenderListItem::markerText() const
-{
-    if (m_marker)
-        return m_marker->text();
-    return nullAtom().string();
-}
-
-String RenderListItem::markerTextWithSuffix() const
+StringView RenderListItem::markerTextWithoutSuffix() const
 {
     if (!m_marker)
-        return String();
+        return { };
+    return m_marker->textWithoutSuffix();
+}
 
-    // Append the suffix for the marker in the right place depending
-    // on the direction of the text (right-to-left or left-to-right).
-    if (m_marker->style().isLeftToRightDirection())
-        return m_marker->text() + m_marker->suffix();
-    return m_marker->suffix() + m_marker->text();
+StringView RenderListItem::markerTextWithSuffix() const
+{
+    if (!m_marker)
+        return { };
+    return m_marker->textWithSuffix();
 }
 
 void RenderListItem::explicitValueChanged()
@@ -310,7 +304,7 @@ void RenderListItem::explicitValueChanged()
         item->updateValue();
 }
 
-void RenderListItem::setExplicitValue(Optional<int> value)
+void RenderListItem::setExplicitValue(std::optional<int> value)
 {
     if (!value) {
         if (!m_valueWasSetExplicitly)
@@ -319,7 +313,7 @@ void RenderListItem::setExplicitValue(Optional<int> value)
         if (m_valueWasSetExplicitly && m_value == value)
             return;
     }
-    m_valueWasSetExplicitly = value.hasValue();
+    m_valueWasSetExplicitly = value.has_value();
     m_value = value;
     explicitValueChanged();
 }

@@ -37,15 +37,17 @@ public:
         : Range()
         , m_startPhysicalSize(0)
         , m_totalPhysicalSize(0)
+        , m_physicalEnd(begin())
         , m_isEligible(true)
         , m_usedSinceLastScavenge(false)
     {
     }
 
-    LargeRange(const Range& other, size_t startPhysicalSize, size_t totalPhysicalSize)
+    LargeRange(const Range& other, size_t startPhysicalSize, size_t totalPhysicalSize, void* physicalEnd)
         : Range(other)
         , m_startPhysicalSize(startPhysicalSize)
         , m_totalPhysicalSize(totalPhysicalSize)
+        , m_physicalEnd(static_cast<char*>(physicalEnd))
         , m_isEligible(true)
         , m_usedSinceLastScavenge(false)
     {
@@ -53,10 +55,11 @@ public:
         BASSERT(this->totalPhysicalSize() >= this->startPhysicalSize());
     }
 
-    LargeRange(void* begin, size_t size, size_t startPhysicalSize, size_t totalPhysicalSize, bool usedSinceLastScavenge = false)
+    LargeRange(void* begin, size_t size, size_t startPhysicalSize, size_t totalPhysicalSize, void* physicalEnd, bool usedSinceLastScavenge = false)
         : Range(begin, size)
         , m_startPhysicalSize(startPhysicalSize)
         , m_totalPhysicalSize(totalPhysicalSize)
+        , m_physicalEnd(static_cast<char*>(physicalEnd))
         , m_isEligible(true)
         , m_usedSinceLastScavenge(usedSinceLastScavenge)
     {
@@ -84,6 +87,13 @@ public:
     size_t totalPhysicalSize() const { return m_totalPhysicalSize; }
     void setTotalPhysicalSize(size_t totalPhysicalSize) { m_totalPhysicalSize = totalPhysicalSize; }
 
+    // This is the address past the end of physical memory in this range.
+    // When decomitting this range, we decommitt [begin(), physicalEnd).
+    char* physicalEnd() const { return m_physicalEnd; }
+    void setPhysicalEnd(void* physicalEnd) { m_physicalEnd = static_cast<char*>(physicalEnd); }
+    void clearPhysicalEnd() { m_physicalEnd = begin(); }
+    bool hasPhysicalPages() { return m_physicalEnd != begin(); }
+
     std::pair<LargeRange, LargeRange> split(size_t) const;
 
     void setEligible(bool eligible) { m_isEligible = eligible; }
@@ -99,6 +109,7 @@ public:
 private:
     size_t m_startPhysicalSize;
     size_t m_totalPhysicalSize;
+    char* m_physicalEnd;
     unsigned m_isEligible: 1;
     unsigned m_usedSinceLastScavenge: 1;
 };
@@ -123,14 +134,17 @@ inline bool canMerge(const LargeRange& a, const LargeRange& b)
 inline LargeRange merge(const LargeRange& a, const LargeRange& b)
 {
     const LargeRange& left = std::min(a, b);
+    const LargeRange& right = std::max(a, b);
+    void* physicalEnd = right.totalPhysicalSize() ? right.physicalEnd() : left.physicalEnd();
     bool mergedUsedSinceLastScavenge = a.usedSinceLastScavenge() || b.usedSinceLastScavenge();
     if (left.size() == left.startPhysicalSize()) {
         return LargeRange(
             left.begin(),
             a.size() + b.size(),
             a.startPhysicalSize() + b.startPhysicalSize(),
-            a.totalPhysicalSize() + b.totalPhysicalSize()
-            , mergedUsedSinceLastScavenge
+            a.totalPhysicalSize() + b.totalPhysicalSize(),
+            physicalEnd,
+            mergedUsedSinceLastScavenge
         );
         
     }
@@ -139,8 +153,9 @@ inline LargeRange merge(const LargeRange& a, const LargeRange& b)
         left.begin(),
         a.size() + b.size(),
         left.startPhysicalSize(),
-        a.totalPhysicalSize() + b.totalPhysicalSize()
-        , mergedUsedSinceLastScavenge
+        a.totalPhysicalSize() + b.totalPhysicalSize(),
+        physicalEnd,
+        mergedUsedSinceLastScavenge
     );
 }
 
@@ -148,11 +163,12 @@ inline std::pair<LargeRange, LargeRange> LargeRange::split(size_t leftSize) cons
 {
     BASSERT(leftSize <= this->size());
     size_t rightSize = this->size() - leftSize;
+    char* physicalEnd = this->physicalEnd();
 
     if (leftSize <= startPhysicalSize()) {
         BASSERT(totalPhysicalSize() >= leftSize);
-        LargeRange left(begin(), leftSize, leftSize, leftSize);
-        LargeRange right(left.end(), rightSize, startPhysicalSize() - leftSize, totalPhysicalSize() - leftSize);
+        LargeRange left(begin(), leftSize, leftSize, leftSize, std::min(physicalEnd, begin() + leftSize));
+        LargeRange right(left.end(), rightSize, startPhysicalSize() - leftSize, totalPhysicalSize() - leftSize, std::max(physicalEnd, left.end()));
         return std::make_pair(left, right);
     }
 
@@ -167,8 +183,8 @@ inline std::pair<LargeRange, LargeRange> LargeRange::split(size_t leftSize) cons
         rightTotalPhysicalSize = rightSize;
     }
 
-    LargeRange left(begin(), leftSize, startPhysicalSize(), leftTotalPhysicalSize);
-    LargeRange right(left.end(), rightSize, 0, rightTotalPhysicalSize);
+    LargeRange left(begin(), leftSize, startPhysicalSize(), leftTotalPhysicalSize, std::min(physicalEnd, begin() + leftSize));
+    LargeRange right(left.end(), rightSize, 0, rightTotalPhysicalSize, std::max(physicalEnd, left.end()));
     return std::make_pair(left, right);
 }
 

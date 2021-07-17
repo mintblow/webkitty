@@ -32,7 +32,8 @@ from steps import (ApplyPatch, ApplyWatchList, CheckOutSource, CheckOutSpecificR
                    RunEWSUnitTests, RunResultsdbpyTests, RunJavaScriptCoreTests, RunWebKit1Tests, RunWebKitPerlTests, RunWebKitPyPython2Tests,
                    RunWebKitPyPython3Tests, RunWebKitTests, RunWebKitTestsInStressMode, RunWebKitTestsInStressGuardmallocMode,
                    SetBuildSummary, ShowIdentifier, TriggerCrashLogSubmission, UpdateWorkingDirectory,
-                   ValidatePatch, ValidateChangeLogAndReviewer, ValidateCommiterAndReviewer, WaitForCrashCollection)
+                   ValidatePatch, ValidateChangeLogAndReviewer, ValidateCommiterAndReviewer, WaitForCrashCollection,
+                   InstallBuiltProduct)
 
 
 class Factory(factory.BuildFactory):
@@ -114,6 +115,8 @@ class BuildFactory(Factory):
         if platform == 'gtk':
             self.addStep(InstallGtkDependencies())
         self.addStep(CompileWebKit(skipUpload=self.skipUpload))
+        if platform == 'gtk':
+            self.addStep(InstallBuiltProduct())
 
 
 class TestFactory(Factory):
@@ -134,6 +137,8 @@ class TestFactory(Factory):
             self.addStep(WaitForCrashCollection())
         self.addStep(KillOldProcesses())
         if self.LayoutTestClass:
+            self.addStep(FindModifiedLayoutTests(skipBuildIfNoResult=False))
+            self.addStep(RunWebKitTestsInStressMode(num_iterations=10))
             self.addStep(self.LayoutTestClass())
         if self.APITestClass:
             self.addStep(self.APITestClass())
@@ -152,7 +157,6 @@ class StressTestFactory(TestFactory):
         self.addStep(WaitForCrashCollection())
         self.addStep(KillOldProcesses())
         self.addStep(RunWebKitTestsInStressMode())
-        self.addStep(RunWebKitTestsInStressGuardmallocMode())
         self.addStep(TriggerCrashLogSubmission())
         self.addStep(SetBuildSummary())
 

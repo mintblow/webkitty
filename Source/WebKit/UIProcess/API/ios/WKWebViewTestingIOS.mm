@@ -96,7 +96,7 @@
 #endif
 }
 
-- (void)_didNotHandleTapAsMeaningfulClickAtPoint:(CGPoint)point
+- (void)_didTapAtPoint:(CGPoint)point withResult:(_WKTapHandlingResult)result
 {
     // For subclasses to override.
 }
@@ -203,9 +203,9 @@
     return [_contentView formInputLabel];
 }
 
-- (CGRect)_inputViewBounds
+- (CGRect)_inputViewBoundsInWindow
 {
-    return _inputViewBounds;
+    return _inputViewBoundsInWindow;
 }
 
 - (NSArray<NSValue *> *)_uiTextSelectionRects
@@ -341,6 +341,11 @@
     return [_contentView tapHighlightViewRect];
 }
 
+- (UIGestureRecognizer *)_imageAnalysisGestureRecognizer
+{
+    return [_contentView imageAnalysisGestureRecognizer];
+}
+
 - (void)_simulateElementAction:(_WKElementActionType)actionType atLocation:(CGPoint)location
 {
     [_contentView _simulateElementAction:actionType atLocation:location];
@@ -404,7 +409,7 @@
 
         _page->setPrivateClickMeasurement(WTFMove(measurement));
     } else
-        _page->setPrivateClickMeasurement(WTF::nullopt);
+        _page->setPrivateClickMeasurement(std::nullopt);
 #endif
 }
 #endif

@@ -308,6 +308,7 @@ void SlotAssignment::didChangeSlot(const AtomString& slotAttrValue, ShadowRoot& 
         return;
 
     RenderTreeUpdater::tearDownRenderers(*shadowRoot.host());
+    shadowRoot.host()->invalidateStyleAndRenderersForSubtree();
 
     slot->assignedNodes.clear();
     m_slotAssignmentsIsValid = false;
@@ -315,8 +316,6 @@ void SlotAssignment::didChangeSlot(const AtomString& slotAttrValue, ShadowRoot& 
     auto slotElement = makeRefPtr(findFirstSlotElement(*slot, shadowRoot));
     if (!slotElement)
         return;
-
-    shadowRoot.host()->invalidateStyleAndRenderersForSubtree();
 
     if (shadowRoot.shouldFireSlotchangeEvent())
         slotElement->enqueueSlotChangeEvent();
@@ -332,6 +331,10 @@ const Vector<WeakPtr<Node>>* SlotAssignment::assignedNodesForSlot(const HTMLSlot
     ASSERT(slotElement.containingShadowRoot() == &shadowRoot);
     const AtomString& slotName = slotNameFromAttributeValue(slotElement.attributeWithoutSynchronization(nameAttr));
     auto* slot = m_slots.get(slotName);
+
+    bool hasNotAddedSlotInInsertedIntoAncestorYet = shadowRoot.isConnected() && (!slotElement.isConnected() || slotElement.isInInsertedIntoAncestor());
+    if (hasNotAddedSlotInInsertedIntoAncestorYet)
+        return nullptr;
     RELEASE_ASSERT(slot);
 
     if (!m_slotAssignmentsIsValid)

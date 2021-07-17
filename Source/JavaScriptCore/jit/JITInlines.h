@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2008-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,17 +33,17 @@
 
 namespace JSC {
 
-ALWAYS_INLINE MacroAssembler::JumpList JIT::emitLoadForArrayMode(const Instruction* currentInstruction, JITArrayMode arrayMode, PatchableJump& badType)
+ALWAYS_INLINE MacroAssembler::JumpList JIT::emitLoadForArrayMode(const Instruction* currentInstruction, JITArrayMode arrayMode, PatchableJump& badType, ByValInfo* byValInfo)
 {
     switch (arrayMode) {
     case JITInt32:
-        return emitInt32Load(currentInstruction, badType);
+        return emitInt32Load(currentInstruction, badType, byValInfo);
     case JITDouble:
-        return emitDoubleLoad(currentInstruction, badType);
+        return emitDoubleLoad(currentInstruction, badType, byValInfo);
     case JITContiguous:
-        return emitContiguousLoad(currentInstruction, badType);
+        return emitContiguousLoad(currentInstruction, badType, byValInfo);
     case JITArrayStorage:
-        return emitArrayStorageLoad(currentInstruction, badType);
+        return emitArrayStorageLoad(currentInstruction, badType, byValInfo);
     default:
         break;
     }
@@ -93,7 +93,7 @@ ALWAYS_INLINE JIT::Call JIT::emitNakedNearCall(CodePtr<NoPtrTag> target)
 {
     ASSERT(m_bytecodeIndex); // This method should only be called during hot/cold path generation, so that m_bytecodeIndex is set.
     Call nakedCall = nearCall();
-    m_nearCalls.append(NearCallRecord(nakedCall, m_bytecodeIndex, FunctionPtr<JSInternalPtrTag>(target.retagged<JSInternalPtrTag>())));
+    m_nearCalls.append(NearCallRecord(nakedCall, FunctionPtr<JSInternalPtrTag>(target.retagged<JSInternalPtrTag>())));
     return nakedCall;
 }
 
@@ -101,8 +101,16 @@ ALWAYS_INLINE JIT::Call JIT::emitNakedNearTailCall(CodePtr<NoPtrTag> target)
 {
     ASSERT(m_bytecodeIndex); // This method should only be called during hot/cold path generation, so that m_bytecodeIndex is set.
     Call nakedCall = nearTailCall();
-    m_nearCalls.append(NearCallRecord(nakedCall, m_bytecodeIndex, FunctionPtr<JSInternalPtrTag>(target.retagged<JSInternalPtrTag>())));
+    m_nearCalls.append(NearCallRecord(nakedCall, FunctionPtr<JSInternalPtrTag>(target.retagged<JSInternalPtrTag>())));
     return nakedCall;
+}
+
+ALWAYS_INLINE JIT::Jump JIT::emitNakedNearJump(CodePtr<JITThunkPtrTag> target)
+{
+    ASSERT(m_bytecodeIndex); // This method should only be called during hot/cold path generation, so that m_bytecodeIndex is set.
+    Jump nakedJump = jump();
+    m_nearJumps.append(NearJumpRecord(nakedJump, CodeLocationLabel(target)));
+    return nakedJump;
 }
 
 ALWAYS_INLINE void JIT::updateTopCallFrame()
@@ -118,6 +126,13 @@ ALWAYS_INLINE MacroAssembler::Call JIT::appendCallWithExceptionCheck(const Funct
     MacroAssembler::Call call = appendCall(function);
     exceptionCheck();
     return call;
+}
+
+ALWAYS_INLINE void JIT::appendCallWithExceptionCheck(Address function)
+{
+    updateTopCallFrame();
+    appendCall(function);
+    exceptionCheck();
 }
 
 #if OS(WINDOWS) && CPU(X86_64)
@@ -149,6 +164,16 @@ ALWAYS_INLINE MacroAssembler::Call JIT::appendCallWithExceptionCheckSetJSValueRe
     return call;
 }
 
+ALWAYS_INLINE void JIT::appendCallWithExceptionCheckSetJSValueResult(Address function, VirtualRegister dst)
+{
+    appendCallWithExceptionCheck(function);
+#if USE(JSVALUE64)
+    emitPutVirtualRegister(dst, returnValueGPR);
+#else
+    emitStore(dst, returnValueGPR2, returnValueGPR);
+#endif
+}
+
 template<typename Metadata>
 ALWAYS_INLINE MacroAssembler::Call JIT::appendCallWithExceptionCheckSetJSValueResultWithProfile(Metadata& metadata, const FunctionPtr<CFunctionPtrTag> function, VirtualRegister dst)
 {
@@ -161,6 +186,19 @@ ALWAYS_INLINE MacroAssembler::Call JIT::appendCallWithExceptionCheckSetJSValueRe
     emitStore(dst, returnValueGPR2, returnValueGPR);
 #endif
     return call;
+}
+
+template<typename Metadata>
+ALWAYS_INLINE void JIT::appendCallWithExceptionCheckSetJSValueResultWithProfile(Metadata& metadata, Address function, VirtualRegister dst)
+{
+    appendCallWithExceptionCheck(function);
+#if USE(JSVALUE64)
+    emitValueProfilingSite(metadata, returnValueGPR);
+    emitPutVirtualRegister(dst, returnValueGPR);
+#else
+    emitValueProfilingSite(metadata, JSValueRegs(returnValueGPR2, returnValueGPR));
+    emitStore(dst, returnValueGPR2, returnValueGPR);
+#endif
 }
 
 ALWAYS_INLINE void JIT::linkSlowCaseIfNotJSCell(Vector<SlowCaseEntry>::iterator& iter, VirtualRegister reg)
@@ -269,36 +307,6 @@ ALWAYS_INLINE void JIT::emitCount(AbstractSamplingCounter& counter, int32_t coun
 {
     add64(TrustedImm32(count), AbsoluteAddress(counter.addressOfCounter()));
 }
-#endif
-
-#if ENABLE(OPCODE_SAMPLING)
-#if CPU(X86_64)
-ALWAYS_INLINE void JIT::sampleInstruction(const Instruction* instruction, bool inHostFunction)
-{
-    move(TrustedImmPtr(m_interpreter->sampler()->sampleSlot()), X86Registers::ecx);
-    storePtr(TrustedImmPtr(m_interpreter->sampler()->encodeSample(instruction, inHostFunction)), X86Registers::ecx);
-}
-#else
-ALWAYS_INLINE void JIT::sampleInstruction(const Instruction* instruction, bool inHostFunction)
-{
-    storePtr(TrustedImmPtr(m_interpreter->sampler()->encodeSample(instruction, inHostFunction)), m_interpreter->sampler()->sampleSlot());
-}
-#endif
-#endif
-
-#if ENABLE(CODEBLOCK_SAMPLING)
-#if CPU(X86_64)
-ALWAYS_INLINE void JIT::sampleCodeBlock(CodeBlock* codeBlock)
-{
-    move(TrustedImmPtr(m_interpreter->sampler()->codeBlockSlot()), X86Registers::ecx);
-    storePtr(TrustedImmPtr(codeBlock), X86Registers::ecx);
-}
-#else
-ALWAYS_INLINE void JIT::sampleCodeBlock(CodeBlock* codeBlock)
-{
-    storePtr(TrustedImmPtr(codeBlock), m_interpreter->sampler()->codeBlockSlot());
-}
-#endif
 #endif
 
 ALWAYS_INLINE bool JIT::isOperandConstantChar(VirtualRegister src)

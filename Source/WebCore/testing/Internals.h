@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 Google Inc. All rights reserved.
- * Copyright (C) 2013-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -39,7 +39,6 @@
 #include "TextIndicator.h"
 #include "VP9Utilities.h"
 #include <JavaScriptCore/Float32Array.h>
-#include <wtf/Optional.h>
 
 #if ENABLE(VIDEO)
 #include "MediaElementSession.h"
@@ -110,7 +109,6 @@ class UnsuspendableActiveDOMObject;
 class VoidCallback;
 class WebAnimation;
 class WebGLRenderingContext;
-class WebKitAudioContext;
 class WindowProxy;
 class XMLHttpRequest;
 
@@ -171,6 +169,7 @@ public:
     bool nodeNeedsStyleRecalc(Node&);
     String styleChangeType(Node&);
     String description(JSC::JSValue);
+    void log(const String&);
 
     bool isPreloaded(const String& url);
     bool isLoadingFromMemoryCache(const String& url);
@@ -234,8 +233,8 @@ public:
     bool areTimersThrottled() const;
 
     enum EventThrottlingBehavior { Responsive, Unresponsive };
-    void setEventThrottlingBehaviorOverride(Optional<EventThrottlingBehavior>);
-    Optional<EventThrottlingBehavior> eventThrottlingBehaviorOverride() const;
+    void setEventThrottlingBehaviorOverride(std::optional<EventThrottlingBehavior>);
+    std::optional<EventThrottlingBehavior> eventThrottlingBehaviorOverride() const;
 
     // Spatial Navigation testing.
     ExceptionOr<unsigned> lastSpatialNavigationCandidateCount() const;
@@ -272,6 +271,8 @@ public:
     void selectColorInColorChooser(HTMLInputElement&, const String& colorValue);
     ExceptionOr<Vector<String>> formControlStateOfPreviousHistoryItem();
     ExceptionOr<void> setFormControlStateOfPreviousHistoryItem(const Vector<String>&);
+
+    ExceptionOr<Ref<DOMRect>> absoluteLineRectFromPoint(int x, int y);
 
     ExceptionOr<Ref<DOMRect>> absoluteCaretBounds();
     ExceptionOr<bool> isCaretBlinkingSuspended();
@@ -437,7 +438,7 @@ public:
 
     ExceptionOr<String> scrollingStateTreeAsText() const;
     ExceptionOr<String> scrollingTreeAsText() const;
-    ExceptionOr<String> mainThreadScrollingReasons() const;
+    ExceptionOr<String> synchronousScrollingReasons() const;
     ExceptionOr<Ref<DOMRectList>> nonFastScrollableRects() const;
 
     ExceptionOr<void> setElementUsesDisplayListDrawing(Element&, bool usesDisplayListDrawing);
@@ -485,6 +486,8 @@ public:
     uint64_t storageAreaMapCount() const;
 
     uint64_t elementIdentifier(Element&) const;
+    bool isElementAlive(Document&, uint64_t documentIdentifier) const;
+
     uint64_t frameIdentifier(const Document&) const;
     uint64_t pageIdentifier(const Document&) const;
 
@@ -577,8 +580,8 @@ public:
     ExceptionOr<unsigned> renderingUpdateCount();
 
     enum CompositingPolicy { Normal, Conservative };
-    ExceptionOr<void> setCompositingPolicyOverride(Optional<CompositingPolicy>);
-    ExceptionOr<Optional<CompositingPolicy>> compositingPolicyOverride() const;
+    ExceptionOr<void> setCompositingPolicyOverride(std::optional<CompositingPolicy>);
+    ExceptionOr<std::optional<CompositingPolicy>> compositingPolicyOverride() const;
 
     void updateLayoutAndStyleForAllFrames();
     ExceptionOr<void> updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(Node*);
@@ -645,6 +648,7 @@ public:
     String getImageSourceURL(Element&);
 
 #if ENABLE(VIDEO)
+    unsigned mediaElementCount();
     Vector<String> mediaResponseSources(HTMLMediaElement&);
     Vector<String> mediaResponseContentRanges(HTMLMediaElement&);
     void simulateAudioInterruption(HTMLMediaElement&);
@@ -656,10 +660,12 @@ public:
     String elementBufferingPolicy(HTMLMediaElement&);
     double privatePlayerVolume(const HTMLMediaElement&);
     bool privatePlayerMuted(const HTMLMediaElement&);
+    bool isMediaElementHidden(const HTMLMediaElement&);
+
     ExceptionOr<void> setOverridePreferredDynamicRangeMode(HTMLMediaElement&, const String&);
 #endif
 
-    ExceptionOr<void> setIsPlayingToBluetoothOverride(Optional<bool>);
+    ExceptionOr<void> setIsPlayingToBluetoothOverride(std::optional<bool>);
 
     bool isSelectPopupVisible(HTMLSelectElement&);
 
@@ -714,7 +720,7 @@ public:
 #endif
 
 #if ENABLE(WEB_AUDIO)
-    void setAudioContextRestrictions(const Variant<RefPtr<AudioContext>, RefPtr<WebKitAudioContext>>&, StringView restrictionsString);
+    void setAudioContextRestrictions(AudioContext&, StringView restrictionsString);
     void useMockAudioDestinationCocoa();
 #endif
 
@@ -741,18 +747,19 @@ public:
     MockContentFilterSettings& mockContentFilterSettings();
 #endif
 
-#if ENABLE(CSS_SCROLL_SNAP)
     ExceptionOr<String> scrollSnapOffsets(Element&);
     ExceptionOr<bool> isScrollSnapInProgress(Element&);
     void setPlatformMomentumScrollingPredictionEnabled(bool);
-#endif
 
     ExceptionOr<String> pathStringWithShrinkWrappedRects(const Vector<double>& rectComponents, double radius);
 
 #if ENABLE(VIDEO)
     String getCurrentMediaControlsStatusForElement(HTMLMediaElement&);
     void setMediaControlsMaximumRightContainerButtonCountOverride(HTMLMediaElement&, size_t);
+    void setMediaControlsHidePlaybackRates(HTMLMediaElement&, bool);
 #endif // ENABLE(VIDEO)
+
+    void setPageMediaVolume(float);
 
     String userVisibleString(const DOMURL&);
     void setShowAllPlugins(bool);
@@ -844,6 +851,7 @@ public:
     bool supportsAudioSession() const;
     String audioSessionCategory() const;
     double preferredAudioBufferSize() const;
+    double currentAudioBufferSize() const;
     bool audioSessionActive() const;
 
     void storeRegistrationsOnDisk(DOMPromiseDeferred<void>&&);
@@ -875,6 +883,7 @@ public:
         RefPtr<DOMPointReadOnly> topRight;
         RefPtr<DOMPointReadOnly> bottomRight;
         RefPtr<DOMPointReadOnly> bottomLeft;
+        bool hasLeadingWhitespace { true };
 
         ~ImageOverlayText();
     };
@@ -957,6 +966,8 @@ public:
 
     using MediaSessionState = PlatformMediaSession::State;
     MediaSessionState mediaSessionState(HTMLMediaElement&);
+
+    size_t mediaElementCount() const;
 #endif
 
     void setCaptureExtraNetworkLoadMetricsEnabled(bool);
@@ -975,17 +986,17 @@ public:
     bool capsLockIsOn();
         
     using HEVCParameterSet = WebCore::HEVCParameters;
-    Optional<HEVCParameterSet> parseHEVCCodecParameters(StringView);
+    std::optional<HEVCParameterSet> parseHEVCCodecParameters(StringView);
 
     struct DoViParameterSet {
         String codecName;
         uint16_t bitstreamProfileID;
         uint16_t bitstreamLevelID;
     };
-    Optional<DoViParameterSet> parseDoViCodecParameters(StringView);
+    std::optional<DoViParameterSet> parseDoViCodecParameters(StringView);
 
     using VPCodecConfigurationRecord = WebCore::VPCodecConfigurationRecord;
-    Optional<VPCodecConfigurationRecord> parseVPCodecParameters(StringView);
+    std::optional<VPCodecConfigurationRecord> parseVPCodecParameters(StringView);
 
     struct CookieData {
         String name;
@@ -1006,7 +1017,7 @@ public:
             , value(cookie.value)
             , domain(cookie.domain)
             , path(cookie.path)
-            , expires(cookie.expires.valueOr(0))
+            , expires(cookie.expires.value_or(0))
             , isHttpOnly(cookie.httpOnly)
             , isSecure(cookie.secure)
             , isSession(cookie.session)
@@ -1159,6 +1170,14 @@ public:
 
     String dumpStyleResolvers();
 
+    enum class AutoplayPolicy : uint8_t {
+        Default,
+        Allow,
+        AllowWithoutSound,
+        Deny,
+    };
+    ExceptionOr<void> setDocumentAutoplayPolicy(Document&, AutoplayPolicy);
+
 private:
     explicit Internals(Document&);
     Document* contextDocument() const;
@@ -1193,7 +1212,6 @@ private:
 #endif
 
 #if ENABLE(MEDIA_SESSION_COORDINATOR)
-    RefPtr<MediaSessionCoordinator> m_mediaSessionCoordinator;
     RefPtr<MockMediaSessionCoordinator> m_mockMediaSessionCoordinator;
 #endif
 };

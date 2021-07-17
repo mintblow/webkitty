@@ -217,10 +217,12 @@ inline CapabilityLevel canCompile(Node* node)
     case ToNumber:
     case ToNumeric:
     case ToString:
+    case FunctionToString:
     case ToObject:
     case CallObjectConstructor:
     case CallStringConstructor:
     case CallNumberConstructor:
+    case ObjectAssign:
     case ObjectCreate:
     case ObjectKeys:
     case ObjectGetOwnPropertyNames:
@@ -243,6 +245,8 @@ inline CapabilityLevel canCompile(Node* node)
     case Unreachable:
     case InByVal:
     case InById:
+    case HasPrivateName:
+    case HasPrivateBrand:
     case HasOwnProperty:
     case IsCellWithType:
     case MapHash:
@@ -407,7 +411,7 @@ inline CapabilityLevel canCompile(Node* node)
     case FilterCallLinkStatus:
     case FilterGetByStatus:
     case FilterPutByIdStatus:
-    case FilterInByIdStatus:
+    case FilterInByStatus:
     case FilterDeleteByStatus:
     case FilterCheckPrivateBrandStatus:
     case FilterSetPrivateBrandStatus:
@@ -525,6 +529,8 @@ CapabilityLevel canCompile(Graph& graph)
                 case NotSymbolUse:
                 case AnyIntUse:
                 case DoubleRepAnyIntUse:
+                case NotDoubleUse:
+                case NeitherDoubleNorHeapBigIntNorStringUse:
                     // These are OK.
                     break;
                 default:

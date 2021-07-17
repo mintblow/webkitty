@@ -46,7 +46,7 @@ auto DisplayList::Iterator::updateCurrentDrawingItemExtent(ItemType itemType) ->
         return ExtentUpdateResult::Success;
 
     if (!isDrawingItem(itemType)) {
-        m_currentExtent = WTF::nullopt;
+        m_currentExtent = std::nullopt;
         return ExtentUpdateResult::Success;
     }
 
@@ -66,31 +66,64 @@ void DisplayList::Iterator::updateCurrentItem()
         return;
 
     auto& items = *itemBuffer();
-    auto itemType = static_cast<ItemType>(m_cursor[0]);
-
-    if (updateCurrentDrawingItemExtent(itemType) == ExtentUpdateResult::Failure) {
+    auto rawItemTypeValue = m_cursor[0];
+    if (UNLIKELY(!isValidEnum<ItemType>(rawItemTypeValue))) {
         m_isValid = false;
         return;
     }
 
+    auto itemType = static_cast<ItemType>(rawItemTypeValue);
+    if (UNLIKELY(updateCurrentDrawingItemExtent(itemType) == ExtentUpdateResult::Failure)) {
+        m_isValid = false;
+        return;
+    }
+
+    auto remainingCapacityInBuffer = static_cast<uint64_t>(m_currentEndOfBuffer - m_cursor);
     auto paddedSizeOfTypeAndItem = paddedSizeOfTypeAndItemInBytes(itemType);
-    m_currentBufferForItem = paddedSizeOfTypeAndItem <= sizeOfFixedBufferForCurrentItem ? m_fixedBufferForCurrentItem : reinterpret_cast<uint8_t*>(fastMalloc(paddedSizeOfTypeAndItem));
+    m_currentBufferForItem = paddedSizeOfTypeAndItem <= sizeOfFixedBufferForCurrentItem ? m_fixedBufferForCurrentItem : static_cast<uint8_t*>(fastMalloc(paddedSizeOfTypeAndItem));
     if (isInlineItem(itemType)) {
-        if (UNLIKELY(!ItemHandle { m_cursor }.safeCopy({ m_currentBufferForItem })))
+        if (UNLIKELY(remainingCapacityInBuffer < paddedSizeOfTypeAndItem)) {
             m_isValid = false;
+            return;
+        }
+
+        if (UNLIKELY(!ItemHandle { m_cursor }.safeCopy(itemType, { m_currentBufferForItem }))) {
+            m_isValid = false;
+            return;
+        }
 
         m_currentItemSizeInBuffer = paddedSizeOfTypeAndItem;
     } else {
         auto* client = items.m_readingClient;
         RELEASE_ASSERT(client);
-        auto dataLength = reinterpret_cast<uint64_t*>(m_cursor)[1];
-        auto* startOfData = m_cursor + 2 * sizeof(uint64_t);
-        auto decodedItemHandle = client->decodeItem(startOfData, dataLength, itemType, m_currentBufferForItem);
-        if (UNLIKELY(!decodedItemHandle))
+        constexpr auto sizeOfTypeAndDataLength = 2 * sizeof(uint64_t);
+
+        if (UNLIKELY(remainingCapacityInBuffer < sizeOfTypeAndDataLength)) {
             m_isValid = false;
+            return;
+        }
+
+        auto dataLength = reinterpret_cast<uint64_t*>(m_cursor)[1];
+        if (UNLIKELY(dataLength >= std::numeric_limits<uint32_t>::max() - alignof(uint64_t) - sizeOfTypeAndDataLength)) {
+            m_isValid = false;
+            return;
+        }
+
+        auto itemSizeInBuffer = roundUpToMultipleOf<alignof(uint64_t)>(dataLength) + sizeOfTypeAndDataLength;
+        if (UNLIKELY(remainingCapacityInBuffer < itemSizeInBuffer)) {
+            m_isValid = false;
+            return;
+        }
+
+        auto* startOfData = m_cursor + sizeOfTypeAndDataLength;
+        auto decodedItemHandle = client->decodeItem(startOfData, dataLength, itemType, m_currentBufferForItem);
+        if (UNLIKELY(!decodedItemHandle)) {
+            m_isValid = false;
+            return;
+        }
 
         m_currentBufferForItem[0] = static_cast<uint8_t>(itemType);
-        m_currentItemSizeInBuffer = 2 * sizeof(uint64_t) + roundUpToMultipleOf(alignof(uint64_t), dataLength);
+        m_currentItemSizeInBuffer = itemSizeInBuffer;
     }
 }
 

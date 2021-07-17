@@ -37,6 +37,7 @@
 #import "WebGLLayer.h"
 #import <CoreGraphics/CGBitmapContext.h>
 #import <Metal/Metal.h>
+#import <pal/spi/cocoa/MetalSPI.h>
 #import <wtf/BlockObjCExceptions.h>
 #import <wtf/darwin/WeakLinking.h>
 #import <wtf/text/CString.h>
@@ -115,14 +116,20 @@ static ScopedEGLDefaultDisplay InitializeEGLDisplay(const GraphicsContextGLAttri
         displayAttributes.append(EGL_PLATFORM_ANGLE_DEVICE_CONTEXT_VOLATILE_CGL_ANGLE);
         displayAttributes.append(EGL_TRUE);
     }
-    bool canUseMetal = platformSupportsMetal();
-    if (attrs.useMetal && canUseMetal) {
+    if (attrs.useMetal) {
         displayAttributes.append(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
         displayAttributes.append(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
     }
-
-    LOG(WebGL, "Attempting to use ANGLE's %s backend.", attrs.useMetal && canUseMetal ? "Metal" : "OpenGL");
-
+    LOG(WebGL, "Attempting to use ANGLE's %s backend.\n", attrs.useMetal ? "Metal" : "OpenGL");
+    if (attrs.powerPreference != GraphicsContextGLAttributes::PowerPreference::Default) {
+        displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
+        if (attrs.powerPreference == GraphicsContextGLAttributes::PowerPreference::LowPower)
+            displayAttributes.append(EGL_LOW_POWER_ANGLE);
+        else {
+            ASSERT(attrs.powerPreference == GraphicsContextGLAttributes::PowerPreference::HighPerformance);
+            displayAttributes.append(EGL_HIGH_POWER_ANGLE);
+        }
+    }
     displayAttributes.append(EGL_NONE);
     display = EGL_GetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, reinterpret_cast<void*>(EGL_DEFAULT_DISPLAY), displayAttributes.data());
 
@@ -162,7 +169,7 @@ RefPtr<GraphicsContextGLOpenGL> GraphicsContextGLOpenGL::create(GraphicsContextG
 {
     // If ANGLE is not loaded, we can fail immediately.
     if (!isANGLEAvailable()) {
-        LOG(WebGL, "ANGLE shared library was not loaded. Can't make GraphicsContextGL.");
+        WTFLogAlways("ANGLE shared library was not loaded. Can't make GraphicsContextGL.");
         return nullptr;
     }
 
@@ -200,6 +207,10 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
     : GraphicsContextGL(attrs, sharedContext)
 {
     m_isForWebGL2 = attrs.webGLVersion == GraphicsContextGLWebGLVersion::WebGL2;
+    if (attrs.useMetal && !platformSupportsMetal()) {
+        attrs.useMetal = false;
+        setContextAttributes(attrs);
+    }
 
     m_displayObj = InitializeEGLDisplay(attrs);
     if (!m_displayObj)
@@ -257,10 +268,13 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
         // context.
         eglContextAttributes.append(EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE);
         eglContextAttributes.append(EGL_TRUE);
+        // WebGL requires that all resources are cleared at creation.
+        // FIXME: performing robust resource initialization in the VideoTextureCopier adds a large amount of overhead
+        // so it would be nice to avoid that there (we should always be touching every pixel as we copy).
+        eglContextAttributes.append(EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE);
+        eglContextAttributes.append(EGL_TRUE);
     }
-    // WebGL requires that all resources are cleared at creation.
-    eglContextAttributes.append(EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE);
-    eglContextAttributes.append(EGL_TRUE);
+
     // WebGL doesn't allow client arrays.
     eglContextAttributes.append(EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE);
     eglContextAttributes.append(EGL_FALSE);
@@ -293,8 +307,7 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
         requiredExtensions.append("GL_ANGLE_texture_rectangle"_s);
         // For creating the EGL surface from an IOSurface.
         requiredExtensions.append("GL_EXT_texture_format_BGRA8888"_s);
-            }
-
+    }
 #endif // PLATFORM(MAC) || PLATFORM(MACCATALYST)
     ExtensionsGL& extensions = getExtensions();
     for (auto& extension : requiredExtensions) {
@@ -303,6 +316,15 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
             return;
         }
         extensions.ensureEnabled(extension);
+    }
+    if (contextAttributes().useMetal) {
+        // The implementation uses GLsync objects. Enable the functionality for WebGL 1.0 contexts
+        // that use OpenGL ES 2.0.
+        if (extensions.supports("GL_ARB_sync"_s)) {
+            attrs.hasFenceSync = true;
+            extensions.ensureEnabled("GL_ARB_sync"_s);
+            setContextAttributes(attrs);
+        }
     }
     validateAttributes();
     attrs = contextAttributes(); // They may have changed during validation.
@@ -385,6 +407,12 @@ GraphicsContextGLOpenGL::~GraphicsContextGLOpenGL()
             gl::DeleteTextures(1, &m_preserveDrawingBufferTexture);
         if (m_preserveDrawingBufferFBO)
             gl::DeleteFramebuffers(1, &m_preserveDrawingBufferFBO);
+        // If fences are not enabled, this loop will not execute.
+        for (auto& fence : m_frameCompletionFences)
+            fence.reset();
+    } else {
+        for (auto& fence : m_frameCompletionFences)
+            fence.abandon();
     }
     if (m_displayBufferPbuffer) {
         EGL_DestroySurface(m_displayObj, m_displayBufferPbuffer);
@@ -571,7 +599,7 @@ bool GraphicsContextGLOpenGL::reshapeDisplayBufferBacking()
 bool GraphicsContextGLOpenGL::allocateAndBindDisplayBufferBacking()
 {
     ASSERT(!getInternalFramebufferSize().isEmpty());
-    auto backing = WebCore::IOSurface::create(getInternalFramebufferSize(), WebCore::sRGBColorSpaceRef());
+    auto backing = IOSurface::create(getInternalFramebufferSize(), DestinationColorSpace::SRGB());
     if (!backing)
         return false;
 
@@ -610,6 +638,116 @@ bool GraphicsContextGLOpenGL::bindDisplayBufferBacking(std::unique_ptr<IOSurface
     m_displayBufferBacking = WTFMove(backing);
     return true;
 }
+
+void* GraphicsContextGLOpenGL::createPbufferAndAttachIOSurface(GCGLenum target, PbufferAttachmentUsage usage, GCGLenum internalFormat, GCGLsizei width, GCGLsizei height, GCGLenum type, IOSurfaceRef surface, GCGLuint plane)
+{
+    if (target != GraphicsContextGL::TEXTURE_RECTANGLE_ARB && target != GraphicsContextGL::TEXTURE_2D) {
+        LOG(WebGL, "Unknown texture target %d.", static_cast<int>(target));
+        return nullptr;
+    }
+
+    auto eglTextureTarget = [&] () -> EGLint {
+        if (target == GraphicsContextGL::TEXTURE_RECTANGLE_ARB)
+            return EGL_TEXTURE_RECTANGLE_ANGLE;
+        return EGL_TEXTURE_2D;
+    }();
+
+    if (eglTextureTarget != GraphicsContextGLOpenGL::EGLDrawingBufferTextureTarget()) {
+        LOG(WebGL, "Mismatch in EGL texture target: %d should be %d.", static_cast<int>(target), GraphicsContextGLOpenGL::EGLDrawingBufferTextureTarget());
+        return nullptr;
+    }
+
+    auto usageHintAngle = [&] () -> EGLint {
+        if (usage == PbufferAttachmentUsage::Read)
+            return EGL_IOSURFACE_READ_HINT_ANGLE;
+        if (usage == PbufferAttachmentUsage::Write)
+            return EGL_IOSURFACE_WRITE_HINT_ANGLE;
+        return EGL_IOSURFACE_READ_HINT_ANGLE | EGL_IOSURFACE_WRITE_HINT_ANGLE;
+    }();
+
+    const EGLint surfaceAttributes[] = {
+        EGL_WIDTH, width,
+        EGL_HEIGHT, height,
+        EGL_IOSURFACE_PLANE_ANGLE, static_cast<EGLint>(plane),
+        EGL_TEXTURE_TARGET, static_cast<EGLint>(eglTextureTarget),
+        EGL_TEXTURE_INTERNAL_FORMAT_ANGLE, static_cast<EGLint>(internalFormat),
+        EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
+        EGL_TEXTURE_TYPE_ANGLE, static_cast<EGLint>(type),
+        // Only has an effect on the iOS Simulator.
+        EGL_IOSURFACE_USAGE_HINT_ANGLE, usageHintAngle,
+        EGL_NONE, EGL_NONE
+    };
+
+    auto display = platformDisplay();
+    EGLSurface pbuffer = EGL_CreatePbufferFromClientBuffer(display, EGL_IOSURFACE_ANGLE, surface, platformConfig(), surfaceAttributes);
+    if (!pbuffer) {
+        LOG(WebGL, "EGL_CreatePbufferFromClientBuffer failed.");
+        return nullptr;
+    }
+
+    if (!EGL_BindTexImage(display, pbuffer, EGL_BACK_BUFFER)) {
+        LOG(WebGL, "EGL_BindTexImage failed.");
+        EGL_DestroySurface(display, pbuffer);
+        return nullptr;
+    }
+
+    return pbuffer;
+}
+
+void GraphicsContextGLOpenGL::destroyPbufferAndDetachIOSurface(void* handle)
+{
+    auto display = platformDisplay();
+    EGL_ReleaseTexImage(display, handle, EGL_BACK_BUFFER);
+    EGL_DestroySurface(display, handle);
+}
+
+#if !PLATFORM(IOS_FAMILY_SIMULATOR)
+void* GraphicsContextGLOpenGL::attachIOSurfaceToSharedTexture(GCGLenum target, IOSurface* surface)
+{
+    constexpr EGLint emptyAttributes[] = { EGL_NONE };
+
+    // Create a MTLTexture out of the IOSurface.
+    // FIXME: We need to use the same device that ANGLE is using, which might not be the default.
+
+    RetainPtr<MTLSharedTextureHandle> handle = adoptNS([[MTLSharedTextureHandle alloc] initWithIOSurface:surface->surface() label:@"WebXR"]);
+    if (!handle) {
+        LOG(WebGL, "Unable to create a MTLSharedTextureHandle from the IOSurface in attachIOSurfaceToTexture.");
+        return nullptr;
+    }
+
+    if (!handle.get().device) {
+        LOG(WebGL, "MTLSharedTextureHandle does not have a Metal device in attachIOSurfaceToTexture.");
+        return nullptr;
+    }
+
+    auto texture = adoptNS([handle.get().device newSharedTextureWithHandle:handle.get()]);
+    if (!texture) {
+        LOG(WebGL, "Unable to create a MTLSharedTexture from the texture handle in attachIOSurfaceToTexture.");
+        return nullptr;
+    }
+
+    // FIXME: Does the texture have the correct usage mode?
+
+    // Create an EGLImage out of the MTLTexture
+    auto display = platformDisplay();
+    auto eglImage = EGL_CreateImageKHR(display, EGL_NO_CONTEXT, EGL_METAL_TEXTURE_ANGLE, reinterpret_cast<EGLClientBuffer>(texture.get()), emptyAttributes);
+    if (!eglImage) {
+        LOG(WebGL, "Unable to create an EGLImage from the Metal handle in attachIOSurfaceToTexture.");
+        return nullptr;
+    }
+
+    // Tell the currently bound texture to use the EGLImage.
+    gl::EGLImageTargetTexture2DOES(target, eglImage);
+
+    return eglImage;
+}
+
+void GraphicsContextGLOpenGL::detachIOSurfaceFromSharedTexture(void* handle)
+{
+    auto display = platformDisplay();
+    EGL_DestroyImageKHR(display, handle);
+}
+#endif
 
 bool GraphicsContextGLOpenGL::isGLES2Compliant() const
 {
@@ -659,15 +797,22 @@ void GraphicsContextGLOpenGL::prepareForDisplay()
         allocateAndBindDisplayBufferBacking();
 
     markLayerComposited();
+
+    if (contextAttributes().useMetal && contextAttributes().hasFenceSync) {
+        // OpenGL sync objects are not signaling upon completion on Catalina-era drivers.
+        // OpenGL drivers typically implement some sort of internal throttling.
+        bool success = waitAndUpdateOldestFrame();
+        UNUSED_VARIABLE(success); // FIXME: implement context lost.
+    }
 }
 
-RefPtr<ImageData> GraphicsContextGLOpenGL::readCompositedResults()
+std::optional<PixelBuffer> GraphicsContextGLOpenGL::readCompositedResults()
 {
     auto& displayBuffer = m_swapChain->displayBuffer();
     if (!displayBuffer.surface || !displayBuffer.handle)
-        return nullptr;
+        return std::nullopt;
     if (displayBuffer.surface->size() != getInternalFramebufferSize())
-        return nullptr;
+        return std::nullopt;
     // Note: We are using GL to read the IOSurface. At the time of writing, there are no convinient
     // functions to convert the IOSurface pixel data to ImageData. The image data ends up being
     // drawn to a ImageBuffer, but at the time there's no functions to construct a NativeImage
@@ -678,7 +823,7 @@ RefPtr<ImageData> GraphicsContextGLOpenGL::readCompositedResults()
     ScopedRestoreTextureBinding restoreBinding(drawingBufferTextureTargetQuery(), textureTarget, textureTarget != TEXTURE_RECTANGLE_ARB);
     gl::BindTexture(textureTarget, texture);
     if (!EGL_BindTexImage(m_displayObj, displayBuffer.handle, EGL_BACK_BUFFER))
-        return nullptr;
+        return std::nullopt;
     gl::TexParameteri(textureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     ScopedFramebuffer fbo;
     ScopedRestoreReadFramebufferBinding fboBinding(m_isForWebGL2, m_state.boundReadFBO, fbo);

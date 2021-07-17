@@ -74,9 +74,9 @@ private:
     void willBeRemovedFromTree(IsInternalMove) override;
 
     void layout() override;
-    LayoutRect clippedOverflowRectForRepaint(const RenderLayerModelObject* repaintContainer) const override;
+    LayoutRect clippedOverflowRect(const RenderLayerModelObject* repaintContainer, VisibleRectContext) const override;
 
-    bool requiresLayer() const override { return hasOverflowClip() || hasTransformRelatedProperty() || hasHiddenBackface() || hasClipPath() || createsGroup() || isStickilyPositioned(); }
+    bool requiresLayer() const override { return hasNonVisibleOverflow() || hasTransformRelatedProperty() || hasHiddenBackface() || hasClipPath() || createsGroup() || isStickilyPositioned(); }
 
     void paint(PaintInfo&, const LayoutPoint&) override;
 

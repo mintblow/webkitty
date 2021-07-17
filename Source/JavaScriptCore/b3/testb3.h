@@ -27,6 +27,7 @@
 
 #include "AirCode.h"
 #include "AirInstInlines.h"
+#include "AirStackSlot.h"
 #include "AirValidate.h"
 #include "AllowMacroScratchRegisterUsage.h"
 #include "B3ArgumentRegValue.h"
@@ -52,7 +53,6 @@
 #include "B3ReduceLoopStrength.h"
 #include "B3ReduceStrength.h"
 #include "B3SlotBaseValue.h"
-#include "B3StackSlot.h"
 #include "B3StackmapGenerationParams.h"
 #include "B3SwitchValue.h"
 #include "B3UpsilonValue.h"
@@ -71,6 +71,7 @@
 #include "LinkBuffer.h"
 #include "PureNaN.h"
 #include <cmath>
+#include <regex>
 #include <string>
 #include <wtf/FastTLS.h>
 #include <wtf/IndexSet.h>
@@ -244,11 +245,13 @@ void checkDisassembly(Compilation& compilation, const Func& func, const CString&
     CRASH();
 }
 
-inline void checkUsesInstruction(Compilation& compilation, const char* text)
+inline void checkUsesInstruction(Compilation& compilation, const char* text, bool regex = false)
 {
     checkDisassembly(
         compilation,
         [&] (const char* disassembly) -> bool {
+            if (regex)
+                return std::regex_match(disassembly, std::regex(text, std::regex::extended));
             return strstr(disassembly, text);
         },
         toCString("Expected to find ", text, " but didnt!"));
@@ -416,8 +419,50 @@ inline double modelLoad<double, double>(double value) { return value; }
 
 void run(const char* filter);
 void testBitAndSExt32(int32_t value, int64_t mask);
+void testUbfx32ShiftAnd();
+void testUbfx32AndShift();
+void testUbfx64ShiftAnd();
+void testUbfx64AndShift();
+void testUbfiz32AndShiftValueMask();
+void testUbfiz32AndShiftMaskValue();
+void testUbfiz32ShiftAnd();
+void testUbfiz32AndShift();
+void testUbfiz64AndShiftValueMask();
+void testUbfiz64AndShiftMaskValue();
+void testUbfiz64ShiftAnd();
+void testUbfiz64AndShift();
+void testInsertBitField32();
+void testInsertBitField64();
+void testExtractInsertBitfieldAtLowEnd32();
+void testExtractInsertBitfieldAtLowEnd64();
+void testBIC32();
+void testBIC64();
+void testOrNot32();
+void testOrNot64();
+void testBitfieldZeroExtend32();
+void testBitfieldZeroExtend64();
+void testExtractRegister32();
+void testExtractRegister64();
+void testInsertSignedBitfieldInZero32();
+void testInsertSignedBitfieldInZero64();
+void testExtractSignedBitfield32();
+void testExtractSignedBitfield64();
+void testBitAndZeroShiftRightArgImmMask32();
+void testBitAndZeroShiftRightArgImmMask64();
 void testBasicSelect();
 void testSelectTest();
+void testAddWithLeftShift32();
+void testAddWithRightShift32();
+void testAddWithUnsignedRightShift32();
+void testAddWithLeftShift64();
+void testAddWithRightShift64();
+void testAddWithUnsignedRightShift64();
+void testSubWithLeftShift32();
+void testSubWithRightShift32();
+void testSubWithUnsignedRightShift32();
+void testSubWithLeftShift64();
+void testSubWithRightShift64();
+void testSubWithUnsignedRightShift64();
 void testSelectCompareDouble();
 void testSelectCompareFloat(float, float);
 void testSelectCompareFloatToDouble(float, float);
@@ -636,6 +681,7 @@ void testIToD32Imm(int32_t value);
 void testIToF32Imm(int32_t value);
 void testIToDReducedToIToF64Arg();
 void testIToDReducedToIToF32Arg();
+void testStoreZeroReg();
 void testStore32(int value);
 void testStoreConstant(int value);
 void testStoreConstantPtr(intptr_t value);
@@ -780,6 +826,10 @@ void testMulTreeArg32(int32_t);
 void testArg(int argument);
 void testReturnConst64(int64_t value);
 void testReturnVoid();
+void testLoadZeroExtendIndexAddress();
+void testLoadSignExtendIndexAddress();
+void testStoreZeroExtendIndexAddress();
+void testStoreSignExtendIndexAddress();
 void testAddArg(int);
 void testAddArgs(int, int);
 void testAddArgImm(int, int);
@@ -866,12 +916,20 @@ void testMulAddArgsLeft();
 void testMulAddArgsRight();
 void testMulAddArgsLeft32();
 void testMulAddArgsRight32();
+void testMulAddSignExtend32ArgsLeft();
+void testMulAddSignExtend32ArgsRight();
+void testMulAddZeroExtend32ArgsLeft();
+void testMulAddZeroExtend32ArgsRight();
 void testMulSubArgsLeft();
 void testMulSubArgsRight();
 void testMulSubArgsLeft32();
 void testMulSubArgsRight32();
+void testMulSubSignExtend32();
+void testMulSubZeroExtend32();
 void testMulNegArgs();
 void testMulNegArgs32();
+void testMulNegSignExtend32();
+void testMulNegZeroExtend32();
 void testMulArgDouble(double);
 void testMulArgsDouble(double, double);
 void testCallSimpleDouble(double, double);
@@ -1027,6 +1085,7 @@ void testSubMemArg(int64_t, int64_t);
 void testSubImmMem(int64_t, int64_t);
 void testSubMemImm(int64_t, int64_t);
 void testSubArgs32(int, int);
+void testSubArgs32ZeroExtend(int, int);
 void testSubArgImm32(int, int);
 void testSubImmArg32(int, int);
 void testSubMemArg32(int32_t, int32_t);

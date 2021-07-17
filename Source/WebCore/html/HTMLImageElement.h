@@ -50,7 +50,7 @@ class HTMLImageElement : public HTMLElement, public FormNamedItem {
 public:
     static Ref<HTMLImageElement> create(Document&);
     static Ref<HTMLImageElement> create(const QualifiedName&, Document&, HTMLFormElement* = nullptr);
-    static Ref<HTMLImageElement> createForLegacyFactoryFunction(Document&, Optional<unsigned> width, Optional<unsigned> height);
+    static Ref<HTMLImageElement> createForLegacyFactoryFunction(Document&, std::optional<unsigned> width, std::optional<unsigned> height);
 
     virtual ~HTMLImageElement();
 
@@ -148,8 +148,10 @@ protected:
 private:
     void attributeChanged(const QualifiedName&, const AtomString& oldValue, const AtomString& newValue, AttributeModificationReason) final;
     void parseAttribute(const QualifiedName&, const AtomString&) override;
-    bool isPresentationAttribute(const QualifiedName&) const override;
-    void collectStyleForPresentationAttribute(const QualifiedName&, const AtomString&, MutableStyleProperties&) override;
+    bool hasPresentationalHintsForAttribute(const QualifiedName&) const override;
+    void collectPresentationalHintsForAttribute(const QualifiedName&, const AtomString&, MutableStyleProperties&) override;
+    void collectExtraStyleForPresentationalHints(MutableStyleProperties&) override;
+    void invalidateAttributeMapping();
 
     void didAttachRenderers() override;
     RenderPtr<RenderElement> createElementRenderer(RenderStyle&&, const RenderTreePosition&) override;
@@ -183,6 +185,9 @@ private:
 
     float effectiveImageDevicePixelRatio() const;
 
+    HTMLSourceElement* sourceElement() const;
+    void setSourceElement(HTMLSourceElement*);
+
     std::unique_ptr<HTMLImageLoader> m_imageLoader;
     WeakPtr<HTMLFormElement> m_form;
     WeakPtr<HTMLFormElement> m_formSetByParser;
@@ -196,6 +201,8 @@ private:
     bool m_isDroppedImagePlaceholder { false };
 
     WeakPtr<HTMLPictureElement> m_pictureElement;
+    // The source element that was selected to provide the source URL.
+    WeakPtr<HTMLSourceElement> m_sourceElement;
     MediaQueryDynamicResults m_mediaQueryDynamicResults;
 
 #if ENABLE(ATTACHMENT_ELEMENT)

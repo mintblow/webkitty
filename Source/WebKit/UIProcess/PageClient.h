@@ -62,8 +62,8 @@
 #include <WebCore/InspectorOverlay.h>
 #endif
 
-#if ENABLE(IMAGE_EXTRACTION)
-#include <WebCore/ImageExtractionResult.h>
+#if ENABLE(IMAGE_ANALYSIS)
+#include <WebCore/TextRecognitionResult.h>
 #endif
 
 OBJC_CLASS CALayer;
@@ -93,6 +93,7 @@ class SecurityOrigin;
 namespace WebCore {
 class Color;
 class Cursor;
+class DestinationColorSpace;
 class FloatQuad;
 class FloatRect;
 class Region;
@@ -106,11 +107,12 @@ class SelectionData;
 enum class MouseEventPolicy : uint8_t;
 enum class RouteSharingPolicy : uint8_t;
 enum class ScrollbarStyle : uint8_t;
-enum class TextIndicatorWindowLifetime : uint8_t;
-enum class TextIndicatorWindowDismissalAnimation : uint8_t;
+enum class TextIndicatorLifetime : uint8_t;
+enum class TextIndicatorDismissalAnimation : uint8_t;
 enum class DOMPasteAccessResponse : uint8_t;
 
 struct AppHighlight;
+struct DataDetectorElementInfo;
 struct DictionaryPopupInfo;
 struct TextIndicatorData;
 struct ViewportAttributes;
@@ -135,6 +137,7 @@ struct TranslationContextMenuInfo;
 namespace WebKit {
 
 enum class UndoOrRedo : bool;
+enum class TapHandlingResult : uint8_t;
 
 class ContextMenuContextData;
 class DownloadProxy;
@@ -157,6 +160,10 @@ class WebPopupMenuProxy;
 class WebProcessProxy;
 
 enum class ContinueUnsafeLoad : bool { No, Yes };
+
+#if ENABLE(IMAGE_ANALYSIS)
+enum class ImageAnalysisType : uint8_t { Text, VisualSearch };
+#endif
 
 struct FocusedElementInformation;
 struct FrameInfoData;
@@ -186,10 +193,6 @@ class WebFullScreenManagerProxyClient;
 
 #if USE(GSTREAMER)
 class InstallMissingMediaPluginsPermissionRequest;
-#endif
-
-#if PLATFORM(COCOA)
-struct ColorSpaceData;
 #endif
 
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
@@ -270,7 +273,7 @@ public:
 
     virtual bool handleRunOpenPanel(WebPageProxy*, WebFrameProxy*, const FrameInfoData&, API::OpenPanelParameters*, WebOpenPanelResultListenerProxy*) { return false; }
     virtual bool showShareSheet(const WebCore::ShareDataWithParsedURL&, WTF::CompletionHandler<void (bool)>&&) { return false; }
-    virtual void showContactPicker(const WebCore::ContactsRequestData&, WTF::CompletionHandler<void(Optional<Vector<WebCore::ContactInfo>>&&)>&& completionHandler) { completionHandler(WTF::nullopt); }
+    virtual void showContactPicker(const WebCore::ContactsRequestData&, WTF::CompletionHandler<void(std::optional<Vector<WebCore::ContactInfo>>&&)>&& completionHandler) { completionHandler(std::nullopt); }
 
     virtual void didChangeContentSize(const WebCore::IntSize&) = 0;
 
@@ -317,7 +320,7 @@ public:
 #endif
 
 #if PLATFORM(COCOA) || PLATFORM(GTK)
-    virtual RefPtr<ViewSnapshot> takeViewSnapshot(Optional<WebCore::IntRect>&&) = 0;
+    virtual RefPtr<ViewSnapshot> takeViewSnapshot(std::optional<WebCore::IntRect>&&) = 0;
 #endif
 
 #if USE(APPKIT)
@@ -335,7 +338,7 @@ public:
 #endif
 #if PLATFORM(IOS_FAMILY)
     virtual void didNotHandleTapAsClick(const WebCore::IntPoint&) = 0;
-    virtual void didNotHandleTapAsMeaningfulClickAtPoint(const WebCore::IntPoint&) = 0;
+    virtual void didTapAtPoint(const WebCore::IntPoint&, TapHandlingResult) = 0;
     virtual void didCompleteSyntheticClick() = 0;
 #endif
 
@@ -385,8 +388,8 @@ public:
 #endif
 
 #if PLATFORM(COCOA)
-    virtual void setTextIndicator(Ref<WebCore::TextIndicator>, WebCore::TextIndicatorWindowLifetime) = 0;
-    virtual void clearTextIndicator(WebCore::TextIndicatorWindowDismissalAnimation) = 0;
+    virtual void setTextIndicator(Ref<WebCore::TextIndicator>, WebCore::TextIndicatorLifetime) = 0;
+    virtual void clearTextIndicator(WebCore::TextIndicatorDismissalAnimation) = 0;
     virtual void setTextIndicatorAnimationProgress(float) = 0;
     
     virtual void didPerformDictionaryLookup(const WebCore::DictionaryPopupInfo&) = 0;
@@ -426,7 +429,7 @@ public:
 
     virtual CGRect boundsOfLayerInLayerBackedWindowCoordinates(CALayer *) const = 0;
 
-    virtual ColorSpaceData colorSpace() = 0;
+    virtual WebCore::DestinationColorSpace colorSpace() = 0;
 
     virtual void showPlatformContextMenu(NSMenu *, WebCore::IntPoint) = 0;
 
@@ -452,8 +455,8 @@ public:
     virtual void layerTreeCommitComplete() = 0;
 
     virtual void couldNotRestorePageState() = 0;
-    virtual void restorePageState(Optional<WebCore::FloatPoint> scrollPosition, const WebCore::FloatPoint& scrollOrigin, const WebCore::FloatBoxExtent& obscuredInsetsOnSave, double scale) = 0;
-    virtual void restorePageCenterAndScale(Optional<WebCore::FloatPoint> center, double scale) = 0;
+    virtual void restorePageState(std::optional<WebCore::FloatPoint> scrollPosition, const WebCore::FloatPoint& scrollOrigin, const WebCore::FloatBoxExtent& obscuredInsetsOnSave, double scale) = 0;
+    virtual void restorePageCenterAndScale(std::optional<WebCore::FloatPoint> center, double scale) = 0;
 
     virtual void elementDidFocus(const FocusedElementInformation&, bool userIsInteracting, bool blurPreviousNode, OptionSet<WebCore::ActivityState::Flag> activityStateChanges, API::Object* userData) = 0;
     virtual void updateInputContextAfterBlurringAndRefocusingElement() = 0;
@@ -490,6 +493,8 @@ public:
 #if HAVE(UISCROLLVIEW_ASYNCHRONOUS_SCROLL_EVENT_HANDLING)
     virtual void handleAsynchronousCancelableScrollEvent(UIScrollView *, UIScrollEvent *, void (^completion)(BOOL handled)) = 0;
 #endif
+
+    virtual WebCore::Color contentViewBackgroundColor() = 0;
 #endif
 
     // Auxiliary Client Creation
@@ -514,6 +519,8 @@ public:
 
     virtual void themeColorWillChange() { }
     virtual void themeColorDidChange() { }
+    virtual void underPageBackgroundColorWillChange() { }
+    virtual void underPageBackgroundColorDidChange() { }
     virtual void pageExtendedBackgroundColorWillChange() { }
     virtual void pageExtendedBackgroundColorDidChange() { }
     virtual void sampledPageTopColorWillChange() { }
@@ -536,9 +543,9 @@ public:
     virtual WebCore::DataOwnerType dataOwnerForPasteboard(PasteboardAccessIntent) const { return WebCore::DataOwnerType::Undefined; }
 #endif
 
-#if ENABLE(IMAGE_EXTRACTION)
-    virtual void requestImageExtraction(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::ImageExtractionResult&&)>&& completion) { completion({ }); }
-    virtual void computeCanRevealImage(const URL&, ShareableBitmap&, CompletionHandler<void(bool)>&& completion) { completion(false); }
+#if ENABLE(IMAGE_ANALYSIS)
+    virtual void requestTextRecognition(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::TextRecognitionResult&&)>&& completion) { completion({ }); }
+    virtual void computeHasImageAnalysisResults(const URL&, ShareableBitmap&, ImageAnalysisType, CompletionHandler<void(bool)>&& completion) { completion(false); }
 #endif
 
 #if ENABLE(MEDIA_CONTROLS_CONTEXT_MENUS) && USE(UICONTEXTMENU)
@@ -569,6 +576,8 @@ public:
     virtual bool decidePolicyForInstallMissingMediaPluginsPermissionRequest(InstallMissingMediaPluginsPermissionRequest&) = 0;
 #endif
 
+    virtual void pageDidScroll(const WebCore::IntPoint&) { }
+
     virtual void didRestoreScrollPosition() = 0;
 
     virtual bool windowIsFrontWindowUnderMouse(const NativeWebMouseEvent&) { return false; }
@@ -583,7 +592,7 @@ public:
     virtual void didHandleDragStartRequest(bool started) = 0;
     virtual void didHandleAdditionalDragItemsRequest(bool added) = 0;
     virtual void willReceiveEditDragSnapshot() = 0;
-    virtual void didReceiveEditDragSnapshot(Optional<WebCore::TextIndicatorData>) = 0;
+    virtual void didReceiveEditDragSnapshot(std::optional<WebCore::TextIndicatorData>) = 0;
     virtual void didChangeDragCaretRect(const WebCore::IntRect& previousCaretRect, const WebCore::IntRect& caretRect) = 0;
 #endif
 
@@ -603,10 +612,11 @@ public:
 #if ENABLE(APP_HIGHLIGHTS)
     virtual void storeAppHighlight(const WebCore::AppHighlight&) = 0;
 #endif
+    virtual void requestScrollToRect(const WebCore::FloatRect& targetRect, const WebCore::FloatPoint& origin) { }
 
 #if PLATFORM(COCOA)
     virtual void cancelPointersForGestureRecognizer(UIGestureRecognizer*) { }
-    virtual WTF::Optional<unsigned> activeTouchIdentifierForGestureRecognizer(UIGestureRecognizer*) { return WTF::nullopt; }
+    virtual std::optional<unsigned> activeTouchIdentifierForGestureRecognizer(UIGestureRecognizer*) { return std::nullopt; }
 #endif
 
 #if USE(WPE_RENDERER)
@@ -622,6 +632,10 @@ public:
 #if HAVE(TRANSLATION_UI_SERVICES) && ENABLE(CONTEXT_MENUS)
     virtual bool canHandleContextMenuTranslation() const = 0;
     virtual void handleContextMenuTranslation(const WebCore::TranslationContextMenuInfo&) = 0;
+#endif
+
+#if ENABLE(DATA_DETECTION)
+    virtual void handleClickForDataDetectionResult(const WebCore::DataDetectorElementInfo&, const WebCore::IntPoint&) { }
 #endif
 };
 

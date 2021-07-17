@@ -31,6 +31,8 @@
 #include "CryptoAlgorithmRegistry.h"
 #include "CryptoKeyPair.h"
 #include "CryptoKeyRSAComponents.h"
+#include "OpenSSLUtilities.h"
+#include <JavaScriptCore/TypedArrayInlines.h>
 #include <openssl/X509.h>
 #include <openssl/evp.h>
 
@@ -41,18 +43,6 @@ static size_t getRSAModulusLength(RSA* rsa)
     if (!rsa)
         return 0;
     return BN_num_bytes(rsa->n) * 8;
-}
-
-static Vector<uint8_t> convertToBytes(BIGNUM* bignum)
-{
-    Vector<uint8_t> bytes(BN_num_bytes(bignum));
-    BN_bn2bin(bignum, bytes.data());
-    return bytes;
-}
-
-static BIGNUM* convertToBigNumber(BIGNUM* bignum, const Vector<uint8_t>& bytes)
-{
-    return BN_bin2bn(bytes.data(), bytes.size(), bignum);
 }
 
 RefPtr<CryptoKeyRSA> CryptoKeyRSA::create(CryptoAlgorithmIdentifier identifier, CryptoAlgorithmIdentifier hash, bool hasHash, const CryptoKeyRSAComponents& keyData, bool extractable, CryptoKeyUsageBitmap usages)
@@ -153,11 +143,11 @@ size_t CryptoKeyRSA::keySizeInBits() const
 }
 
 // Convert the exponent vector to a 32-bit value, if possible.
-static Optional<uint32_t> exponentVectorToUInt32(const Vector<uint8_t>& exponent)
+static std::optional<uint32_t> exponentVectorToUInt32(const Vector<uint8_t>& exponent)
 {
     if (exponent.size() > 4) {
         if (std::any_of(exponent.begin(), exponent.end() - 4, [](uint8_t element) { return !!element; }))
-            return WTF::nullopt;
+            return std::nullopt;
     }
 
     uint32_t result = 0;
@@ -208,20 +198,20 @@ void CryptoKeyRSA::generatePair(CryptoAlgorithmIdentifier algorithm, CryptoAlgor
     callback(CryptoKeyPair { WTFMove(publicKey), WTFMove(privateKey) });
 }
 
-RefPtr<CryptoKeyRSA> CryptoKeyRSA::importSpki(CryptoAlgorithmIdentifier identifier, Optional<CryptoAlgorithmIdentifier> hash, Vector<uint8_t>&& keyData, bool extractable, CryptoKeyUsageBitmap usages)
+RefPtr<CryptoKeyRSA> CryptoKeyRSA::importSpki(CryptoAlgorithmIdentifier identifier, std::optional<CryptoAlgorithmIdentifier> hash, Vector<uint8_t>&& keyData, bool extractable, CryptoKeyUsageBitmap usages)
 {
     // We need a local pointer variable to pass to d2i (DER to internal) functions().
     const uint8_t* ptr = keyData.data();
 
     // We use d2i_PUBKEY() to import a public key.
     auto pkey = EvpPKeyPtr(d2i_PUBKEY(nullptr, &ptr, keyData.size()));
-    if (!pkey)
+    if (!pkey || EVP_PKEY_type(pkey->type) != EVP_PKEY_RSA)
         return nullptr;
 
-    return adoptRef(new CryptoKeyRSA(identifier, hash.valueOr(CryptoAlgorithmIdentifier::SHA_1), !!hash, CryptoKeyType::Public, WTFMove(pkey), extractable, usages));
+    return adoptRef(new CryptoKeyRSA(identifier, hash.value_or(CryptoAlgorithmIdentifier::SHA_1), !!hash, CryptoKeyType::Public, WTFMove(pkey), extractable, usages));
 }
 
-RefPtr<CryptoKeyRSA> CryptoKeyRSA::importPkcs8(CryptoAlgorithmIdentifier identifier, Optional<CryptoAlgorithmIdentifier> hash, Vector<uint8_t>&& keyData, bool extractable, CryptoKeyUsageBitmap usages)
+RefPtr<CryptoKeyRSA> CryptoKeyRSA::importPkcs8(CryptoAlgorithmIdentifier identifier, std::optional<CryptoAlgorithmIdentifier> hash, Vector<uint8_t>&& keyData, bool extractable, CryptoKeyUsageBitmap usages)
 {
     // We need a local pointer variable to pass to d2i (DER to internal) functions().
     const uint8_t* ptr = keyData.data();
@@ -232,10 +222,10 @@ RefPtr<CryptoKeyRSA> CryptoKeyRSA::importPkcs8(CryptoAlgorithmIdentifier identif
         return nullptr;
 
     auto pkey = EvpPKeyPtr(EVP_PKCS82PKEY(p8inf.get()));
-    if (!pkey)
+    if (!pkey || EVP_PKEY_type(pkey->type) != EVP_PKEY_RSA)
         return nullptr;
 
-    return adoptRef(new CryptoKeyRSA(identifier, hash.valueOr(CryptoAlgorithmIdentifier::SHA_1), !!hash, CryptoKeyType::Private, WTFMove(pkey), extractable, usages));
+    return adoptRef(new CryptoKeyRSA(identifier, hash.value_or(CryptoAlgorithmIdentifier::SHA_1), !!hash, CryptoKeyType::Private, WTFMove(pkey), extractable, usages));
 }
 
 ExceptionOr<Vector<uint8_t>> CryptoKeyRSA::exportSpki() const
@@ -243,13 +233,13 @@ ExceptionOr<Vector<uint8_t>> CryptoKeyRSA::exportSpki() const
     if (type() != CryptoKeyType::Public)
         return Exception { InvalidAccessError };
 
-    int len = i2d_PUBKEY(m_platformKey.get(), nullptr);
+    int len = i2d_PUBKEY(platformKey(), nullptr);
     if (len < 0)
         return Exception { OperationError };
 
     Vector<uint8_t> keyData(len);
     auto ptr = keyData.data();
-    if (i2d_PUBKEY(m_platformKey.get(), &ptr) < 0)
+    if (i2d_PUBKEY(platformKey(), &ptr) < 0)
         return Exception { OperationError };
 
     return keyData;
@@ -260,7 +250,7 @@ ExceptionOr<Vector<uint8_t>> CryptoKeyRSA::exportPkcs8() const
     if (type() != CryptoKeyType::Private)
         return Exception { InvalidAccessError };
 
-    auto p8inf = PKCS8PrivKeyInfoPtr(EVP_PKEY2PKCS8(m_platformKey.get()));
+    auto p8inf = PKCS8PrivKeyInfoPtr(EVP_PKEY2PKCS8(platformKey()));
     if (!p8inf)
         return Exception { OperationError };
 
@@ -278,9 +268,9 @@ ExceptionOr<Vector<uint8_t>> CryptoKeyRSA::exportPkcs8() const
 
 auto CryptoKeyRSA::algorithm() const -> KeyAlgorithm
 {
-    RSA* rsa = EVP_PKEY_get0_RSA(m_platformKey.get());
+    RSA* rsa = EVP_PKEY_get0_RSA(platformKey());
 
-    auto modulusLength = getRSAModulusLength(rsa);
+    auto modulusLength = rsa ? BN_num_bytes(rsa->n) * 8 : 0;
     auto publicExponent = rsa ? convertToBytes(rsa->e) : Vector<uint8_t> { };
 
     if (m_restrictedToSpecificHash) {
@@ -301,7 +291,7 @@ auto CryptoKeyRSA::algorithm() const -> KeyAlgorithm
 
 std::unique_ptr<CryptoKeyRSAComponents> CryptoKeyRSA::exportData() const
 {
-    RSA* rsa = EVP_PKEY_get0_RSA(m_platformKey.get());
+    RSA* rsa = EVP_PKEY_get0_RSA(platformKey());
     if (!rsa)
         return nullptr;
 

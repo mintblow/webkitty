@@ -103,7 +103,7 @@ void ContextMenuController::handleContextMenuEvent(Event& event)
 
     SetForScope<bool> isHandlingContextMenuEventForScope(m_isHandlingContextMenuEvent, true);
 
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::DisallowUserAgentShadowContent, HitTestRequest::AllowChildFrameContent };
+    constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::DisallowUserAgentShadowContent, HitTestRequest::Type::AllowChildFrameContent };
     m_contextMenu = maybeCreateContextMenu(event, hitType, ContextMenuContext::Type::ContextMenu);
     if (!m_contextMenu)
         return;
@@ -124,9 +124,9 @@ void ContextMenuController::showContextMenu(Event& event, ContextMenuProvider& p
 
     auto contextType = provider.contextMenuContextType();
 
-    OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::AllowChildFrameContent };
+    OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::AllowChildFrameContent };
     if (contextType == ContextMenuContext::Type::ContextMenu)
-        hitType.add(HitTestRequest::DisallowUserAgentShadowContent);
+        hitType.add(HitTestRequest::Type::DisallowUserAgentShadowContent);
 
     m_contextMenu = maybeCreateContextMenu(event, WTFMove(hitType), contextType);
     if (!m_contextMenu) {
@@ -142,7 +142,7 @@ void ContextMenuController::showContextMenu(Event& event, ContextMenuProvider& p
     showContextMenu(event);
 }
 
-std::unique_ptr<ContextMenu> ContextMenuController::maybeCreateContextMenu(Event& event, OptionSet<HitTestRequest::RequestType> hitType, ContextMenuContext::Type contextType)
+std::unique_ptr<ContextMenu> ContextMenuController::maybeCreateContextMenu(Event& event, OptionSet<HitTestRequest::Type> hitType, ContextMenuContext::Type contextType)
 {
     if (!is<MouseEvent>(event))
         return nullptr;
@@ -441,12 +441,6 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuAction action, co
     case ContextMenuItemTagTextDirectionRightToLeft:
         frame->editor().command("MakeTextWritingDirectionRightToLeft").execute();
         break;
-    case ContextMenuItemTagAddHighlightToCurrentGroup:
-        // FIXME: Add Highlight Logic
-        break;
-    case ContextMenuItemTagAddHighlightToNewGroup:
-        // FIXME: Add Highlight Logic
-        break;
 #if PLATFORM(COCOA)
     case ContextMenuItemTagSearchInSpotlight:
         m_client.searchWithSpotlight();
@@ -521,7 +515,7 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuAction action, co
     case ContextMenuItemTagDictationAlternative:
         frame->editor().applyDictationAlternative(title);
         break;
-    case ContextMenuItemTagRevealImage:
+    case ContextMenuItemTagQuickLookImage:
         // This should be handled at the client layer.
         ASSERT_NOT_REACHED();
         break;
@@ -801,8 +795,8 @@ void ContextMenuController::populate()
         contextMenuItemTagSearchInSpotlight());
 #endif
 #if ENABLE(APP_HIGHLIGHTS)
-    ContextMenuItem AddHighlightItem(ActionType, ContextMenuItemTagAddHighlightToCurrentGroup, contextMenuItemTagAddHighlightToCurrentGroup());
-    ContextMenuItem AddHighlightToNewGroupItem(ActionType, ContextMenuItemTagAddHighlightToNewGroup, contextMenuItemTagAddHighlightToNewGroup());
+    ContextMenuItem AddHighlightItem(ActionType, ContextMenuItemTagAddHighlightToCurrentQuickNote, contextMenuItemTagAddHighlightToCurrentQuickNote());
+    ContextMenuItem AddHighlightToNewQuickNoteItem(ActionType, ContextMenuItemTagAddHighlightToNewQuickNote, contextMenuItemTagAddHighlightToNewQuickNote());
 #endif
 #if !PLATFORM(GTK)
     ContextMenuItem SearchWebItem(ActionType, ContextMenuItemTagSearchWeb, contextMenuItemTagSearchWeb());
@@ -830,9 +824,6 @@ void ContextMenuController::populate()
     ContextMenuItem SelectAllItem(ActionType, ContextMenuItemTagSelectAll, contextMenuItemTagSelectAll());
     ContextMenuItem InsertEmojiItem(ActionType, ContextMenuItemTagInsertEmoji, contextMenuItemTagInsertEmoji());
 #endif
-#if ENABLE(IMAGE_EXTRACTION)
-    ContextMenuItem RevealImageItem(ActionType, ContextMenuItemTagRevealImage, contextMenuItemTagRevealImage());
-#endif
 
 #if PLATFORM(GTK) || PLATFORM(WIN)
     ContextMenuItem ShareMenuItem;
@@ -855,6 +846,12 @@ void ContextMenuController::populate()
     // The default image control menu gets populated solely by the platform.
     if (m_context.controlledImage())
         return;
+#endif
+
+#if ENABLE(IMAGE_ANALYSIS)
+    bool shouldAppendQuickLookImageItem = false;
+    auto quickLookItemTitle = frame->settings().preferInlineTextSelectionInImages() ? contextMenuItemTagLookUpImage() : contextMenuItemTagQuickLookImage();
+    ContextMenuItem QuickLookImageItem { ActionType, ContextMenuItemTagQuickLookImage, quickLookItemTitle };
 #endif
 
     auto addSelectedTextActionsIfNeeded = [&] (const String& selectedText) {
@@ -904,9 +901,9 @@ void ContextMenuController::populate()
             if (imageURL.isLocalFile() || image) {
                 appendItem(CopyImageItem, m_contextMenu.get());
 
-#if ENABLE(IMAGE_EXTRACTION)
-                if (image && !image->isAnimated())
-                    appendItem(RevealImageItem, m_contextMenu.get());
+#if ENABLE(IMAGE_ANALYSIS)
+                if (m_client.supportsLookUpInImages() && image && !image->isAnimated())
+                    shouldAppendQuickLookImageItem = true;
 #endif
             }
 #if PLATFORM(GTK)
@@ -968,7 +965,7 @@ void ContextMenuController::populate()
 #if ENABLE(APP_HIGHLIGHTS)
                 if (auto* page = frame->page()) {
                     if (page->settings().appHighlightsEnabled() && !selectionIsInsideImageOverlay) {
-                        appendItem(AddHighlightToNewGroupItem, m_contextMenu.get());
+                        appendItem(AddHighlightToNewQuickNoteItem, m_contextMenu.get());
                         appendItem(AddHighlightItem, m_contextMenu.get());
                         appendItem(*separatorItem(), m_contextMenu.get());
                     }
@@ -1170,6 +1167,18 @@ void ContextMenuController::populate()
             appendItem(ShareMenuItem, m_contextMenu.get());
         }
     }
+
+#if ENABLE(IMAGE_ANALYSIS)
+    if (shouldAppendQuickLookImageItem) {
+        if (!frame->settings().preferInlineTextSelectionInImages()) {
+            // In the case where inline text selection is enabled, the Look Up item is only added if
+            // we discover visual look up results after image analysis. In that scenario, a separator
+            // is only added before the Look Up item once we're certain that we want to show it.
+            appendItem(*separatorItem(), m_contextMenu.get());
+        }
+        appendItem(QuickLookImageItem, m_contextMenu.get());
+    }
+#endif // ENABLE(IMAGE_ANALYSIS)
 }
 
 void ContextMenuController::addInspectElementItem()
@@ -1319,10 +1328,10 @@ void ContextMenuController::checkOrEnableIfNeeded(ContextMenuItem& item) const
         case ContextMenuItemTagCheckSpellingWhileTyping:
             shouldCheck = frame->editor().isContinuousSpellCheckingEnabled();
             break;
-        case ContextMenuItemTagAddHighlightToCurrentGroup:
+        case ContextMenuItemTagAddHighlightToCurrentQuickNote:
             shouldEnable = frame->selection().isRange();
             break;
-        case ContextMenuItemTagAddHighlightToNewGroup:
+        case ContextMenuItemTagAddHighlightToNewQuickNote:
             shouldEnable = frame->selection().isRange();
             break;
 #if PLATFORM(COCOA)
@@ -1495,7 +1504,7 @@ void ContextMenuController::checkOrEnableIfNeeded(ContextMenuItem& item) const
             shouldEnable = m_context.hitTestResult().mediaHasAudio();
             shouldCheck = shouldEnable &&  m_context.hitTestResult().mediaMuted();
             break;
-        case ContextMenuItemTagRevealImage:
+        case ContextMenuItemTagQuickLookImage:
         case ContextMenuItemTagTranslate:
             break;
     }

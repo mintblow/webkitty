@@ -30,7 +30,6 @@
 #include "X86Assembler.h"
 #include "AbstractMacroAssembler.h"
 #include <array>
-#include <wtf/Optional.h>
 
 namespace JSC {
 
@@ -1336,26 +1335,6 @@ public:
     void store32(TrustedImm32 imm, BaseIndex address)
     {
         m_assembler.movl_i32m(imm.m_value, address.offset, address.base, address.index, address.scale);
-    }
-
-    void storeZero32(ImplicitAddress address)
-    {
-        store32(TrustedImm32(0), address);
-    }
-
-    void storeZero32(BaseIndex address)
-    {
-        store32(TrustedImm32(0), address);
-    }
-
-    void storeZero16(ImplicitAddress address)
-    {
-        store16(TrustedImm32(0), address);
-    }
-
-    void storeZero16(BaseIndex address)
-    {
-        store16(TrustedImm32(0), address);
     }
 
     void store8(TrustedImm32 imm, Address address)
@@ -3108,7 +3087,7 @@ public:
         }
     }
 
-    static Optional<ResultCondition> commuteCompareToZeroIntoTest(RelationalCondition cond)
+    static std::optional<ResultCondition> commuteCompareToZeroIntoTest(RelationalCondition cond)
     {
         switch (cond) {
         case Equal:
@@ -3121,7 +3100,7 @@ public:
             return PositiveOrZero;
             break;
         default:
-            return WTF::nullopt;
+            return std::nullopt;
         }
     }
 

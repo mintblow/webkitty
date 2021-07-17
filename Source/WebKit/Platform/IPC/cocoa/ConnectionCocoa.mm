@@ -89,7 +89,7 @@ private:
         : m_xpcConnection(xpcConnection)
         , m_watchdogTimer(RunLoop::main(), this, &ConnectionTerminationWatchdog::watchdogTimerFired)
 #if PLATFORM(IOS_FAMILY)
-        , m_assertion(makeUnique<WebKit::ProcessAndUIAssertion>(xpc_connection_get_pid(m_xpcConnection.get()), "ConnectionTerminationWatchdog"_s, WebKit::ProcessAssertionType::Background))
+        , m_assertion(WebKit::ProcessAndUIAssertion::create(xpc_connection_get_pid(m_xpcConnection.get()), "ConnectionTerminationWatchdog"_s, WebKit::ProcessAssertionType::Background))
 #endif
     {
         m_watchdogTimer.startOneShot(interval);
@@ -104,7 +104,7 @@ private:
     OSObjectPtr<xpc_connection_t> m_xpcConnection;
     RunLoop::Timer<ConnectionTerminationWatchdog> m_watchdogTimer;
 #if PLATFORM(IOS_FAMILY)
-    std::unique_ptr<WebKit::ProcessAndUIAssertion> m_assertion;
+    Ref<WebKit::ProcessAndUIAssertion> m_assertion;
 #endif
 };
     
@@ -309,7 +309,7 @@ bool Connection::sendOutgoingMessage(UniqueRef<Encoder>&& encoder)
             return false;
     }
 
-    size_t safeMessageSize = messageSize.unsafeGet();
+    size_t safeMessageSize = messageSize;
     auto message = MachMessage::create(encoder->messageName(), safeMessageSize);
     if (!message)
         return false;
@@ -423,7 +423,7 @@ static std::unique_ptr<Decoder> createMessageDecoder(mach_msg_header_t* header)
             return nullptr;
         }
 
-        return Decoder::create(body, bodySize.unsafeGet(), nullptr, Vector<Attachment> { });
+        return Decoder::create(body, bodySize, nullptr, Vector<Attachment> { });
     }
 
     mach_msg_body_t* body = reinterpret_cast<mach_msg_body_t*>(header + 1);
@@ -476,7 +476,7 @@ static std::unique_ptr<Decoder> createMessageDecoder(mach_msg_header_t* header)
         return nullptr;
     }
 
-    return Decoder::create(messageBody, messageBodySize.unsafeGet(), nullptr, WTFMove(attachments));
+    return Decoder::create(messageBody, messageBodySize, nullptr, WTFMove(attachments));
 }
 
 // The receive buffer size should always include the maximum trailer size.
@@ -595,10 +595,10 @@ IPC::Connection::Identifier Connection::identifier() const
     return Identifier(m_isServer ? m_receivePort : m_sendPort, m_xpcConnection);
 }
 
-Optional<audit_token_t> Connection::getAuditToken()
+std::optional<audit_token_t> Connection::getAuditToken()
 {
     if (!m_xpcConnection)
-        return WTF::nullopt;
+        return std::nullopt;
     
     audit_token_t auditToken;
     xpc_connection_get_audit_token(m_xpcConnection.get(), &auditToken);

@@ -98,6 +98,11 @@ CallData JSCell::getConstructData(JSCell*)
     return { };
 }
 
+bool JSCell::isValidCallee() const
+{
+    return isObject() && asObject(this)->globalObject();
+}
+
 bool JSCell::put(JSCell* cell, JSGlobalObject* globalObject, PropertyName identifier, JSValue value, PutPropertySlot& slot)
 {
     if (cell->isString() || cell->isSymbol() || cell->isHeapBigInt())
@@ -287,7 +292,7 @@ NEVER_INLINE NO_RETURN_DUE_TO_CRASH NOT_TAIL_CALLED void reportZappedCellAndCras
         variousState |= static_cast<uint64_t>(foundBlockHandle->needsDestruction()) << 3;
         variousState |= static_cast<uint64_t>(foundBlock->isNewlyAllocated(cell)) << 4;
 
-        ptrdiff_t cellOffset = cellAddress - reinterpret_cast<uint64_t>(foundBlockHandle->start());
+        ptrdiff_t cellOffset = cellAddress - bitwise_cast<uintptr_t>(foundBlockHandle->start());
         bool cellIsProperlyAligned = !(cellOffset % cellSize);
         variousState |= static_cast<uint64_t>(cellIsProperlyAligned) << 5;
     } else {

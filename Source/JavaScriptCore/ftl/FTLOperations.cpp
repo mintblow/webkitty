@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -612,7 +612,7 @@ JSC_DEFINE_JIT_OPERATION(operationMaterializeObjectInOSR, JSCell*, (JSGlobalObje
         JSGlobalObject* globalObject = codeBlock->globalObject();
         Structure* structure = globalObject->arrayStructureForIndexingTypeDuringAllocation(ArrayWithContiguous);
 
-        Checked<unsigned, RecordOverflow> checkedArraySize = 0;
+        CheckedUint32 checkedArraySize = 0;
         unsigned numProperties = 0;
         for (unsigned i = materialization->properties().size(); i--;) {
             const ExitPropertyValue& property = materialization->properties()[i];
@@ -628,7 +628,7 @@ JSC_DEFINE_JIT_OPERATION(operationMaterializeObjectInOSR, JSCell*, (JSGlobalObje
 
         // FIXME: we should throw an out of memory error here if checkedArraySize has hasOverflowed() or tryCreate() fails.
         // https://bugs.webkit.org/show_bug.cgi?id=169784
-        unsigned arraySize = checkedArraySize.unsafeGet(); // Crashes if overflowed.
+        unsigned arraySize = checkedArraySize; // Crashes if overflowed.
         JSArray* result = JSArray::tryCreate(vm, structure, arraySize);
         RELEASE_ASSERT(result);
 
@@ -730,6 +730,7 @@ JSC_DEFINE_JIT_OPERATION(operationTypeOfObjectAsTypeofType, int32_t, (JSGlobalOb
 JSC_DEFINE_JIT_OPERATION(operationCompileFTLLazySlowPath, void*, (CallFrame* callFrame, unsigned index))
 {
     VM& vm = callFrame->deprecatedVM();
+    // Don't need an ActiveScratchBufferScope here because we DeferGCForAWhile.
 
     // We cannot GC. We've got pointers in evil places.
     DeferGCForAWhile deferGC(vm.heap);

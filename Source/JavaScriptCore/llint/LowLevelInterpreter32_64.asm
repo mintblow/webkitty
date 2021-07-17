@@ -425,7 +425,7 @@ end)
 op(llint_get_host_call_return_value, macro ()
     functionPrologue()
     pushCalleeSaves()
-    loadp Callee[cfr], t0
+    loadp Callee + PayloadOffset[cfr], t0
     convertCalleeToVM(t0)
     loadi VM::encodedHostCallReturnValue + TagOffset[t0], t1
     loadi VM::encodedHostCallReturnValue + PayloadOffset[t0], t0
@@ -1975,6 +1975,43 @@ macro compareUnsignedJumpOp(opcodeName, opcodeStruct, integerCompare)
 end
 
 
+macro compareOp(opcodeName, opcodeStruct, integerCompareAndSet, doubleCompareAndSet)
+    llintOpWithReturn(op_%opcodeName%, opcodeStruct, macro (size, get, dispatch, return)
+        get(m_lhs, t2)
+        get(m_rhs, t3)
+        loadConstantOrVariable(size, t2, t0, t1)
+        loadConstantOrVariable2Reg(size, t3, t2, t3)
+        bineq t0, Int32Tag, .op1NotInt
+        bineq t2, Int32Tag, .op2NotInt
+        integerCompareAndSet(t1, t3, t1)
+        return(BooleanTag, t1)
+
+    .op1NotInt:
+        bia t0, LowestTag, .slow
+        bib t2, LowestTag, .op1NotIntOp2Double
+        bineq t2, Int32Tag, .slow
+        ci2ds t3, ft1
+        jmp .op1NotIntReady
+    .op1NotIntOp2Double:
+        fii2d t3, t2, ft1
+    .op1NotIntReady:
+        fii2d t1, t0, ft0
+        doubleCompareAndSet(ft0, ft1, t1)
+        return(BooleanTag, t1)
+
+    .op2NotInt:
+        ci2ds t1, ft0
+        bia t2, LowestTag, .slow
+        fii2d t3, t2, ft1
+        doubleCompareAndSet(ft0, ft1, t1)
+        return(BooleanTag, t1)
+
+    .slow:
+        callSlowPath(_slow_path_%opcodeName%)
+        dispatch()
+    end)
+end
+
 macro compareUnsignedOp(opcodeName, opcodeStruct, integerCompareAndSet)
     llintOpWithReturn(op_%opcodeName%, opcodeStruct, macro (size, get, dispatch, return)
         get(m_rhs, t2)
@@ -2582,7 +2619,7 @@ llintOpWithMetadata(op_put_to_scope, OpPutToScope, macro (size, get, dispatch, m
         storei t3, JSLexicalEnvironment_variables + PayloadOffset[t0, t1, 8]
     end
 
-    macro putLocalClosureVar()
+    macro putResolvedClosureVar()
         get(m_value, t1)
         loadConstantOrVariable(size, t1, t2, t3)
         loadp OpPutToScope::Metadata::m_watchpointSet[t5], t1
@@ -2609,10 +2646,10 @@ llintOpWithMetadata(op_put_to_scope, OpPutToScope, macro (size, get, dispatch, m
     loadi OpPutToScope::Metadata::m_getPutInfo + GetPutInfo::m_operand[t5], t0
     andi ResolveTypeMask, t0
 
-#pLocalClosureVar:
-    bineq t0, LocalClosureVar, .pGlobalProperty
+#pResolvedClosureVar:
+    bineq t0, ResolvedClosureVar, .pGlobalProperty
     loadVariable(get, m_scope, t2, t1, t0)
-    putLocalClosureVar()
+    putResolvedClosureVar()
     writeBarrierOnOperands(size, get, m_scope, m_value)
     dispatch()
 
@@ -2993,7 +3030,9 @@ end)
 
 
 op(fuzzer_return_early_from_loop_hint, macro ()
-    notSupported()
+    move UndefinedTag, r1
+    move 0, r0
+    doReturn()
 end)
 
 

@@ -56,10 +56,10 @@ public:
     LayoutUnit verticalSpacing() const { return m_verticalSpacing; }
 
     void setCollapsedBorder(const Edges& collapsedBorder) { m_collapsedBorder = collapsedBorder; }
-    Optional<Edges> collapsedBorder() const { return m_collapsedBorder; }
+    std::optional<Edges> collapsedBorder() const { return m_collapsedBorder; }
 
-    void setWidthConstraints(FormattingContext::IntrinsicWidthConstraints intrinsicWidthConstraints) { m_intrinsicWidthConstraints = intrinsicWidthConstraints; }
-    Optional<FormattingContext::IntrinsicWidthConstraints> widthConstraints() const { return m_intrinsicWidthConstraints; }
+    void setWidthConstraints(IntrinsicWidthConstraints intrinsicWidthConstraints) { m_intrinsicWidthConstraints = intrinsicWidthConstraints; }
+    std::optional<IntrinsicWidthConstraints> widthConstraints() const { return m_intrinsicWidthConstraints; }
 
     bool isEmpty() const { return m_slotMap.isEmpty(); }
     // Column represents a vertical set of slots in the grid. A column has horizontal position and width.
@@ -67,28 +67,26 @@ public:
     public:
         Column(const ContainerBox*);
 
-        void setLogicalLeft(LayoutUnit);
-        LayoutUnit logicalLeft() const;
-        LayoutUnit logicalRight() const { return logicalLeft() + logicalWidth(); }
-        void setLogicalWidth(LayoutUnit);
-        LayoutUnit logicalWidth() const;
+        void setUsedLogicalLeft(LayoutUnit);
+        LayoutUnit usedLogicalLeft() const;
+        LayoutUnit usedLogicalRight() const { return usedLogicalLeft() + usedLogicalWidth(); }
+        void setUsedLogicalWidth(LayoutUnit);
+        LayoutUnit usedLogicalWidth() const;
 
-        bool isFixedWidth() const;
+        void setComputedLogicalWidth(Length&&);
+        const Length& computedLogicalWidth() const { return m_computedLogicalWidth; }
 
-        void setHasFixedWidthCell() { m_hasFixedWidthCell = true; }
         const ContainerBox* box() const { return m_layoutBox.get(); }
 
     private:
-        bool hasFixedWidthCell() const { return m_hasFixedWidthCell; }
-
-        LayoutUnit m_computedLogicalWidth;
-        LayoutUnit m_computedLogicalLeft;
+        LayoutUnit m_usedLogicalWidth;
+        LayoutUnit m_usedLogicalLeft;
+        Length m_computedLogicalWidth;
         WeakPtr<const ContainerBox> m_layoutBox;
-        bool m_hasFixedWidthCell { false };
 
 #if ASSERT_ENABLED
-        bool m_hasComputedWidth { false };
-        bool m_hasComputedLeft { false };
+        bool m_hasUsedWidth { false };
+        bool m_hasUsedLeft { false };
 #endif
     };
 
@@ -102,8 +100,7 @@ public:
         void addColumn(const ContainerBox&);
         void addAnonymousColumn();
 
-        LayoutUnit logicalWidth() const { return m_columnList.last().logicalRight() - m_columnList.first().logicalLeft(); }
-        bool hasFixedColumnsOnly() const;
+        LayoutUnit logicalWidth() const { return m_columnList.last().usedLogicalRight() - m_columnList.first().usedLogicalLeft(); }
 
     private:
         ColumnList m_columnList;
@@ -167,8 +164,6 @@ public:
         void setBaseline(InlineLayoutUnit baseline) { m_baseline = baseline; }
         InlineLayoutUnit baseline() const { return m_baseline; }
 
-        bool isFixedWidth() const;
-
         const ContainerBox& box() const { return *m_layoutBox.get(); }
 
     private:
@@ -187,8 +182,8 @@ public:
         const Cell& cell() const { return *m_cell; }
         Cell& cell() { return *m_cell; }
 
-        const FormattingContext::IntrinsicWidthConstraints& widthConstraints() const { return m_widthConstraints; }
-        void setWidthConstraints(const FormattingContext::IntrinsicWidthConstraints& widthConstraints) { m_widthConstraints = widthConstraints; }
+        const IntrinsicWidthConstraints& widthConstraints() const { return m_widthConstraints; }
+        void setWidthConstraints(const IntrinsicWidthConstraints& widthConstraints) { m_widthConstraints = widthConstraints; }
 
         // Initial slot position for a spanning cell.
         // <td></td><td colspan=2></td> [1, 0] slot has column span of 2.
@@ -205,7 +200,7 @@ public:
         WeakPtr<Cell> m_cell;
         bool m_isColumnSpanned { false };
         bool m_isRowSpanned { false };
-        FormattingContext::IntrinsicWidthConstraints m_widthConstraints;
+        IntrinsicWidthConstraints m_widthConstraints;
     };
 
     const Columns& columns() const { return m_columns; }
@@ -231,9 +226,43 @@ private:
 
     LayoutUnit m_horizontalSpacing;
     LayoutUnit m_verticalSpacing;
-    Optional<FormattingContext::IntrinsicWidthConstraints> m_intrinsicWidthConstraints;
-    Optional<Edges> m_collapsedBorder;
+    std::optional<IntrinsicWidthConstraints> m_intrinsicWidthConstraints;
+    std::optional<Edges> m_collapsedBorder;
 };
+
+inline void TableGrid::Column::setComputedLogicalWidth(Length&& computedLogicalWidth)
+{
+    ASSERT(computedLogicalWidth.type() == LengthType::Fixed || computedLogicalWidth.type() == LengthType::Percent || computedLogicalWidth.type() == LengthType::Relative);
+    m_computedLogicalWidth = WTFMove(computedLogicalWidth);
+}
+
+inline void TableGrid::Column::setUsedLogicalWidth(LayoutUnit usedLogicalWidth)
+{
+#if ASSERT_ENABLED
+    m_hasUsedWidth = true;
+#endif
+    m_usedLogicalWidth = usedLogicalWidth;
+}
+
+inline LayoutUnit TableGrid::Column::usedLogicalWidth() const
+{
+    ASSERT(m_hasUsedWidth);
+    return m_usedLogicalWidth;
+}
+
+inline void TableGrid::Column::setUsedLogicalLeft(LayoutUnit usedLogicalLeft)
+{
+#if ASSERT_ENABLED
+    m_hasUsedLeft = true;
+#endif
+    m_usedLogicalLeft = usedLogicalLeft;
+}
+
+inline LayoutUnit TableGrid::Column::usedLogicalLeft() const
+{
+    ASSERT(m_hasUsedLeft);
+    return m_usedLogicalLeft;
+}
 
 }
 }

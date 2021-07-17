@@ -36,7 +36,6 @@
 #include <sys/stat.h>
 #include <windows.h>
 #include <wtf/CryptographicallyRandomNumber.h>
-#include <wtf/FileMetadata.h>
 #include <wtf/HashMap.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
@@ -71,20 +70,19 @@ static bool getFileSizeFromFindData(const WIN32_FIND_DATAW& findData, long long&
     return true;
 }
 
-static bool getFileSizeFromByHandleFileInformationStructure(const BY_HANDLE_FILE_INFORMATION& fileInformation, long long& size)
+static std::optional<uint64_t> getFileSizeFromByHandleFileInformationStructure(const BY_HANDLE_FILE_INFORMATION& fileInformation)
 {
     ULARGE_INTEGER fileSize;
     fileSize.HighPart = fileInformation.nFileSizeHigh;
     fileSize.LowPart = fileInformation.nFileSizeLow;
 
     if (fileSize.QuadPart > static_cast<ULONGLONG>(std::numeric_limits<long long>::max()))
-        return false;
+        return std::nullopt;
 
-    size = fileSize.QuadPart;
-    return true;
+    return fileSize.QuadPart;
 }
 
-static void getFileCreationTimeFromFindData(const WIN32_FIND_DATAW& findData, time_t& time)
+static void fileCreationTimeFromFindData(const WIN32_FIND_DATAW& findData, time_t& time)
 {
     ULARGE_INTEGER fileTime;
     fileTime.HighPart = findData.ftCreationTime.dwHighDateTime;
@@ -95,7 +93,7 @@ static void getFileCreationTimeFromFindData(const WIN32_FIND_DATAW& findData, ti
 }
 
 
-static void getFileModificationTimeFromFindData(const WIN32_FIND_DATAW& findData, time_t& time)
+static void fileModificationTimeFromFindData(const WIN32_FIND_DATAW& findData, time_t& time)
 {
     ULARGE_INTEGER fileTime;
     fileTime.HighPart = findData.ftLastWriteTime.dwHighDateTime;
@@ -105,42 +103,24 @@ static void getFileModificationTimeFromFindData(const WIN32_FIND_DATAW& findData
     time = fileTime.QuadPart / 10000000 - kSecondsFromFileTimeToTimet;
 }
 
-bool getFileSize(PlatformFileHandle fileHandle, long long& size)
+std::optional<uint64_t> fileSize(PlatformFileHandle fileHandle)
 {
     BY_HANDLE_FILE_INFORMATION fileInformation;
     if (!::GetFileInformationByHandle(fileHandle, &fileInformation))
-        return false;
+        return std::nullopt;
 
-    return getFileSizeFromByHandleFileInformationStructure(fileInformation, size);
+    return getFileSizeFromByHandleFileInformationStructure(fileInformation);
 }
 
-Optional<WallTime> getFileCreationTime(const String& path)
+std::optional<WallTime> fileCreationTime(const String& path)
 {
     WIN32_FIND_DATAW findData;
     if (!getFindData(path, findData))
-        return WTF::nullopt;
+        return std::nullopt;
 
     time_t time = 0;
-    getFileCreationTimeFromFindData(findData, time);
+    fileCreationTimeFromFindData(findData, time);
     return WallTime::fromRawSeconds(time);
-}
-
-static String getFinalPathName(const String& path)
-{
-    auto handle = openFile(path, FileOpenMode::Read);
-    if (!isHandleValid(handle))
-        return String();
-
-    // VOLUME_NAME_DOS can return a \\?\ prefixed path, so it can be longer than MAX_PATH
-    Vector<UChar> buffer(32768);
-    if (::GetFinalPathNameByHandleW(handle, wcharFrom(buffer.data()), buffer.size(), VOLUME_NAME_DOS) >= 32768) {
-        closeFile(handle);
-        return String();
-    }
-    closeFile(handle);
-
-    buffer.shrink(wcslen(wcharFrom(buffer.data())));
-    return String::adopt(WTFMove(buffer));
 }
 
 #if !USE(CF)
@@ -159,11 +139,6 @@ CString fileSystemRepresentation(const String& path)
 }
 
 #endif // !USE(CF)
-
-String homeDirectoryPath()
-{
-    return "";
-}
 
 static String bundleName()
 {
@@ -328,7 +303,7 @@ bool truncateFile(PlatformFileHandle handle, long long offset)
     return SetFileInformationByHandle(handle, FileEndOfFileInfo, &eofInfo, sizeof(FILE_END_OF_FILE_INFO));
 }
 
-int writeToFile(PlatformFileHandle handle, const char* data, int length)
+int writeToFile(PlatformFileHandle handle, const void* data, int length)
 {
     if (!isHandleValid(handle))
         return -1;
@@ -341,7 +316,7 @@ int writeToFile(PlatformFileHandle handle, const char* data, int length)
     return static_cast<int>(bytesWritten);
 }
 
-int readFromFile(PlatformFileHandle handle, char* data, int length)
+int readFromFile(PlatformFileHandle handle, void* data, int length)
 {
     if (!isHandleValid(handle))
         return -1;
@@ -364,45 +339,21 @@ String roamingUserSpecificStorageDirectory()
     return cachedStorageDirectory(CSIDL_APPDATA);
 }
 
-Vector<String> listDirectory(const String& directory, const String& filter)
-{
-    Vector<String> entries;
-
-    PathWalker walker(directory, filter);
-    if (!walker.isValid())
-        return entries;
-
-    do {
-        if (walker.data().dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY
-            && (!wcscmp(walker.data().cFileName, L".") || !wcscmp(walker.data().cFileName, L"..")))
-            continue;
-
-        entries.append(directory + "\\" + reinterpret_cast<const UChar*>(walker.data().cFileName));
-    } while (walker.step());
-
-    return entries;
-}
-
-Optional<int32_t> getFileDeviceId(const CString& fsFile)
+std::optional<int32_t> getFileDeviceId(const CString& fsFile)
 {
     auto handle = openFile(fsFile.data(), FileOpenMode::Read);
     if (!isHandleValid(handle))
-        return WTF::nullopt;
+        return std::nullopt;
 
     BY_HANDLE_FILE_INFORMATION fileInformation = { };
     if (!::GetFileInformationByHandle(handle, &fileInformation)) {
         closeFile(handle);
-        return WTF::nullopt;
+        return std::nullopt;
     }
 
     closeFile(handle);
 
     return fileInformation.dwVolumeSerialNumber;
-}
-
-String realPath(const String& filePath)
-{
-    return getFinalPathName(filePath);
 }
 
 String createTemporaryDirectory()
@@ -412,9 +363,21 @@ String createTemporaryDirectory()
     });
 }
 
-bool unmapViewOfFile(void* buffer, size_t)
+std::optional<uint32_t> volumeFileBlockSize(const String& path)
 {
-    return UnmapViewOfFile(buffer);
+    DWORD sectorsPerCluster, bytesPerSector, freeClusters, totalClusters;
+    if (!GetDiskFreeSpaceW(path.wideCharacters().data(), &sectorsPerCluster, &bytesPerSector, &freeClusters, &totalClusters))
+        return std::nullopt;
+
+    return sectorsPerCluster * bytesPerSector;
+}
+
+MappedFileData::~MappedFileData()
+{
+    if (m_fileData)
+        UnmapViewOfFile(m_fileData);
+    if (m_fileMapping)
+        CloseHandle(m_fileMapping);
 }
 
 bool MappedFileData::mapFileHandle(PlatformFileHandle handle, FileOpenMode openMode, MappedFileMode)
@@ -422,12 +385,12 @@ bool MappedFileData::mapFileHandle(PlatformFileHandle handle, FileOpenMode openM
     if (!isHandleValid(handle))
         return false;
 
-    long long size;
-    if (!getFileSize(handle, size) || size > std::numeric_limits<size_t>::max() || size > std::numeric_limits<decltype(m_fileSize)>::max()) {
+    auto size = fileSize(handle);
+    if (!size || *size > std::numeric_limits<size_t>::max() || *size > std::numeric_limits<decltype(m_fileSize)>::max()) {
         return false;
     }
 
-    if (!size) {
+    if (!*size) {
         return true;
     }
 
@@ -448,15 +411,14 @@ bool MappedFileData::mapFileHandle(PlatformFileHandle handle, FileOpenMode openM
         break;
     }
 
-    auto mapping = CreateFileMapping(handle, nullptr, pageProtection, 0, 0, nullptr);
-    if (!mapping)
+    m_fileMapping = CreateFileMapping(handle, nullptr, pageProtection, 0, 0, nullptr);
+    if (!m_fileMapping)
         return false;
 
-    m_fileData = MapViewOfFile(mapping, desiredAccess, 0, 0, size);
-    CloseHandle(mapping);
+    m_fileData = MapViewOfFile(m_fileMapping, desiredAccess, 0, 0, *size);
     if (!m_fileData)
         return false;
-    m_fileSize = size;
+    m_fileSize = *size;
     return true;
 }
 

@@ -234,11 +234,12 @@ void PlatformCALayerRemote::updateBackingStore()
     ASSERT(m_properties.backingStoreAttached);
 
     auto type = m_acceleratesDrawing ? RemoteLayerBackingStore::Type::IOSurface : RemoteLayerBackingStore::Type::Bitmap;
+    auto includeDisplayList = RemoteLayerBackingStore::IncludeDisplayList::No;
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
     if (m_context->useCGDisplayListsForDOMRendering())
-        type = RemoteLayerBackingStore::Type::CGDisplayList;
+        includeDisplayList = RemoteLayerBackingStore::IncludeDisplayList::Yes;
 #endif
-    m_properties.backingStore->ensureBackingStore(type, m_properties.bounds.size(), m_properties.contentsScale, m_wantsDeepColorBackingStore, m_properties.opaque);
+    m_properties.backingStore->ensureBackingStore(type, m_properties.bounds.size(), m_properties.contentsScale, m_wantsDeepColorBackingStore, m_properties.opaque, includeDisplayList);
 }
 
 void PlatformCALayerRemote::setNeedsDisplayInRect(const FloatRect& rect)
@@ -893,7 +894,7 @@ bool PlatformCALayerRemote::isSeparated() const
     return m_properties.isSeparated;
 }
 
-void PlatformCALayerRemote::setSeparated(bool value)
+void PlatformCALayerRemote::setIsSeparated(bool value)
 {
     if (m_properties.isSeparated == value)
         return;
@@ -901,6 +902,36 @@ void PlatformCALayerRemote::setSeparated(bool value)
     m_properties.isSeparated = value;
     m_properties.notePropertiesChanged(RemoteLayerTreeTransaction::SeparatedChanged);
 }
+
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+bool PlatformCALayerRemote::isSeparatedPortal() const
+{
+    return m_properties.isSeparatedPortal;
+}
+
+void PlatformCALayerRemote::setIsSeparatedPortal(bool value)
+{
+    if (m_properties.isSeparatedPortal == value)
+        return;
+
+    m_properties.isSeparatedPortal = value;
+    m_properties.notePropertiesChanged(RemoteLayerTreeTransaction::SeparatedPortalChanged);
+}
+
+bool PlatformCALayerRemote::isDescendentOfSeparatedPortal() const
+{
+    return m_properties.isDescendentOfSeparatedPortal;
+}
+
+void PlatformCALayerRemote::setIsDescendentOfSeparatedPortal(bool value)
+{
+    if (m_properties.isDescendentOfSeparatedPortal == value)
+        return;
+
+    m_properties.isDescendentOfSeparatedPortal = value;
+    m_properties.notePropertiesChanged(RemoteLayerTreeTransaction::DescendentOfSeparatedPortalChanged);
+}
+#endif
 #endif
 
 Ref<PlatformCALayer> PlatformCALayerRemote::createCompatibleLayer(PlatformCALayer::LayerType layerType, PlatformCALayerClient* client) const

@@ -31,9 +31,9 @@
 
 #pragma once
 
+#include <optional>
 #include <wtf/Forward.h>
 #include <wtf/Noncopyable.h>
-#include <wtf/Optional.h>
 
 namespace WebCore {
 
@@ -62,6 +62,11 @@ public:
 #if ENABLE(OFFSCREEN_CANVAS)
     void setOffscreenCanvasEnabled(bool isEnabled) { m_isOffscreenCanvasEnabled = isEnabled; }
     bool offscreenCanvasEnabled() const { return m_isOffscreenCanvasEnabled; }
+#endif
+
+#if ENABLE(OFFSCREEN_CANVAS_IN_WORKERS)
+    void setOffscreenCanvasInWorkersEnabled(bool isEnabled) { m_isOffscreenCanvasInWorkersEnabled = isEnabled; }
+    bool offscreenCanvasInWorkersEnabled() const { return m_isOffscreenCanvasInWorkersEnabled; }
 #endif
 
     void setCacheAPIEnabled(bool isEnabled) { m_isCacheAPIEnabled = isEnabled; }
@@ -123,7 +128,7 @@ public:
     bool cssTypedOMEnabled() const { return m_CSSTypedOMEnabled; }
 #endif
 
-    void setWebSQLDisabled(bool isDisabled) { m_webSQLEnabled = !isDisabled; }
+    void setWebSQLEnabled(bool isEnabled) { m_webSQLEnabled = isEnabled; }
     bool webSQLEnabled() const { return m_webSQLEnabled; }
 
     void setDialogElementEnabled(bool isEnabled) { m_dialogElementEnabled = isEnabled; }
@@ -158,8 +163,10 @@ public:
     void setWebRTCMDNSICECandidatesEnabled(bool isEnabled) { m_isWebRTCMDNSICECandidatesEnabled = isEnabled; }
     bool webRTCH264SimulcastEnabled() const { return m_isWebRTCH264SimulcastEnabled; }
     void setWebRTCH264SimulcastEnabled(bool isEnabled) { m_isWebRTCH264SimulcastEnabled = isEnabled; }
-    bool webRTCPlatformSocketsEnabled() const { return m_isWebRTCPlatformSocketsEnabled; }
-    void setWebRTCPlatformSocketsEnabled(bool isEnabled) { m_isWebRTCPlatformSocketsEnabled = isEnabled; }
+    bool webRTCPlatformTCPSocketsEnabled() const { return m_isWebRTCPlatformTCPSocketsEnabled; }
+    void setWebRTCPlatformTCPSocketsEnabled(bool isEnabled) { m_isWebRTCPlatformTCPSocketsEnabled = isEnabled; }
+    bool webRTCPlatformUDPSocketsEnabled() const { return m_isWebRTCPlatformUDPSocketsEnabled; }
+    void setWebRTCPlatformUDPSocketsEnabled(bool isEnabled) { m_isWebRTCPlatformUDPSocketsEnabled = isEnabled; }
 #endif
 
 #if ENABLE(DATALIST_ELEMENT)
@@ -236,12 +243,12 @@ public:
 #endif
 
 #if ENABLE(VORBIS)
-    void setVorbisDecoderEnabled(bool isEnabled) { m_vorbisDecoderEnabled = isEnabled; }
+    WEBCORE_EXPORT void setVorbisDecoderEnabled(bool isEnabled);
     bool vorbisDecoderEnabled() const { return m_vorbisDecoderEnabled; }
 #endif
 
 #if ENABLE(OPUS)
-    void setOpusDecoderEnabled(bool isEnabled) { m_opusDecoderEnabled = isEnabled; }
+    WEBCORE_EXPORT void setOpusDecoderEnabled(bool isEnabled);
     bool opusDecoderEnabled() const { return m_opusDecoderEnabled; }
 #endif
 
@@ -261,6 +268,9 @@ private:
     bool m_isImageBitmapEnabled { true };
 #if ENABLE(OFFSCREEN_CANVAS)
     bool m_isOffscreenCanvasEnabled { false };
+#endif
+#if ENABLE(OFFSCREEN_CANVAS_IN_WORKERS)
+    bool m_isOffscreenCanvasInWorkersEnabled { false };
 #endif
     bool m_isCacheAPIEnabled { false };
     bool m_isWebSocketEnabled { true };
@@ -311,7 +321,8 @@ private:
     bool m_isWebRTCVP9Profile0CodecEnabled { false };
     bool m_isWebRTCVP9Profile2CodecEnabled { false };
     bool m_isWebRTCH264LowLatencyEncoderEnabled { false };
-    bool m_isWebRTCPlatformSocketsEnabled { false };
+    bool m_isWebRTCPlatformTCPSocketsEnabled { false };
+    bool m_isWebRTCPlatformUDPSocketsEnabled { false };
 #endif
 
 #if ENABLE(DATALIST_ELEMENT)
@@ -337,7 +348,7 @@ private:
 
 #if ENABLE(TOUCH_EVENTS)
     bool m_mouseEventsSimulationEnabled { false };
-    Optional<bool> m_touchEventsEnabled;
+    std::optional<bool> m_touchEventsEnabled;
 #endif
 
 #if HAVE(NSURLSESSION_WEBSOCKET)

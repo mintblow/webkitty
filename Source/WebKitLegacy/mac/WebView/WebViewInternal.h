@@ -31,7 +31,6 @@
 
 #import "WebPreferences.h"
 #import "WebViewPrivate.h"
-#import "WebTypesInternal.h"
 #import "WebUIDelegate.h"
 
 #ifdef __cplusplus
@@ -105,7 +104,7 @@ using CocoaDragOperation = uint64_t;
 
 OptionSet<WebCore::DragOperation> coreDragOperationMask(CocoaDragOperation);
 
-WebDragSourceAction kit(Optional<WebCore::DragSourceAction>);
+WebDragSourceAction kit(std::optional<WebCore::DragSourceAction>);
 #endif // ENABLE(DRAG_SUPPORT)
 
 WebCore::FindOptions coreOptions(WebFindOptions);
@@ -319,8 +318,8 @@ WebLayoutMilestones kitLayoutMilestones(OptionSet<WebCore::LayoutMilestone>);
 
 #if PLATFORM(MAC) && defined(__cplusplus)
 - (void)_setTextIndicator:(WebCore::TextIndicator&)textIndicator;
-- (void)_setTextIndicator:(WebCore::TextIndicator&)textIndicator withLifetime:(WebCore::TextIndicatorWindowLifetime)lifetime;
-- (void)_clearTextIndicatorWithAnimation:(WebCore::TextIndicatorWindowDismissalAnimation)animation;
+- (void)_setTextIndicator:(WebCore::TextIndicator&)textIndicator withLifetime:(WebCore::TextIndicatorLifetime)lifetime;
+- (void)_clearTextIndicatorWithAnimation:(WebCore::TextIndicatorDismissalAnimation)animation;
 - (void)_setTextIndicatorAnimationProgress:(float)progress;
 - (void)_showDictionaryLookupPopup:(const WebCore::DictionaryPopupInfo&)dictionaryPopupInfo;
 - (id)_animationControllerForDictionaryLookupPopupInfo:(const WebCore::DictionaryPopupInfo&)dictionaryPopupInfo;

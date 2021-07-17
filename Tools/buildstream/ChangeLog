@@ -1,3 +1,96 @@
+2021-07-09  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [Flatpak SDK] Update to libsoup3 2.99.9
+        https://bugs.webkit.org/show_bug.cgi?id=227833
+
+        Reviewed by Michael Catanzaro.
+
+        It requires new glib and glib-networking too.
+
+        * elements/sdk/glib-networking.bst:
+        * elements/sdk/glib.bst:
+        * elements/sdk/libsoup3.bst:
+
+2021-06-21  Philippe Normand  <pnormand@igalia.com>
+
+        [Flatpak SDK] Update to FDO 20.08.13 release
+        https://bugs.webkit.org/show_bug.cgi?id=227176
+
+        Reviewed by Žan Doberšek.
+
+        This release contains libvpx 1.10.0 which we need since the libwebrtc bump to M92. The
+        current version we have has ABI incompatible with what libwebrtc expects and this issue was
+        hidden by r277036 which pulls in the bundled libvpx headers...
+
+        * elements/freedesktop-sdk.bst:
+        * patches/fdo-0001-meson-Bump-to-0.56.1.patch: Removed.
+
+2021-06-07  Philippe Normand  <pnormand@igalia.com>
+
+        Unreviewed, fix libsoup3 build in Flatpak SDK
+
+        * elements/sdk/libsoup3.bst:
+
+2021-06-07  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [Flatpak SDK] Update to libsoup3 2.99.8
+        https://bugs.webkit.org/show_bug.cgi?id=226712
+
+        Reviewed by Philippe Normand.
+
+        * elements/sdk/libsoup3.bst:
+
+2021-06-03  Miguel Gomez  <magomez@igalia.com>
+
+        REGRESSION(r275755): [GStreamer] Crashes on surfaceless i965 platforms
+        https://bugs.webkit.org/show_bug.cgi?id=226581
+
+        Reviewed by Philippe Normand.
+
+        Vendor potential fix for https://gitlab.freedesktop.org/mesa/mesa/-/issues/778.
+
+        * elements/sdk/mesa.bst:
+        * patches/mesa/0002-i965-Prevent-invalid-framebuffer-usage.patch: Added.
+
+2021-05-31  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [Flatpak SDK] Update to libsoup3 2.99.7
+        https://bugs.webkit.org/show_bug.cgi?id=226457
+
+        Reviewed by Philippe Normand.
+
+        * elements/sdk/libsoup3.bst:
+
+2021-05-24  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [Flatpak SDK] Update to libsoup3 2.99.6
+        https://bugs.webkit.org/show_bug.cgi?id=226166
+
+        Reviewed by Philippe Normand.
+
+        * elements/sdk/libsoup3.bst:
+
+2021-05-20  Adrian Perez de Castro  <aperez@igalia.com>
+
+        [Flatpak SDK] Remove PHP packages
+        https://bugs.webkit.org/show_bug.cgi?id=226037
+
+        Reviewed by Philippe Normand.
+
+        Remove the PHP package from the SDK now that the layout tests do not use PHP.
+
+        * elements/test-infra.bst: Remove php.bst from the element list.
+        * elements/test-infra/php.bst: Removed.
+
+2021-05-13  Lauro Moura  <lmoura@igalia.com>
+
+        [Flatpak SDK] Update WPEBackend-fdo to 1.8.4
+        https://bugs.webkit.org/show_bug.cgi?id=225735
+
+        Reviewed by Adrian Perez de Castro.
+
+        * elements/sdk/wpebackend-fdo.bst:
+
 2021-05-07  Carlos Garcia Campos  <cgarcia@igalia.com>
 
         [Flatpak SDK] Update to libsoup3 2.99.5

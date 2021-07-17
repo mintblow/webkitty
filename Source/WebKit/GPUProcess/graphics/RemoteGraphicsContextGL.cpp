@@ -198,39 +198,39 @@ void RemoteGraphicsContextGL::notifyMarkContextChanged()
 void RemoteGraphicsContextGL::paintRenderingResultsToCanvas(WebCore::RenderingResourceIdentifier imageBuffer, CompletionHandler<void()>&& completionHandler)
 {
     assertIsCurrent(m_streamThread);
-    paintImageDataToImageBuffer(m_context->readRenderingResultsForPainting(), imageBuffer, WTFMove(completionHandler));
+    paintPixelBufferToImageBuffer(m_context->readRenderingResultsForPainting(), imageBuffer, WTFMove(completionHandler));
 }
 
 void RemoteGraphicsContextGL::paintCompositedResultsToCanvas(WebCore::RenderingResourceIdentifier imageBuffer, CompletionHandler<void()>&& completionHandler)
 {
     assertIsCurrent(m_streamThread);
-    paintImageDataToImageBuffer(m_context->readCompositedResultsForPainting(), imageBuffer, WTFMove(completionHandler));
+    paintPixelBufferToImageBuffer(m_context->readCompositedResultsForPainting(), imageBuffer, WTFMove(completionHandler));
 }
 
-void RemoteGraphicsContextGL::paintImageDataToImageBuffer(RefPtr<WebCore::ImageData>&& imageData, WebCore::RenderingResourceIdentifier target, CompletionHandler<void()>&& completionHandler)
+void RemoteGraphicsContextGL::paintPixelBufferToImageBuffer(std::optional<WebCore::PixelBuffer>&& pixelBuffer, WebCore::RenderingResourceIdentifier target, CompletionHandler<void()>&& completionHandler)
 {
     assertIsCurrent(m_streamThread);
     // FIXME: We do not have functioning read/write fences in RemoteRenderingBackend. Thus this is synchronous,
     // as are the messages that call these.
-    Lock mutex;
+    Lock lock;
     Condition conditionVariable;
     bool isFinished = false;
     m_renderingBackend->dispatch([&, contextAttributes = m_context->contextAttributes()]() mutable {
         if (auto imageBuffer = m_renderingBackend->remoteResourceCache().cachedImageBuffer(target)) {
             // Here we do not try to play back pending commands for imageBuffer. Currently this call is only made for empty
             // image buffers and there's no good way to add display lists.
-            if (imageData)
-                GraphicsContextGLOpenGL::paintToCanvas(contextAttributes, imageData.releaseNonNull(), imageBuffer->backendSize(), imageBuffer->context());
+            if (pixelBuffer)
+                GraphicsContextGLOpenGL::paintToCanvas(contextAttributes, WTFMove(*pixelBuffer), imageBuffer->backendSize(), imageBuffer->context());
             else
                 imageBuffer->context().clearRect({ IntPoint(), imageBuffer->backendSize() });
             // Unfortunately "flush" implementation in RemoteRenderingBackend overloads ordering and effects.
             imageBuffer->flushContext();
         }
-        Locker locker { mutex };
+        Locker locker { lock };
         isFinished = true;
         conditionVariable.notifyOne();
     });
-    std::unique_lock<Lock> lock(mutex);
+    Locker locker { lock };
     conditionVariable.wait(lock, [&] {
         return isFinished;
     });

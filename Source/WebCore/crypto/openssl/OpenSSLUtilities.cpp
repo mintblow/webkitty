@@ -50,27 +50,59 @@ const EVP_MD* digestAlgorithm(CryptoAlgorithmIdentifier hashFunction)
     }
 }
 
-Optional<Vector<uint8_t>> calculateDigest(const EVP_MD* algorithm, const Vector<uint8_t>& message)
+std::optional<Vector<uint8_t>> calculateDigest(const EVP_MD* algorithm, const Vector<uint8_t>& message)
 {
     EvpDigestCtxPtr ctx;
     if (!(ctx = EvpDigestCtxPtr(EVP_MD_CTX_create())))
-        return WTF::nullopt;
+        return std::nullopt;
 
     int digestLength = EVP_MD_size(algorithm);
     if (digestLength <= 0)
-        return WTF::nullopt;
+        return std::nullopt;
     Vector<uint8_t> digest(digestLength);
 
     if (EVP_DigestInit_ex(ctx.get(), algorithm, nullptr) != 1)
-        return WTF::nullopt;
+        return std::nullopt;
 
     if (EVP_DigestUpdate(ctx.get(), message.data(), message.size()) != 1)
-        return WTF::nullopt;
+        return std::nullopt;
 
     if (EVP_DigestFinal_ex(ctx.get(), digest.data(), nullptr) != 1)
-        return WTF::nullopt;
+        return std::nullopt;
 
     return digest;
+}
+
+Vector<uint8_t> convertToBytes(const BIGNUM* bignum)
+{
+    Vector<uint8_t> bytes(BN_num_bytes(bignum));
+    BN_bn2bin(bignum, bytes.data());
+    return bytes;
+}
+
+Vector<uint8_t> convertToBytesExpand(const BIGNUM* bignum, size_t minimumBufferSize)
+{
+    int length = BN_num_bytes(bignum);
+    if (length < 0)
+        return { };
+
+    size_t bufferSize = std::max<size_t>(length, minimumBufferSize);
+
+    Vector<uint8_t> bytes(bufferSize);
+
+    size_t paddingLength = bufferSize - length;
+    if (paddingLength > 0) {
+        uint8_t padding = BN_is_negative(bignum) ? 0xFF : 0x00;
+        for (size_t i = 0; i < paddingLength; i++)
+            bytes[i] = padding;
+    }
+    BN_bn2bin(bignum, bytes.data() + paddingLength);
+    return bytes;
+}
+
+BIGNUM* convertToBigNumber(BIGNUM* bignum, const Vector<uint8_t>& bytes)
+{
+    return BN_bin2bn(bytes.data(), bytes.size(), bignum);
 }
 
 } // namespace WebCore

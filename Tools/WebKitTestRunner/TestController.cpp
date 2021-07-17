@@ -468,13 +468,13 @@ WKPageRef TestController::createOtherPage(PlatformWebView* parentView, WKPageCon
         nullptr, // renderingProgressDidChange
         canAuthenticateAgainstProtectionSpace,
         didReceiveAuthenticationChallenge,
-        processDidCrash,
+        nullptr, // webProcessDidCrash
         copyWebCryptoMasterKey,
         didBeginNavigationGesture,
         willEndNavigationGesture,
         didEndNavigationGesture,
         didRemoveNavigationGestureSnapshot,
-        nullptr, // webProcessDidTerminate
+        webProcessDidTerminate, // webProcessDidTerminate
         nullptr, // contentRuleListNotification
         copySignedPublicKeyAndChallengeString,
         navigationActionDidBecomeDownload,
@@ -588,7 +588,6 @@ void TestController::configureWebsiteDataStoreTemporaryDirectories(WKWebsiteData
         WKWebsiteDataStoreConfigurationSetCacheStorageDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "CacheStorage", pathSeparator, randomNumber)).get());
         WKWebsiteDataStoreConfigurationSetIndexedDBDatabaseDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "Databases", pathSeparator, "IndexedDB", pathSeparator, randomNumber)).get());
         WKWebsiteDataStoreConfigurationSetLocalStorageDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "LocalStorage", pathSeparator, randomNumber)).get());
-        WKWebsiteDataStoreConfigurationSetWebSQLDatabaseDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "Databases", pathSeparator, "WebSQL", pathSeparator, randomNumber)).get());
         WKWebsiteDataStoreConfigurationSetMediaKeysStorageDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "MediaKeys", pathSeparator, randomNumber)).get());
         WKWebsiteDataStoreConfigurationSetResourceLoadStatisticsDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "ResourceLoadStatistics", pathSeparator, randomNumber)).get());
         WKWebsiteDataStoreConfigurationSetServiceWorkerRegistrationDirectory(configuration, toWK(makeString(temporaryFolder, pathSeparator, "ServiceWorkers", pathSeparator, randomNumber)).get());
@@ -810,13 +809,13 @@ void TestController::createWebViewWithOptions(const TestOptions& options)
         nullptr, // renderingProgressDidChange
         canAuthenticateAgainstProtectionSpace,
         didReceiveAuthenticationChallenge,
-        processDidCrash,
+        nullptr,
         copyWebCryptoMasterKey,
         didBeginNavigationGesture,
         willEndNavigationGesture,
         didEndNavigationGesture,
         didRemoveNavigationGestureSnapshot,
-        nullptr, // webProcessDidTerminate
+        webProcessDidTerminate, // webProcessDidTerminate
         nullptr, // contentRuleListNotification
         copySignedPublicKeyAndChallengeString,
         navigationActionDidBecomeDownload,
@@ -985,7 +984,10 @@ bool TestController::resetStateToConsistentValues(const TestOptions& options, Re
 
     WKPageClearWheelEventTestMonitor(m_mainWebView->page());
 
+    // GStreamer uses fakesink to avoid sound output during testing and doing this creates trouble with volume events.
+#if !USE(GSTREAMER)
     WKPageSetMediaVolume(m_mainWebView->page(), 0);
+#endif
 
     WKPageClearUserMediaState(m_mainWebView->page());
 
@@ -1079,7 +1081,7 @@ bool TestController::resetStateToConsistentValues(const TestOptions& options, Re
         updateLiveDocumentsAfterTest();
 #if PLATFORM(COCOA)
         clearApplicationBundleIdentifierTestingOverride();
-        clearAppBoundNavigationData();
+        clearAppPrivacyReportTestingData();
 #endif
         clearBundleIdentifierInNetworkProcess();
     }
@@ -1778,6 +1780,27 @@ void TestController::didReceiveSynchronousMessageFromInjectedBundle(WKStringRef 
             return completionHandler(nullptr);
         }
 #endif
+
+#if ENABLE(MAC_GESTURE_EVENTS)
+        if (WKStringIsEqualToUTF8CString(subMessageName, "ScaleGestureStart")) {
+            auto scale = doubleValue(dictionary, "Scale");
+            m_eventSenderProxy->scaleGestureStart(scale);
+            return completionHandler(nullptr);
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "ScaleGestureChange")) {
+            auto scale = doubleValue(dictionary, "Scale");
+            m_eventSenderProxy->scaleGestureChange(scale);
+            return completionHandler(nullptr);
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "ScaleGestureEnd")) {
+            auto scale = doubleValue(dictionary, "Scale");
+            m_eventSenderProxy->scaleGestureEnd(scale);
+            return completionHandler(nullptr);
+        }
+#endif // ENABLE(MAC_GESTURE_EVENTS)
+
         ASSERT_NOT_REACHED();
     }
 
@@ -1862,9 +1885,9 @@ void TestController::didReceiveAuthenticationChallenge(WKPageRef page, WKAuthent
     static_cast<TestController*>(const_cast<void*>(clientInfo))->didReceiveAuthenticationChallenge(page, /*frame,*/ authenticationChallenge);
 }
 
-void TestController::processDidCrash(WKPageRef page, const void* clientInfo)
+void TestController::webProcessDidTerminate(WKPageRef page, WKProcessTerminationReason reason, const void* clientInfo)
 {
-    static_cast<TestController*>(const_cast<void*>(clientInfo))->processDidCrash();
+    static_cast<TestController*>(const_cast<void*>(clientInfo))->webProcessDidTerminate(reason);
 }
 
 void TestController::didBeginNavigationGesture(WKPageRef page, const void *clientInfo)
@@ -2154,12 +2177,35 @@ void TestController::downloadDidReceiveAuthenticationChallenge(WKDownloadRef, WK
     static_cast<TestController*>(const_cast<void*>(clientInfo))->didReceiveAuthenticationChallenge(nullptr, authenticationChallenge);
 }
 
-void TestController::processDidCrash()
+void TestController::webProcessDidTerminate(WKProcessTerminationReason reason)
 {
     // This function can be called multiple times when crash logs are being saved on Windows, so
     // ensure we only print the crashed message once.
     if (!m_didPrintWebProcessCrashedMessage) {
         pid_t pid = WKPageGetProcessIdentifier(m_mainWebView->page());
+        fprintf(stderr, "%s terminated (pid %ld) ", webProcessName(), static_cast<long>(pid));
+        switch (reason) {
+        case kWKProcessTerminationReasonExceededMemoryLimit:
+            fprintf(stderr, "because the memory limit was exceeded\n");
+            break;
+        case kWKProcessTerminationReasonExceededCPULimit:
+            fprintf(stderr, "because the cpu limit was exceeded\n");
+            break;
+        case kWKProcessTerminationReasonRequestedByClient:
+            fprintf(stderr, "because the client requested\n");
+            break;
+        case kWKProcessTerminationReasonCrash:
+            fprintf(stderr, "because the process crashed\n");
+            break;
+        default:
+            fprintf(stderr, "for an unknown reason\n");
+        }
+
+        if (reason == kWKProcessTerminationReasonRequestedByClient) {
+            fflush(stderr);
+            return;
+        }
+
         fprintf(stderr, "#CRASHED - %s (pid %ld)\n", webProcessName(), static_cast<long>(pid));
         fflush(stderr);
         m_didPrintWebProcessCrashedMessage = true;
@@ -2169,9 +2215,9 @@ void TestController::processDidCrash()
         exit(1);
 }
 
-void TestController::didNotHandleTapAsMeaningfulClick()
+void TestController::didHandleTap(bool wasMeaningful)
 {
-    m_currentInvocation->didNotHandleTapAsMeaningfulClick();
+    m_currentInvocation->didHandleTap(wasMeaningful);
 }
 
 void TestController::didBeginNavigationGesture(WKPageRef)
@@ -2206,7 +2252,7 @@ void TestController::setGeolocationPermission(bool enabled)
     decidePolicyForGeolocationPermissionRequestIfPossible();
 }
 
-void TestController::setMockGeolocationPosition(double latitude, double longitude, double accuracy, Optional<double> altitude, Optional<double> altitudeAccuracy, Optional<double> heading, Optional<double> speed, Optional<double> floorLevel)
+void TestController::setMockGeolocationPosition(double latitude, double longitude, double accuracy, std::optional<double> altitude, std::optional<double> altitudeAccuracy, std::optional<double> heading, std::optional<double> speed, std::optional<double> floorLevel)
 {
     m_geolocationProvider->setPosition(latitude, longitude, accuracy, altitude, altitudeAccuracy, heading, speed, floorLevel);
 }
@@ -2680,11 +2726,17 @@ void TestController::removeAllSessionCredentials()
 {
 }
 
-void TestController::appBoundRequestContextDataForDomain(WKStringRef)
+bool TestController::didLoadAppInitiatedRequest()
 {
+    return false;
 }
 
-void TestController::clearAppBoundNavigationData()
+bool TestController::didLoadNonAppInitiatedRequest()
+{
+    return false;
+}
+
+void TestController::clearAppPrivacyReportTestingData()
 {
 }
 

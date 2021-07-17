@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,6 +40,7 @@
 #import <sys/sysctl.h>
 #import <wtf/NeverDestroyed.h>
 #import <wtf/Scope.h>
+#import <wtf/cocoa/Entitlements.h>
 #import <wtf/cocoa/VectorCocoa.h>
 #import <wtf/spi/darwin/SandboxSPI.h>
 
@@ -51,12 +52,12 @@
 #import <JavaScriptCore/RemoteInspectorConstants.h>
 #endif
 
-#if PLATFORM(MAC)
-#import <wtf/SoftLinking.h>
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+#include <WebCore/CaptionUserPreferencesMediaAF.h>
+#endif
 
-SOFT_LINK_PRIVATE_FRAMEWORK(TCC)
-SOFT_LINK(TCC, TCCAccessCheckAuditToken, Boolean, (CFStringRef service, audit_token_t auditToken, CFDictionaryRef options), (service, auditToken, options))
-SOFT_LINK_CONSTANT(TCC, kTCCServiceAccessibility, CFStringRef)
+#if PLATFORM(MAC)
+#include "TCCSoftLink.h"
 #endif
 
 #import <pal/cf/AudioToolboxSoftLink.h>
@@ -149,21 +150,6 @@ RefPtr<ObjCObjectGraph> WebProcessProxy::transformObjectsToHandles(ObjCObjectGra
     return ObjCObjectGraph::create(ObjCObjectGraph::transform(objectGraph.rootObject(), Transformer()).get());
 }
 
-bool WebProcessProxy::platformIsBeingDebugged() const
-{
-    // If the UI process is sandboxed and lacks 'process-info-pidinfo', it cannot find out whether other processes are being debugged.
-    if (currentProcessIsSandboxed() && !!sandbox_check(getpid(), "process-info-pidinfo", SANDBOX_CHECK_NO_REPORT))
-        return false;
-
-    struct kinfo_proc info;
-    int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, processIdentifier() };
-    size_t size = sizeof(info);
-    if (sysctl(mib, WTF_ARRAY_LENGTH(mib), &info, &size, nullptr, 0) == -1)
-        return false;
-
-    return info.kp_proc.p_flag & P_TRACED;
-}
-
 static Vector<String>& mediaTypeCache()
 {
     ASSERT(RunLoop::isMain());
@@ -229,6 +215,18 @@ void WebProcessProxy::enableRemoteInspectorIfNeeded()
 }
 #endif
 
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+void WebProcessProxy::setCaptionDisplayMode(WebCore::CaptionUserPreferences::CaptionDisplayMode displayMode)
+{
+    WebCore::CaptionUserPreferencesMediaAF::platformSetCaptionDisplayMode(displayMode);
+}
+
+void WebProcessProxy::setCaptionLanguage(const String& language)
+{
+    WebCore::CaptionUserPreferencesMediaAF::platformSetPreferredLanguage(language);
+}
+#endif
+
 void WebProcessProxy::unblockAccessibilityServerIfNeeded()
 {
     if (m_hasSentMessageToUnblockAccessibilityServer)
@@ -244,7 +242,7 @@ void WebProcessProxy::unblockAccessibilityServerIfNeeded()
 
     SandboxExtension::HandleArray handleArray;
 #if PLATFORM(IOS_FAMILY)
-    handleArray = SandboxExtension::createHandlesForMachLookup({ "com.apple.iphone.axserver-systemwide"_s, "com.apple.frontboard.systemappservices"_s }, connection() ? connection()->getAuditToken() : WTF::nullopt);
+    handleArray = SandboxExtension::createHandlesForMachLookup({ "com.apple.iphone.axserver-systemwide"_s, "com.apple.frontboard.systemappservices"_s }, connection() ? connection()->getAuditToken() : std::nullopt);
     ASSERT(handleArray.size() == 2);
 #endif
 
@@ -262,7 +260,7 @@ void WebProcessProxy::unblockPreferenceServiceIfNeeded()
     if (!canSendMessage())
         return;
 
-    auto handleArray = SandboxExtension::createHandlesForMachLookup({ "com.apple.cfprefsd.agent"_s, "com.apple.cfprefsd.daemon"_s }, connection() ? connection()->getAuditToken() : WTF::nullopt);
+    auto handleArray = SandboxExtension::createHandlesForMachLookup({ "com.apple.cfprefsd.agent"_s, "com.apple.cfprefsd.daemon"_s }, connection() ? connection()->getAuditToken() : std::nullopt);
     ASSERT(handleArray.size() == 2);
     
     send(Messages::WebProcess::UnblockPreferenceService(WTFMove(handleArray)), 0);
@@ -279,7 +277,7 @@ Vector<String> WebProcessProxy::platformOverrideLanguages() const
 #if PLATFORM(MAC)
 void WebProcessProxy::isAXAuthenticated(audit_token_t auditToken, CompletionHandler<void(bool)>&& completionHandler)
 {
-    auto authenticated = TCCAccessCheckAuditToken(getkTCCServiceAccessibility(), auditToken, nullptr);
+    auto authenticated = TCCAccessCheckAuditToken(get_TCC_kTCCServiceAccessibility(), auditToken, nullptr);
     completionHandler(authenticated);
 }
 #endif
@@ -288,7 +286,7 @@ void WebProcessProxy::sendAudioComponentRegistrations()
 {
     using namespace PAL;
 
-    if (!isAudioToolboxCoreFrameworkAvailable() || !canLoad_AudioToolboxCore_AudioComponentFetchServerRegistrations())
+    if (!PAL::isAudioToolboxCoreFrameworkAvailable() || !PAL::canLoad_AudioToolboxCore_AudioComponentFetchServerRegistrations())
         return;
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), [protectedThis = makeRef(*this)] () mutable {
@@ -297,10 +295,37 @@ void WebProcessProxy::sendAudioComponentRegistrations()
             return;
 
         RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), registrations = adoptCF(registrations)] () mutable {
-            auto registrationData = SharedBuffer::create(registrations.get());
+            auto registrationData = WebCore::SharedBuffer::create(registrations.get());
             protectedThis->send(Messages::WebProcess::ConsumeAudioComponentRegistrations({ registrationData }), 0);
         });
     });
+}
+
+bool WebProcessProxy::hasCorrectPACEntitlement()
+{
+    if (!hasConnection()) {
+        ASSERT_NOT_REACHED();
+        return false;
+    }
+
+#if HAVE(PAC_SHARED_REGION_ID)
+    auto auditToken = connection()->getAuditToken();
+    if (!auditToken) {
+        ASSERT_NOT_REACHED();
+        RELEASE_LOG_ERROR(Process, "Unable to get parent web process audit token");
+        return false;
+    }
+
+#if USE(APPLE_INTERNAL_SDK)
+    // Confirm that the connection is from a WebContent process:
+    if (!WTF::hasEntitlementValue(auditToken.value(), "com.apple.pac.shared_region_id", "WebContent")) {
+        RELEASE_LOG_ERROR(Process, "Process is not an entitled WebContent process. Process shared_region_id is incorrect.");
+        return false;
+    }
+#endif
+#endif
+
+    return true;
 }
 
 }

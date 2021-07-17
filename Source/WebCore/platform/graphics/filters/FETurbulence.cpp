@@ -27,7 +27,7 @@
 #include "FETurbulence.h"
 
 #include "Filter.h"
-#include "ImageData.h"
+#include "PixelBuffer.h"
 #include <wtf/MathExtras.h>
 #include <wtf/ParallelJobs.h>
 #include <wtf/text/TextStream.h>
@@ -374,7 +374,7 @@ void FETurbulence::fillRegion(Uint8ClampedArray& pixelArray, const PaintingData&
     filterRegion.scale(filter().filterScale());
     FloatPoint point(0, filterRegion.y() + startY);
     int indexOfPixelChannel = startY * (filterRegion.width() << 2);
-    AffineTransform inverseTransfrom = filter().absoluteTransform().inverse().valueOr(AffineTransform());
+    AffineTransform inverseTransfrom = filter().absoluteTransform().inverse().value_or(AffineTransform());
 
     for (int y = startY; y < endY; ++y) {
         point.setY(point.y() + 1);
@@ -396,17 +396,17 @@ void FETurbulence::fillRegionWorker(FillRegionParameters* parameters)
 
 void FETurbulence::platformApplySoftware()
 {
-    auto* resultImage = createUnmultipliedImageResult();
-    if (!resultImage)
+    auto& destinationPixelBuffer = createUnmultipliedImageResult();
+    if (!destinationPixelBuffer)
         return;
 
-    auto& pixelArray = resultImage->data();
+    auto& destinationPixelArray = destinationPixelBuffer->data();
 
     IntSize resultSize(absolutePaintRect().size());
     resultSize.scale(filter().filterScale());
 
     if (resultSize.isEmpty()) {
-        pixelArray.zeroFill();
+        destinationPixelArray.zeroFill();
         return;
     }
 
@@ -426,7 +426,7 @@ void FETurbulence::platformApplySoftware()
     int height = resultSize.height();
 
     unsigned maxNumThreads = height / 8;
-    unsigned optimalThreadNumber = std::min<unsigned>(area.unsafeGet() / s_minimalRectDimension, maxNumThreads);
+    unsigned optimalThreadNumber = std::min<unsigned>(area / s_minimalRectDimension, maxNumThreads);
     if (optimalThreadNumber > 1) {
         WTF::ParallelJobs<FillRegionParameters> parallelJobs(&WebCore::FETurbulence::fillRegionWorker, optimalThreadNumber);
 
@@ -441,7 +441,7 @@ void FETurbulence::platformApplySoftware()
             for (unsigned i = 0; i < numJobs; ++i) {
                 FillRegionParameters& params = parallelJobs.parameter(i);
                 params.filter = this;
-                params.pixelArray = &pixelArray;
+                params.pixelArray = &destinationPixelArray;
                 params.paintingData = &paintingData;
                 params.stitchData = stitchData;
                 params.startY = startY;
@@ -457,7 +457,7 @@ void FETurbulence::platformApplySoftware()
     }
 
     // Fallback to single threaded mode if there is no room for a new thread or the paint area is too small.
-    fillRegion(pixelArray, paintingData, stitchData, 0, height);
+    fillRegion(destinationPixelArray, paintingData, stitchData, 0, height);
 }
 
 static TextStream& operator<<(TextStream& ts, TurbulenceType type)

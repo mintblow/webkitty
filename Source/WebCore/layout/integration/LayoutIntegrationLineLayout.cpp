@@ -216,9 +216,8 @@ void LineLayout::layout()
 
     auto invalidationState = Layout::InvalidationState { };
     auto horizontalConstraints = Layout::HorizontalConstraints { flow().borderAndPaddingStart(), flow().contentSize().width() };
-    auto verticalConstraints = Layout::VerticalConstraints { flow().borderAndPaddingBefore(), { } };
 
-    inlineFormattingContext.lineLayoutForIntergration(invalidationState, { horizontalConstraints, verticalConstraints });
+    inlineFormattingContext.lineLayoutForIntergration(invalidationState, { horizontalConstraints, flow().borderAndPaddingBefore() });
 
     constructContent();
 }
@@ -251,7 +250,7 @@ void LineLayout::prepareLayoutState()
 
     auto& rootGeometry = m_layoutState.ensureGeometryForBox(rootLayoutBox());
     rootGeometry.setContentBoxWidth(flow().contentSize().width());
-    rootGeometry.setPadding({ { } });
+    rootGeometry.setPadding({ });
     rootGeometry.setBorder({ });
     rootGeometry.setHorizontalMargin({ });
     rootGeometry.setVerticalMargin({ });
@@ -347,7 +346,7 @@ void LineLayout::collectOverflow()
 {
     for (auto& line : inlineContent()->lines) {
         flow().addLayoutOverflow(Layout::toLayoutRect(line.scrollableOverflow()));
-        if (!flow().hasOverflowClip())
+        if (!flow().hasNonVisibleOverflow())
             flow().addVisualOverflow(Layout::toLayoutRect(line.inkOverflow()));
     }
 }
@@ -365,7 +364,7 @@ TextRunIterator LineLayout::textRunsFor(const RenderText& renderText) const
         return { };
     auto& layoutBox = m_boxTree.layoutBoxForRenderer(renderText);
 
-    auto firstIndex = [&]() -> Optional<size_t> {
+    auto firstIndex = [&]() -> std::optional<size_t> {
         for (size_t i = 0; i < m_inlineContent->runs.size(); ++i) {
             if (&m_inlineContent->runs[i].layoutBox() == &layoutBox)
                 return i;

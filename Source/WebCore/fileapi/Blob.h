@@ -75,13 +75,6 @@ public:
         return blob;
     }
 
-    static Ref<Blob> create(ScriptExecutionContext* context, const SharedBuffer& buffer, const String& contentType)
-    {
-        auto blob = adoptRef(*new Blob(context, buffer, contentType));
-        blob->suspendIfNeeded();
-        return blob;
-    }
-
     static Ref<Blob> create(ScriptExecutionContext* context, Vector<uint8_t>&& data, const String& contentType)
     {
         auto blob = adoptRef(*new Blob(context, WTFMove(data), contentType));
@@ -131,7 +124,6 @@ public:
 protected:
     WEBCORE_EXPORT explicit Blob(ScriptExecutionContext*);
     Blob(ScriptExecutionContext&, Vector<BlobPartVariant>&&, const BlobPropertyBag&);
-    Blob(ScriptExecutionContext*, const SharedBuffer&, const String& contentType);
     Blob(ScriptExecutionContext*, Vector<uint8_t>&&, const String& contentType);
 
     enum ReferencingExistingBlobConstructor { referencingExistingBlobConstructor };
@@ -141,7 +133,7 @@ protected:
     Blob(UninitializedContructor, ScriptExecutionContext*, URL&&, String&& type);
 
     enum DeserializationContructor { deserializationContructor };
-    Blob(DeserializationContructor, ScriptExecutionContext*, const URL& srcURL, const String& type, Optional<unsigned long long> size, const String& fileBackedPath);
+    Blob(DeserializationContructor, ScriptExecutionContext*, const URL& srcURL, const String& type, std::optional<unsigned long long> size, const String& fileBackedPath);
 
     // For slicing.
     Blob(ScriptExecutionContext*, const URL& srcURL, long long start, long long end, const String& contentType);
@@ -159,7 +151,7 @@ private:
 
     String m_type;
 
-    mutable Optional<unsigned long long> m_size;
+    mutable std::optional<unsigned long long> m_size;
     HashSet<std::unique_ptr<BlobLoader>> m_blobLoaders;
 };
 

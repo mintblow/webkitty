@@ -52,21 +52,21 @@ StructureStubInfo::StructureStubInfo(AccessType accessType, CodeOrigin codeOrigi
     , propertyIsInt32(false)
     , propertyIsSymbol(false)
 {
+    regs.thisGPR = InvalidGPRReg;
 }
 
 StructureStubInfo::~StructureStubInfo()
 {
 }
 
-void StructureStubInfo::initGetByIdSelf(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock, Structure* baseObjectStructure, PropertyOffset offset, CacheableIdentifier identifier)
+void StructureStubInfo::initGetByIdSelf(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock, Structure* inlineAccessBaseStructure, PropertyOffset offset, CacheableIdentifier identifier)
 {
     ASSERT(hasConstantIdentifier);
     setCacheType(locker, CacheType::GetByIdSelf);
     m_identifier = identifier;
     codeBlock->vm().heap.writeBarrier(codeBlock);
     
-    u.byIdSelf.baseObjectStructure.set(
-        codeBlock->vm(), codeBlock, baseObjectStructure);
+    this->inlineAccessBaseStructure.set(codeBlock->vm(), codeBlock, inlineAccessBaseStructure);
     u.byIdSelf.offset = offset;
 }
 
@@ -80,25 +80,23 @@ void StructureStubInfo::initStringLength(const ConcurrentJSLockerBase& locker)
     setCacheType(locker, CacheType::StringLength);
 }
 
-void StructureStubInfo::initPutByIdReplace(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock, Structure* baseObjectStructure, PropertyOffset offset, CacheableIdentifier identifier)
+void StructureStubInfo::initPutByIdReplace(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock, Structure* inlineAccessBaseStructure, PropertyOffset offset, CacheableIdentifier identifier)
 {
     setCacheType(locker, CacheType::PutByIdReplace);
     m_identifier = identifier;
     codeBlock->vm().heap.writeBarrier(codeBlock);
 
-    u.byIdSelf.baseObjectStructure.set(
-        codeBlock->vm(), codeBlock, baseObjectStructure);
+    this->inlineAccessBaseStructure.set(codeBlock->vm(), codeBlock, inlineAccessBaseStructure);
     u.byIdSelf.offset = offset;
 }
 
-void StructureStubInfo::initInByIdSelf(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock, Structure* baseObjectStructure, PropertyOffset offset, CacheableIdentifier identifier)
+void StructureStubInfo::initInByIdSelf(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock, Structure* inlineAccessBaseStructure, PropertyOffset offset, CacheableIdentifier identifier)
 {
     setCacheType(locker, CacheType::InByIdSelf);
     m_identifier = identifier;
     codeBlock->vm().heap.writeBarrier(codeBlock);
 
-    u.byIdSelf.baseObjectStructure.set(
-        codeBlock->vm(), codeBlock, baseObjectStructure);
+    this->inlineAccessBaseStructure.set(codeBlock->vm(), codeBlock, inlineAccessBaseStructure);
     u.byIdSelf.offset = offset;
 }
 
@@ -139,7 +137,7 @@ void StructureStubInfo::aboutToDie()
 }
 
 AccessGenerationResult StructureStubInfo::addAccessCase(
-    const GCSafeConcurrentJSLocker& locker, JSGlobalObject* globalObject, CodeBlock* codeBlock, ECMAMode ecmaMode, CacheableIdentifier ident, std::unique_ptr<AccessCase> accessCase)
+    const GCSafeConcurrentJSLocker& locker, JSGlobalObject* globalObject, CodeBlock* codeBlock, ECMAMode ecmaMode, CacheableIdentifier ident, RefPtr<AccessCase> accessCase)
 {
     checkConsistency();
 
@@ -155,7 +153,7 @@ AccessGenerationResult StructureStubInfo::addAccessCase(
         AccessGenerationResult result;
         
         if (m_cacheType == CacheType::Stub) {
-            result = u.stub->addCase(locker, vm, codeBlock, *this, WTFMove(accessCase));
+            result = u.stub->addCase(locker, vm, codeBlock, *this, accessCase.releaseNonNull());
             
             if (StructureStubInfoInternal::verbose)
                 dataLog("Had stub, result: ", result, "\n");
@@ -170,9 +168,9 @@ AccessGenerationResult StructureStubInfo::addAccessCase(
         } else {
             std::unique_ptr<PolymorphicAccess> access = makeUnique<PolymorphicAccess>();
             
-            Vector<std::unique_ptr<AccessCase>, 2> accessCases;
+            Vector<RefPtr<AccessCase>, 2> accessCases;
             
-            std::unique_ptr<AccessCase> previousCase = AccessCase::fromStructureStubInfo(vm, codeBlock, ident, *this);
+            auto previousCase = AccessCase::fromStructureStubInfo(vm, codeBlock, ident, *this);
             if (previousCase)
                 accessCases.append(WTFMove(previousCase));
             
@@ -227,6 +225,15 @@ AccessGenerationResult StructureStubInfo::addAccessCase(
         
         if (!result.generatedSomeCode())
             return result;
+
+        // When we first transition to becoming a Stub, we might still be running the inline
+        // access code. That's because when we first transition to becoming a Stub, we may
+        // be buffered, and we have not yet generated any code. Once the Stub finally generates
+        // code, we're no longer running the inline access code, so we can then clear out
+        // inlineAccessBaseStructure. The reason we don't clear inlineAccessBaseStructure while
+        // we're buffered is because we rely on it to reset during GC if inlineAccessBaseStructure
+        // is collected.
+        inlineAccessBaseStructure.clear();
         
         // If we generated some code then we don't want to attempt to repatch in the future until we
         // gather enough cases.
@@ -240,6 +247,7 @@ AccessGenerationResult StructureStubInfo::addAccessCase(
 void StructureStubInfo::reset(const ConcurrentJSLockerBase& locker, CodeBlock* codeBlock)
 {
     clearBufferedStructures();
+    inlineAccessBaseStructure.clear();
 
     if (m_cacheType == CacheType::Unset)
         return;
@@ -252,19 +260,19 @@ void StructureStubInfo::reset(const ConcurrentJSLockerBase& locker, CodeBlock* c
 
     switch (accessType) {
     case AccessType::TryGetById:
-        resetGetBy(codeBlock, *this, GetByKind::Try);
+        resetGetBy(codeBlock, *this, GetByKind::TryById);
         break;
     case AccessType::GetById:
-        resetGetBy(codeBlock, *this, GetByKind::Normal);
+        resetGetBy(codeBlock, *this, GetByKind::ById);
         break;
     case AccessType::GetByIdWithThis:
-        resetGetBy(codeBlock, *this, GetByKind::WithThis);
+        resetGetBy(codeBlock, *this, GetByKind::ByIdWithThis);
         break;
     case AccessType::GetByIdDirect:
-        resetGetBy(codeBlock, *this, GetByKind::Direct);
+        resetGetBy(codeBlock, *this, GetByKind::ByIdDirect);
         break;
     case AccessType::GetByVal:
-        resetGetBy(codeBlock, *this, GetByKind::NormalByVal);
+        resetGetBy(codeBlock, *this, GetByKind::ByVal);
         break;
     case AccessType::GetPrivateName:
         resetGetBy(codeBlock, *this, GetByKind::PrivateName);
@@ -272,17 +280,26 @@ void StructureStubInfo::reset(const ConcurrentJSLockerBase& locker, CodeBlock* c
     case AccessType::Put:
         resetPutByID(codeBlock, *this);
         break;
-    case AccessType::In:
-        resetInByID(codeBlock, *this);
+    case AccessType::InById:
+        resetInBy(codeBlock, *this, InByKind::ById);
+        break;
+    case AccessType::InByVal:
+        resetInBy(codeBlock, *this, InByKind::ByVal);
+        break;
+    case AccessType::HasPrivateName:
+        resetInBy(codeBlock, *this, InByKind::PrivateName);
+        break;
+    case AccessType::HasPrivateBrand:
+        resetHasPrivateBrand(codeBlock, *this);
         break;
     case AccessType::InstanceOf:
-        resetInstanceOf(*this);
+        resetInstanceOf(codeBlock, *this);
         break;
     case AccessType::DeleteByID:
-        resetDelBy(codeBlock, *this, DelByKind::Normal);
+        resetDelBy(codeBlock, *this, DelByKind::ById);
         break;
     case AccessType::DeleteByVal:
-        resetDelBy(codeBlock, *this, DelByKind::NormalByVal);
+        resetDelBy(codeBlock, *this, DelByKind::ByVal);
         break;
     case AccessType::CheckPrivateBrand:
         resetCheckPrivateBrand(codeBlock, *this);
@@ -300,7 +317,7 @@ template<typename Visitor>
 void StructureStubInfo::visitAggregateImpl(Visitor& visitor)
 {
     {
-        auto locker = holdLock(m_bufferedStructuresLock);
+        Locker locker { m_bufferedStructuresLock };
         for (auto& bufferedStructure : m_bufferedStructures)
             bufferedStructure.byValId().visitAggregate(visitor);
     }
@@ -329,67 +346,38 @@ void StructureStubInfo::visitWeakReferences(const ConcurrentJSLockerBase& locker
 {
     VM& vm = codeBlock->vm();
     {
-        auto locker = holdLock(m_bufferedStructuresLock);
+        Locker locker { m_bufferedStructuresLock };
         m_bufferedStructures.removeIf(
             [&] (auto& entry) -> bool {
                 return !vm.heap.isMarked(entry.structure());
             });
     }
 
-    switch (m_cacheType) {
-    case CacheType::GetByIdSelf:
-    case CacheType::PutByIdReplace:
-    case CacheType::InByIdSelf:
-        if (vm.heap.isMarked(u.byIdSelf.baseObjectStructure.get()))
-            return;
-        break;
-    case CacheType::Stub:
-        if (u.stub->visitWeak(vm))
-            return;
-        break;
-    default:
+    bool isValid = true;
+    if (inlineAccessBaseStructure)
+        isValid &= vm.heap.isMarked(inlineAccessBaseStructure.get());
+    if (m_cacheType == CacheType::Stub)
+        isValid &= u.stub->visitWeak(vm);
+
+    if (isValid)
         return;
-    }
 
     reset(locker, codeBlock);
     resetByGC = true;
 }
 
-size_t StructureStubInfo::extraMemoryInBytes()
-{
-    size_t extraMemory = 0;
-    // Cacheable Identifier never owns extra memory because UIDs are owned by the unique string table.
-    {
-        auto locker = holdLock(m_bufferedStructuresLock);
-        extraMemory += m_bufferedStructures.capacity() * sizeof(BufferedStructure);
-    }
-    if (cacheType() == CacheType::Stub)
-        extraMemory += u.stub->extraMemoryInBytes();
-    return extraMemory;
-}
-
 template<typename Visitor>
-bool StructureStubInfo::propagateTransitions(Visitor& visitor)
+void StructureStubInfo::propagateTransitions(Visitor& visitor)
 {
-    switch (m_cacheType) {
-    case CacheType::Unset:
-    case CacheType::ArrayLength:
-    case CacheType::StringLength:
-        return true;
-    case CacheType::GetByIdSelf:
-    case CacheType::PutByIdReplace:
-    case CacheType::InByIdSelf:
-        return u.byIdSelf.baseObjectStructure->markIfCheap(visitor);
-    case CacheType::Stub:
-        return u.stub->propagateTransitions(visitor);
-    }
-    
-    RELEASE_ASSERT_NOT_REACHED();
-    return true;
+    if (inlineAccessBaseStructure)
+        inlineAccessBaseStructure->markIfCheap(visitor);
+
+    if (m_cacheType == CacheType::Stub)
+        u.stub->propagateTransitions(visitor);
 }
 
-template bool StructureStubInfo::propagateTransitions(AbstractSlotVisitor&);
-template bool StructureStubInfo::propagateTransitions(SlotVisitor&);
+template void StructureStubInfo::propagateTransitions(AbstractSlotVisitor&);
+template void StructureStubInfo::propagateTransitions(SlotVisitor&);
 
 StubInfoSummary StructureStubInfo::summary(VM& vm) const
 {

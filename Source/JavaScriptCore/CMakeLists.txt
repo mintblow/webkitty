@@ -107,6 +107,7 @@ set(JavaScriptCore_OBJECT_LUT_SOURCES
     runtime/StringPrototype.cpp
     runtime/SymbolConstructor.cpp
     runtime/SymbolPrototype.cpp
+    runtime/TemporalObject.cpp
 
     wasm/js/JSWebAssembly.cpp
     wasm/js/JSToWasmICCallee.cpp
@@ -548,8 +549,6 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     bytecode/CodeType.h
     bytecode/DFGExitProfile.h
     bytecode/DataFormat.h
-    bytecode/DeleteByIdVariant.h
-    bytecode/DeleteByStatus.h
     bytecode/DirectEvalCodeCache.h
     bytecode/ExecutableInfo.h
     bytecode/ExecutableToCodeBlockEdge.h
@@ -604,7 +603,6 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
 
     dfg/DFGCodeOriginPool.h
     dfg/DFGCommon.h
-    dfg/DFGCompilationMode.h
     dfg/DFGDoesGCCheck.h
     dfg/DFGMinifiedID.h
 
@@ -672,10 +670,8 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     heap/IsoSubspace.h
     heap/IsoSubspaceInlines.h
     heap/IsoSubspacePerVM.h
-    heap/JITStubRoutineSet.h
     heap/LocalAllocator.h
     heap/LocalAllocatorInlines.h
-    heap/LockDuringMarking.h
     heap/MachineStackMarker.h
     heap/MarkStack.h
     heap/MarkedBlock.h
@@ -761,8 +757,10 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     interpreter/VMEntryRecord.h
 
     jit/AssemblyHelpers.h
+    jit/AssemblyHelpersSpoolers.h
     jit/CCallHelpers.h
     jit/ExecutableAllocator.h
+    jit/ExecutableMemoryHandle.h
     jit/FPRInfo.h
     jit/GCAwareJITStubRoutine.h
     jit/GPRInfo.h
@@ -771,6 +769,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     jit/JITCodeMap.h
     jit/JITCompilation.h
     jit/JITCompilationEffort.h
+    jit/JITCompilationMode.h
     jit/JITMathICForwards.h
     jit/JITOperations.h
     jit/JITStubRoutine.h
@@ -944,6 +943,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/JSArrayBufferViewInlines.h
     runtime/JSArrayIterator.h
     runtime/JSBigInt.h
+    runtime/JSBoundFunction.h
     runtime/JSCConfig.h
     runtime/JSCInlines.h
     runtime/JSCJSValue.h
@@ -1063,6 +1063,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/ScriptExecutable.h
     runtime/ScriptFetchParameters.h
     runtime/ScriptFetcher.h
+    runtime/SlowPathFunction.h
     runtime/SlowPathReturnType.h
     runtime/SmallStrings.h
     runtime/SourceOrigin.h
@@ -1086,6 +1087,8 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     runtime/SymbolTable.h
     runtime/SymbolTableOrScopeDepth.h
     runtime/TemplateObjectDescriptor.h
+    runtime/TemporalNow.h
+    runtime/TemporalObject.h
     runtime/TestRunnerUtils.h
     runtime/ThrowScope.h
     runtime/ToNativeFromValue.h
@@ -1157,6 +1160,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     yarr/YarrFlags.h
     yarr/YarrInterpreter.h
     yarr/YarrJIT.h
+    yarr/YarrMatchingContextHolder.h
     yarr/YarrParser.h
     yarr/YarrPattern.h
     yarr/YarrUnicodeProperties.h

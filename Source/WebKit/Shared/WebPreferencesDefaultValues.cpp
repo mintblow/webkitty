@@ -267,8 +267,6 @@ bool defaultWebXREnabled()
 {
 #if HAVE(WEBXR_INTERNALS)
     return true;
-#elif HAVE(SYSTEM_FEATURE_FLAGS)
-    return isFeatureFlagEnabled("WebXR");
 #else
     return false;
 #endif
@@ -317,6 +315,7 @@ bool defaultVP9SWDecoderEnabledOnBattery()
 
     return false;
 }
+#endif // ENABLE(VP9)
 
 #if ENABLE(MEDIA_SOURCE)
 
@@ -330,6 +329,5 @@ bool defaultWebMParserEnabled()
 }
 
 #endif // ENABLE(MEDIA_SOURCE)
-#endif // ENABLE(VP9)
 
 } // namespace WebKit

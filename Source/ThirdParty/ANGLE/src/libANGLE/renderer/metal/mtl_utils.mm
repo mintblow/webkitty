@@ -560,22 +560,24 @@ static MTLLanguageVersion GetUserSetOrHighestMSLVersion(const MTLLanguageVersion
 AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
                                                 const std::string &source,
                                                 NSDictionary<NSString *, NSObject *> * substitutionMacros,
+                                                bool enableFastMath,
                                                 AutoObjCPtr<NSError *> *error)
 {
-    return CreateShaderLibrary(metalDevice, source.c_str(), source.size(), substitutionMacros, error);
+    return CreateShaderLibrary(metalDevice, source.c_str(), source.size(), substitutionMacros, enableFastMath, error);
 }
 
 AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
                                                 const std::string &source,
                                                 AutoObjCPtr<NSError *> *error)
 {
-    return CreateShaderLibrary(metalDevice, source.c_str(), source.size(),@{}, error);
+    return CreateShaderLibrary(metalDevice, source.c_str(), source.size(),@{}, true, error);
 }
 
 AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
                                                 const char *source,
                                                 size_t sourceLen,
                                                 NSDictionary<NSString *, NSObject *> * substitutionMacros,
+                                                bool enableFastMath,
                                                 AutoObjCPtr<NSError *> *errorOut)
 {
     ANGLE_MTL_OBJC_SCOPE
@@ -597,11 +599,7 @@ AutoObjCPtr<id<MTLLibrary>> CreateShaderLibrary(id<MTLDevice> metalDevice,
 #endif
         options.languageVersion = GetUserSetOrHighestMSLVersion(options.languageVersion);
         // TODO(jcunningham): workaround for intel driver not preserving invariance on all shaders
-        const uint32_t vendor_id = GetDeviceVendorId(metalDevice);
-        if (vendor_id == angle::kVendorID_Intel)
-        {
-            options.fastMathEnabled = false;
-        }
+        options.fastMathEnabled &= enableFastMath;
         options.preprocessorMacros = substitutionMacros;
         auto library = [metalDevice newLibraryWithSource:nsSource options:options error:&nsError];
         if (angle::GetEnvironmentVar(kANGLEPrintMSLEnv)[0] == '1')
@@ -1303,5 +1301,52 @@ angle::Result GetTriangleFanIndicesCount(ContextMtl *context,
     return angle::Result::Continue;
 }
 
+angle::Result CreateMslShader(mtl::Context *context,
+                              id<MTLLibrary> shaderLib,
+                              NSString * shaderName,
+                              MTLFunctionConstantValues *funcConstants,
+                              id<MTLFunction> *shaderOut)
+{
+    NSError *nsErr = nil;
+
+    id<MTLFunction> mtlShader;
+    if (funcConstants)
+    {
+        mtlShader = [shaderLib newFunctionWithName:shaderName
+                                    constantValues:funcConstants
+                                             error:&nsErr];
+    }
+    else
+    {
+        mtlShader = [shaderLib newFunctionWithName:shaderName];
+    }
+
+    [mtlShader ANGLE_MTL_AUTORELEASE];
+    if (nsErr && !mtlShader)
+    {
+        std::ostringstream ss;
+        ss << "Internal error compiling Metal shader:\n"
+           << nsErr.localizedDescription.UTF8String << "\n";
+
+        ERR() << ss.str();
+
+        ANGLE_MTL_CHECK(context, false, GL_INVALID_OPERATION);
+    }
+    *shaderOut = mtlShader;
+    return angle::Result::Continue;
+}
+
+angle::Result CreateMslShader(Context *context,
+                              id<MTLLibrary> shaderLib,
+                              NSString * shaderName,
+                              MTLFunctionConstantValues *funcConstants,
+                              AutoObjCPtr<id<MTLFunction>> *shaderOut)
+{
+    id<MTLFunction> outFunction;
+    ANGLE_TRY(CreateMslShader(context, shaderLib, shaderName, funcConstants, &outFunction));
+    shaderOut->retainAssign(outFunction);
+    return angle::Result::Continue;
+    
+}
 }  // namespace mtl
 }  // namespace rx

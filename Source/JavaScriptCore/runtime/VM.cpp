@@ -29,6 +29,7 @@
 #include "config.h"
 #include "VM.h"
 
+#include "AccessCase.h"
 #include "AggregateError.h"
 #include "ArgList.h"
 #include "BigIntObject.h"
@@ -43,7 +44,6 @@
 #include "CommonIdentifiers.h"
 #include "ControlFlowProfiler.h"
 #include "CustomGetterSetter.h"
-#include "DFGWorklist.h"
 #include "DOMAttributeGetterSetter.h"
 #include "DateInstance.h"
 #include "DebuggerScope.h"
@@ -81,6 +81,7 @@
 #include "IsoInlinedHeapCellType.h"
 #include "JITCode.h"
 #include "JITOperationList.h"
+#include "JITSizeStatistics.h"
 #include "JITThunks.h"
 #include "JITWorklist.h"
 #include "JSAPIGlobalObject.h"
@@ -567,11 +568,17 @@ VM::VM(VMType vmType, HeapType heapType, WTF::RunLoop* runLoop, bool* success)
 #endif // ENABLE(FTL_JIT)
         getCTIInternalFunctionTrampolineFor(CodeForCall);
         getCTIInternalFunctionTrampolineFor(CodeForConstruct);
+        m_sharedJITStubs = makeUnique<SharedJITStubSet>();
     }
-#endif
+#endif // ENABLE(JIT)
 
     if (Options::forceDebuggerBytecodeGeneration() || Options::alwaysUseShadowChicken())
         ensureShadowChicken();
+
+#if ENABLE(JIT)
+    if (Options::dumpBaselineJITSizeStatistics() || Options::dumpDFGJITSizeStatistics())
+        jitSizeStatistics = makeUnique<JITSizeStatistics>();
+#endif
 
     VMInspector::instance().add(this);
 
@@ -583,12 +590,12 @@ static ReadWriteLock s_destructionLock;
 
 void waitForVMDestruction()
 {
-    auto locker = holdLock(s_destructionLock.write());
+    Locker locker { s_destructionLock.write() };
 }
 
 VM::~VM()
 {
-    auto destructionLocker = holdLock(s_destructionLock.read());
+    Locker destructionLocker { s_destructionLock.read() };
     
     Gigacage::removePrimitiveDisableCallback(primitiveGigacageDisabledCallback, this);
     deferredWorkTimer->stopRunningTasks();
@@ -613,20 +620,8 @@ VM::~VM()
     
 #if ENABLE(JIT)
     if (JITWorklist* worklist = JITWorklist::existingGlobalWorklistOrNull())
-        worklist->completeAllForVM(*this);
+        worklist->cancelAllPlansForVM(*this);
 #endif // ENABLE(JIT)
-
-#if ENABLE(DFG_JIT)
-    // Make sure concurrent compilations are done, but don't install them, since there is
-    // no point to doing so.
-    for (unsigned i = DFG::numberOfWorklists(); i--;) {
-        if (DFG::Worklist* worklist = DFG::existingWorklistForIndexOrNull(i)) {
-            worklist->removeNonCompilingPlansForVM(*this);
-            worklist->waitUntilAllPlansForVMAreReady(*this);
-            worklist->removeAllReadyPlansForVM(*this);
-        }
-    }
-#endif // ENABLE(DFG_JIT)
     
     waitForAsynchronousDisassembly();
     
@@ -661,6 +656,10 @@ VM::~VM()
 #if ENABLE(DFG_JIT)
     for (unsigned i = 0; i < m_scratchBuffers.size(); ++i)
         VMMalloc::free(m_scratchBuffers[i]);
+#endif
+
+#if ENABLE(JIT)
+    m_sharedJITStubs = nullptr;
 #endif
 }
 
@@ -1127,7 +1126,7 @@ void VM::updateStackLimits()
 #if ENABLE(DFG_JIT)
 void VM::gatherScratchBufferRoots(ConservativeRoots& conservativeRoots)
 {
-    auto lock = holdLock(m_scratchBufferLock);
+    Locker locker { m_scratchBufferLock };
     for (auto* scratchBuffer : m_scratchBuffers) {
         if (scratchBuffer->activeLength()) {
             void* bufferStart = scratchBuffer->dataBuffer();
@@ -1369,13 +1368,15 @@ void VM::callPromiseRejectionCallback(Strong<JSPromise>& promise)
 
 void VM::didExhaustMicrotaskQueue()
 {
-    auto unhandledRejections = WTFMove(m_aboutToBeNotifiedRejectedPromises);
-    for (auto& promise : unhandledRejections) {
-        if (promise->isHandled(*this))
-            continue;
+    do {
+        auto unhandledRejections = WTFMove(m_aboutToBeNotifiedRejectedPromises);
+        for (auto& promise : unhandledRejections) {
+            if (promise->isHandled(*this))
+                continue;
 
-        callPromiseRejectionCallback(promise);
-    }
+            callPromiseRejectionCallback(promise);
+        }
+    } while (!m_aboutToBeNotifiedRejectedPromises.isEmpty());
 }
 
 void VM::promiseRejected(JSPromise* promise)
@@ -1491,7 +1492,7 @@ ScratchBuffer* VM::scratchBufferForSize(size_t size)
     if (!size)
         return nullptr;
 
-    auto locker = holdLock(m_scratchBufferLock);
+    Locker locker { m_scratchBufferLock };
 
     if (size > m_sizeOfLastScratchBuffer) {
         // Protect against a N^2 memory usage pathology by ensuring
@@ -1511,7 +1512,7 @@ ScratchBuffer* VM::scratchBufferForSize(size_t size)
 
 void VM::clearScratchBuffers()
 {
-    auto lock = holdLock(m_scratchBufferLock);
+    Locker locker { m_scratchBufferLock };
     for (auto* scratchBuffer : m_scratchBuffers)
         scratchBuffer->setActiveLength(0);
 }
@@ -1685,26 +1686,26 @@ void VM::setCrashOnVMCreation(bool shouldCrash)
 
 void VM::addLoopHintExecutionCounter(const Instruction* instruction)
 {
-    auto locker = holdLock(m_loopHintExecutionCountLock);
-    auto addResult = m_loopHintExecutionCounts.add(instruction, std::pair<unsigned, std::unique_ptr<uint64_t>>(0, nullptr));
+    Locker locker { m_loopHintExecutionCountLock };
+    auto addResult = m_loopHintExecutionCounts.add(instruction, std::pair<unsigned, std::unique_ptr<uintptr_t>>(0, nullptr));
     if (addResult.isNewEntry) {
-        auto ptr = WTF::makeUniqueWithoutFastMallocCheck<uint64_t>();
+        auto ptr = WTF::makeUniqueWithoutFastMallocCheck<uintptr_t>();
         *ptr = 0;
         addResult.iterator->value.second = WTFMove(ptr);
     }
     ++addResult.iterator->value.first;
 }
 
-uint64_t* VM::getLoopHintExecutionCounter(const Instruction* instruction)
+uintptr_t* VM::getLoopHintExecutionCounter(const Instruction* instruction)
 {
-    auto locker = holdLock(m_loopHintExecutionCountLock);
+    Locker locker { m_loopHintExecutionCountLock };
     auto iter = m_loopHintExecutionCounts.find(instruction);
     return iter->value.second.get();
 }
 
 void VM::removeLoopHintExecutionCounter(const Instruction* instruction)
 {
-    auto locker = holdLock(m_loopHintExecutionCountLock);
+    Locker locker { m_loopHintExecutionCountLock };
     auto iter = m_loopHintExecutionCounts.find(instruction);
     RELEASE_ASSERT(!!iter->value.first);
     --iter->value.first;

@@ -73,8 +73,7 @@
 #include <jsc/JSCContextPrivate.h>
 #include <WebCore/CertificateInfo.h>
 #include <WebCore/JSDOMExceptionHandling.h>
-#include <WebCore/PlatformScreen.h>
-#include <WebCore/RefPtrCairo.h>
+#include <WebCore/URLSoup.h>
 #include <glib/gi18n-lib.h>
 #include <libsoup/soup.h>
 #include <wtf/SetForScope.h>
@@ -91,6 +90,7 @@
 #include "WebKitWebInspectorPrivate.h"
 #include "WebKitWebViewBasePrivate.h"
 #include <WebCore/GUniquePtrGtk.h>
+#include <WebCore/RefPtrCairo.h>
 #endif
 
 #if PLATFORM(WPE)
@@ -2170,72 +2170,11 @@ static void webkit_web_view_class_init(WebKitWebViewClass* webViewClass)
         g_cclosure_marshal_generic,
         G_TYPE_BOOLEAN, 1,
         WEBKIT_TYPE_COLOR_CHOOSER_REQUEST);
-
-    /**
-     * WebKitWebView::show-option-menu:
-     * @web_view: the #WebKitWebView on which the signal is emitted
-     * @menu: the #WebKitOptionMenu
-     * @event: the #GdkEvent that triggered the menu, or %NULL
-     * @rectangle: the option element area
-     *
-     * This signal is emitted when a select element in @web_view needs to display a
-     * dropdown menu. This signal can be used to show a custom menu, using @menu to get
-     * the details of all items that should be displayed. The area of the element in the
-     * #WebKitWebView is given as @rectangle parameter, it can be used to position the
-     * menu. If this was triggered by a user interaction, like a mouse click,
-     * @event parameter provides the #GdkEvent.
-     * To handle this signal asynchronously you should keep a ref of the @menu.
-     *
-     * The default signal handler will pop up a #GtkMenu.
-     *
-     * Returns: %TRUE to stop other handlers from being invoked for the event.
-     *   %FALSE to propagate the event further.
-     *
-     * Since: 2.18
-     */
-    signals[SHOW_OPTION_MENU] = g_signal_new(
-        "show-option-menu",
-        G_TYPE_FROM_CLASS(webViewClass),
-        G_SIGNAL_RUN_LAST,
-        G_STRUCT_OFFSET(WebKitWebViewClass, show_option_menu),
-        g_signal_accumulator_true_handled, nullptr,
-        g_cclosure_marshal_generic,
-        G_TYPE_BOOLEAN, 3,
-        WEBKIT_TYPE_OPTION_MENU,
-        GDK_TYPE_EVENT | G_SIGNAL_TYPE_STATIC_SCOPE,
-        GDK_TYPE_RECTANGLE | G_SIGNAL_TYPE_STATIC_SCOPE);
 #endif // PLATFORM(GTK)
 
-#if PLATFORM(WPE)
-    /**
-     * WebKitWebView::show-option-menu:
-     * @web_view: the #WebKitWebView on which the signal is emitted
-     * @menu: the #WebKitOptionMenu
-     * @rectangle: the option element area
-     *
-     * This signal is emitted when a select element in @web_view needs to display a
-     * dropdown menu. This signal can be used to show a custom menu, using @menu to get
-     * the details of all items that should be displayed. The area of the element in the
-     * #WebKitWebView is given as @rectangle parameter, it can be used to position the
-     * menu.
-     * To handle this signal asynchronously you should keep a ref of the @menu.
-     *
-     * Returns: %TRUE to stop other handlers from being invoked for the event.
-     *   %FALSE to propagate the event further.
-     *
-     * Since: 2.28
-     */
-    signals[SHOW_OPTION_MENU] = g_signal_new(
-        "show-option-menu",
-        G_TYPE_FROM_CLASS(webViewClass),
-        G_SIGNAL_RUN_LAST,
-        G_STRUCT_OFFSET(WebKitWebViewClass, show_option_menu),
-        g_signal_accumulator_true_handled, nullptr,
-        g_cclosure_marshal_generic,
-        G_TYPE_BOOLEAN, 2,
-        WEBKIT_TYPE_OPTION_MENU,
-        WEBKIT_TYPE_RECTANGLE | G_SIGNAL_TYPE_STATIC_SCOPE);
-#endif
+    // This signal is different for WPE and GTK, so it's declared in
+    // WebKitWebView[Gtk,WPE].cpp to ensure we don't break the introspection.
+    signals[SHOW_OPTION_MENU] = createShowOptionMenuSignal(webViewClass);
 
     /**
      * WebKitWebView::user-message-received:
@@ -2561,10 +2500,10 @@ void webkitWebViewDismissCurrentScriptDialog(WebKitWebView* webView)
         webkitScriptDialogDismiss(webView->priv->currentScriptDialog);
 }
 
-Optional<WebKitScriptDialogType> webkitWebViewGetCurrentScriptDialogType(WebKitWebView* webView)
+std::optional<WebKitScriptDialogType> webkitWebViewGetCurrentScriptDialogType(WebKitWebView* webView)
 {
     if (!webView->priv->currentScriptDialog)
-        return WTF::nullopt;
+        return std::nullopt;
 
     return static_cast<WebKitScriptDialogType>(webView->priv->currentScriptDialog->type);
 }
@@ -2820,7 +2759,7 @@ void webkitWebViewDidLosePointerLock(WebKitWebView* webView)
 }
 #endif
 
-static void webkitWebViewSynthesizeCompositionKeyPress(WebKitWebView* webView, const String& text, Optional<Vector<CompositionUnderline>>&& underlines, Optional<EditingRange>&& selectionRange)
+static void webkitWebViewSynthesizeCompositionKeyPress(WebKitWebView* webView, const String& text, std::optional<Vector<CompositionUnderline>>&& underlines, std::optional<EditingRange>&& selectionRange)
 {
 #if PLATFORM(GTK)
     webkitWebViewBaseSynthesizeCompositionKeyPress(WEBKIT_WEB_VIEW_BASE(webView), text, WTFMove(underlines), WTFMove(selectionRange));
@@ -2836,7 +2775,7 @@ void webkitWebViewSetComposition(WebKitWebView* webView, const String& text, con
 
 void webkitWebViewConfirmComposition(WebKitWebView* webView, const String& text)
 {
-    webkitWebViewSynthesizeCompositionKeyPress(webView, text, WTF::nullopt, WTF::nullopt);
+    webkitWebViewSynthesizeCompositionKeyPress(webView, text, std::nullopt, std::nullopt);
 }
 
 void webkitWebViewCancelComposition(WebKitWebView* webView, const String& text)
@@ -3779,15 +3718,11 @@ static void webkitWebViewRunJavaScriptCallback(API::SerializedScriptValue* wkSer
         StringBuilder builder;
         if (!exceptionDetails.sourceURL.isEmpty()) {
             builder.append(exceptionDetails.sourceURL);
-            if (exceptionDetails.lineNumber > 0) {
-                builder.append(':');
-                builder.appendNumber(exceptionDetails.lineNumber);
-            }
-            if (exceptionDetails.columnNumber > 0) {
-                builder.append(':');
-                builder.appendNumber(exceptionDetails.columnNumber);
-            }
-            builder.appendLiteral(": ");
+            if (exceptionDetails.lineNumber > 0)
+                builder.append(':', exceptionDetails.lineNumber);
+            if (exceptionDetails.columnNumber > 0)
+                builder.append(':', exceptionDetails.columnNumber);
+            builder.append(": ");
         }
         builder.append(exceptionDetails.message);
         g_task_return_new_error(task, WEBKIT_JAVASCRIPT_ERROR, WEBKIT_JAVASCRIPT_ERROR_SCRIPT_FAILED,
@@ -3819,7 +3754,7 @@ void webkitWebViewRunJavascriptWithoutForcedUserGestures(WebKitWebView* webView,
     g_return_if_fail(WEBKIT_IS_WEB_VIEW(webView));
     g_return_if_fail(script);
 
-    RunJavaScriptParameters params = { String::fromUTF8(script), URL { }, false, WTF::nullopt, false };
+    RunJavaScriptParameters params = { String::fromUTF8(script), URL { }, false, std::nullopt, false };
     webkitWebViewRunJavaScriptWithParams(webView, script, WTFMove(params), cancellable, callback, userData);
 }
 
@@ -3842,7 +3777,7 @@ void webkit_web_view_run_javascript(WebKitWebView* webView, const gchar* script,
     g_return_if_fail(WEBKIT_IS_WEB_VIEW(webView));
     g_return_if_fail(script);
 
-    RunJavaScriptParameters params = { String::fromUTF8(script), URL { }, false, WTF::nullopt, true };
+    RunJavaScriptParameters params = { String::fromUTF8(script), URL { }, false, std::nullopt, true };
     webkitWebViewRunJavaScriptWithParams(webView, script, WTFMove(params), cancellable, callback, userData);
 }
 
@@ -3940,7 +3875,7 @@ void webkit_web_view_run_javascript_in_world(WebKitWebView* webView, const gchar
 
     GRefPtr<GTask> task = adoptGRef(g_task_new(webView, cancellable, callback, userData));
     auto world = API::ContentWorld::sharedWorldWithName(String::fromUTF8(worldName));
-    getPage(webView).runJavaScriptInFrameInScriptWorld({ String::fromUTF8(script), URL { }, false, WTF::nullopt, true }, WTF::nullopt, world.get(), [task = WTFMove(task)] (auto&& result) {
+    getPage(webView).runJavaScriptInFrameInScriptWorld({ String::fromUTF8(script), URL { }, false, std::nullopt, true }, std::nullopt, world.get(), [task = WTFMove(task)] (auto&& result) {
         RefPtr<API::SerializedScriptValue> serializedScriptValue;
         ExceptionDetails exceptionDetails;
         if (result.has_value())
@@ -3985,7 +3920,7 @@ static void resourcesStreamReadCallback(GObject* object, GAsyncResult* result, g
 
     WebKitWebView* webView = WEBKIT_WEB_VIEW(g_task_get_source_object(task.get()));
     gpointer outputStreamData = g_memory_output_stream_get_data(G_MEMORY_OUTPUT_STREAM(object));
-    getPage(webView).runJavaScriptInMainFrame({ String::fromUTF8(reinterpret_cast<const gchar*>(outputStreamData)), URL { }, false, WTF::nullopt, true },
+    getPage(webView).runJavaScriptInMainFrame({ String::fromUTF8(reinterpret_cast<const gchar*>(outputStreamData)), URL { }, false, std::nullopt, true },
         [task] (auto&& result) {
             RefPtr<API::SerializedScriptValue> serializedScriptValue;
             ExceptionDetails exceptionDetails;
@@ -4783,4 +4718,39 @@ void webkit_web_view_terminate_web_process(WebKitWebView* webView)
         Ref<WebKit::WebProcessProxy> protectedProcessProxy(provisionalPageProxy->process());
         protectedProcessProxy->requestTermination(WebKit::ProcessTerminationReason::RequestedByClient);
     }
+}
+
+/**
+ * webkit_web_view_set_cors_allowlist:
+ * @web_view: a #WebKitWebView
+ * @allowlist: (array zero-terminated=1) (element-type utf8) (transfer none) (nullable): an allowlist of URI patterns, or %NULL
+ *
+ * Sets the @allowlist for which
+ * [Cross-Origin Resource Sharing](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+ * checks are disabled in @web_view. URI patterns must be of the form
+ * `[protocol]://[host]/[path]`, each component may contain the wildcard
+ * character (`*`) to represent zero or more other characters. All three
+ * components are required and must not be omitted from the URI
+ * patterns.
+ *
+ * Disabling CORS checks permits resources from other origins to load
+ * allowlisted resources. It does not permit the allowlisted resources
+ * to load resources from other origins.
+ *
+ * If this function is called multiple times, only the allowlist set by
+ * the most recent call will be effective.
+ *
+ * Since: 2.34
+ */
+void webkit_web_view_set_cors_allowlist(WebKitWebView* webView, const gchar* const* allowList)
+{
+    g_return_if_fail(WEBKIT_IS_WEB_VIEW(webView));
+
+    Vector<String> allowListVector;
+    if (allowList) {
+        for (auto str = allowList; *str; ++str)
+            allowListVector.append(String::fromUTF8(*str));
+    }
+
+    getPage(webView).setCORSDisablingPatterns(WTFMove(allowListVector));
 }

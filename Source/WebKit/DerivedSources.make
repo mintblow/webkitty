@@ -39,6 +39,7 @@ VPATH = \
     $(WebKit2)/NetworkProcess/WebStorage \
     $(WebKit2)/PluginProcess \
     $(WebKit2)/PluginProcess/mac \
+    $(WebKit2)/Resources/SandboxProfiles/ios \
     $(WebKit2)/Shared/Plugins \
     $(WebKit2)/Shared \
     $(WebKit2)/Shared/API/Cocoa \
@@ -117,6 +118,7 @@ else
 endif
 
 MESSAGE_RECEIVERS = \
+	NetworkProcess/NetworkBroadcastChannelRegistry \
 	NetworkProcess/NetworkConnectionToWebProcess \
 	NetworkProcess/IndexedDB/WebIDBServer \
 	NetworkProcess/NetworkContentRuleListManager \
@@ -161,7 +163,6 @@ MESSAGE_RECEIVERS = \
 	UIProcess/ios/SmartMagnificationController \
 	UIProcess/mac/SecItemShimProxy \
 	UIProcess/WebGeolocationManagerProxy \
-	UIProcess/Cocoa/PlatformXRSystem \
 	UIProcess/Cocoa/PlaybackSessionManagerProxy \
 	UIProcess/Cocoa/UserMediaCaptureManagerProxy \
 	UIProcess/Cocoa/VideoFullscreenManagerProxy \
@@ -175,6 +176,7 @@ MESSAGE_RECEIVERS = \
 	UIProcess/Media/RemoteMediaSessionCoordinatorProxy \
 	UIProcess/SpeechRecognitionRemoteRealtimeMediaSourceManager \
 	UIProcess/SpeechRecognitionServer \
+	UIProcess/XR/PlatformXRSystem \
 	WebProcess/Databases/IndexedDB/WebIDBConnectionToServer \
 	WebProcess/GPU/GPUProcessConnection \
 	WebProcess/GPU/graphics/RemoteRenderingBackendProxy \
@@ -213,13 +215,13 @@ MESSAGE_RECEIVERS = \
 	WebProcess/Network/webrtc/WebRTCMonitor \
 	WebProcess/Network/webrtc/WebMDNSRegister \
 	WebProcess/Network/webrtc/WebRTCResolver \
+	WebProcess/WebCoreSupport/WebBroadcastChannelRegistry \
 	WebProcess/WebCoreSupport/WebDeviceOrientationUpdateProvider \
 	WebProcess/WebCoreSupport/WebSpeechRecognitionConnection \
 	WebProcess/Speech/SpeechRecognitionRealtimeMediaSourceManager \
 	WebProcess/Storage/WebSWContextManagerConnection \
 	WebProcess/Storage/WebSWClientConnection \
 	WebProcess/WebProcess \
-	WebProcess/cocoa/PlatformXRSystemProxy \
 	WebProcess/cocoa/PlaybackSessionManager \
 	WebProcess/cocoa/RemoteCaptureSampleManager \
 	WebProcess/cocoa/UserMediaCaptureManager \
@@ -238,6 +240,7 @@ MESSAGE_RECEIVERS = \
 	WebProcess/WebPage/Cocoa/TextCheckingControllerProxy \
 	WebProcess/WebPage/ViewUpdateDispatcher \
 	WebProcess/WebAuthentication/WebAuthnProcessConnection \
+	WebProcess/XR/PlatformXRSystemProxy \
 	PluginProcess/WebProcessConnection \
 	PluginProcess/PluginControllerProxy \
 	PluginProcess/PluginProcess \
@@ -246,11 +249,10 @@ MESSAGE_RECEIVERS = \
 	GPUProcess/graphics/RemoteGraphicsContextGL \
 	GPUProcess/webrtc/LibWebRTCCodecsProxy \
 	GPUProcess/webrtc/RemoteSampleBufferDisplayLayerManager \
-	GPUProcess/webrtc/RemoteAudioMediaStreamTrackRendererManager \
 	GPUProcess/webrtc/RemoteMediaRecorderManager \
 	GPUProcess/webrtc/RemoteSampleBufferDisplayLayer \
 	GPUProcess/webrtc/RemoteMediaRecorder \
-	GPUProcess/webrtc/RemoteAudioMediaStreamTrackRenderer \
+	GPUProcess/webrtc/RemoteAudioMediaStreamTrackRendererInternalUnitManager \
 	GPUProcess/GPUProcess \
 	GPUProcess/media/RemoteImageDecoderAVFProxy \
 	GPUProcess/media/RemoteLegacyCDMSessionProxy \
@@ -319,8 +321,13 @@ SANDBOX_PROFILES = \
 	com.apple.WebKit.NetworkProcess.sb \
 	com.apple.WebKit.GPUProcess.sb \
 	com.apple.WebKit.WebAuthnProcess.sb
+	
+SANDBOX_PROFILES_IOS = \
+	com.apple.WebKit.WebContent.sb \
 
-all : $(SANDBOX_PROFILES)
+sandbox-profiles-ios : $(SANDBOX_PROFILES_IOS)
+
+all : $(SANDBOX_PROFILES) $(SANDBOX_PROFILES_IOS)
 
 %.sb : %.sb.in
 	@echo Pre-processing $* sandbox profile...

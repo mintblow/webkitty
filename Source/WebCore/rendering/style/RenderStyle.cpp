@@ -499,7 +499,7 @@ bool RenderStyle::equalForTextAutosizing(const RenderStyle& other) const
         && m_rareNonInheritedData->textOverflow == other.m_rareNonInheritedData->textOverflow;
 }
 
-bool RenderStyle::isIdempotentTextAutosizingCandidate(Optional<AutosizeStatus> overrideStatus) const
+bool RenderStyle::isIdempotentTextAutosizingCandidate(std::optional<AutosizeStatus> overrideStatus) const
 {
     // Refer to <rdar://problem/51826266> for more information regarding how this function was generated.
     auto fields = OptionSet<AutosizeStatus::Fields>::fromRaw(m_inheritedFlags.autosizeStatus);
@@ -737,8 +737,11 @@ static bool rareNonInheritedDataChangeRequiresLayout(const StyleRareNonInherited
         return true;
 #endif
 
-    if (first.aspectRatioType != second.aspectRatioType || first.aspectRatioWidth != second.aspectRatioWidth || first.aspectRatioWidth != second.aspectRatioHeight)
+    if (first.aspectRatioType != second.aspectRatioType
+        || first.aspectRatioWidth != second.aspectRatioWidth
+        || first.aspectRatioHeight != second.aspectRatioHeight) {
         return true;
+    }
 
     return false;
 }
@@ -951,6 +954,9 @@ bool RenderStyle::changeRequiresLayout(const RenderStyle& other, OptionSet<Style
         if (*firstLineStyle != *otherFirstLineStyle)
             return true;
     }
+
+    if (scrollPadding() != other.scrollPadding() || scrollSnapType() != other.scrollSnapType())
+        return true;
 
     return false;
 }
@@ -1253,12 +1259,14 @@ void RenderStyle::setClip(Length&& top, Length&& right, Length&& bottom, Length&
     data.clip.left() = WTFMove(left);
 }
 
-void RenderStyle::addCursor(RefPtr<StyleImage>&& image, const IntPoint& hotSpot)
+void RenderStyle::addCursor(RefPtr<StyleImage>&& image, const std::optional<IntPoint>& hotSpot)
 {
     auto& cursorData = m_rareInheritedData.access().cursorData;
     if (!cursorData)
         cursorData = CursorList::create();
-    cursorData->append(CursorData(WTFMove(image), hotSpot));
+    // Point outside the image is how we tell the cursor machinery there is no hot spot, and it should generate one (done in the Cursor class).
+    // FIXME: Would it be better to extend the concept of "no hot spot" deeper, into CursorData and beyond, rather than using -1/-1 for it?
+    cursorData->append(CursorData(WTFMove(image), hotSpot.value_or(IntPoint { -1, -1 })));
 }
 
 void RenderStyle::setCursorList(RefPtr<CursorList>&& list)
@@ -1923,7 +1931,7 @@ void RenderStyle::setFontStretch(FontSelectionValue value)
     fontCascade().update(currentFontSelector);
 }
 
-void RenderStyle::setFontItalic(Optional<FontSelectionValue> value)
+void RenderStyle::setFontItalic(std::optional<FontSelectionValue> value)
 {
     FontSelector* currentFontSelector = fontCascade().fontSelector();
     auto description = fontDescription();
@@ -2114,6 +2122,11 @@ Color RenderStyle::visitedDependentColor(CSSPropertyID colorProperty) const
     if (insideLink() != InsideLink::InsideVisited)
         return unvisitedColor;
 
+#if ENABLE(CSS_COMPOSITING)
+    if (isInSubtreeWithBlendMode())
+        return unvisitedColor;
+#endif
+    
     Color visitedColor = colorResolvingCurrentColor(colorProperty, true);
 
     // FIXME: Technically someone could explicitly specify the color transparent, but for now we'll just
@@ -2518,7 +2531,6 @@ void RenderStyle::setScrollPaddingRight(Length&& length)
 {
     SET_VAR(m_rareNonInheritedData, scrollPadding.right(), WTFMove(length));
 }
-#if ENABLE(CSS_SCROLL_SNAP)
 
 ScrollSnapType RenderStyle::initialScrollSnapType()
 {
@@ -2568,9 +2580,8 @@ void RenderStyle::setScrollSnapStop(const ScrollSnapStop stop)
 bool RenderStyle::hasSnapPosition() const
 {
     const ScrollSnapAlign& alignment = this->scrollSnapAlign();
-    return alignment.x != ScrollSnapAxisAlignType::None || alignment.y != ScrollSnapAxisAlignType::None;
+    return alignment.blockAlign != ScrollSnapAxisAlignType::None || alignment.inlineAlign != ScrollSnapAxisAlignType::None;
 }
-#endif
 
 bool RenderStyle::hasReferenceFilterOnly() const
 {

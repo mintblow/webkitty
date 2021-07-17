@@ -92,6 +92,8 @@ public:
         case MiscUse:
         case AnyIntUse:
         case DoubleRepAnyIntUse:
+        case NotDoubleUse:
+        case NeitherDoubleNorHeapBigIntNorStringUse:
             return;
             
         case KnownInt32Use:
@@ -273,6 +275,7 @@ bool safeToExecute(AbstractStateType& state, Graph& graph, Node* node, bool igno
     case ToBoolean:
     case LogicalNot:
     case ToString:
+    case FunctionToString:
     case NumberToStringWithValidRadixConstant:
     case StrCat:
     case CallStringConstructor:
@@ -361,7 +364,7 @@ bool safeToExecute(AbstractStateType& state, Graph& graph, Node* node, bool igno
     case FilterCallLinkStatus:
     case FilterGetByStatus:
     case FilterPutByIdStatus:
-    case FilterInByIdStatus:
+    case FilterInByStatus:
     case FilterDeleteByStatus:
     case FilterCheckPrivateBrandStatus:
     case FilterSetPrivateBrandStatus:
@@ -498,6 +501,7 @@ bool safeToExecute(AbstractStateType& state, Graph& graph, Node* node, bool igno
     case CreatePromise:
     case CreateGenerator:
     case CreateAsyncGenerator:
+    case ObjectAssign:
     case ObjectCreate:
     case ObjectKeys:
     case ObjectGetOwnPropertyNames:
@@ -591,6 +595,8 @@ bool safeToExecute(AbstractStateType& state, Graph& graph, Node* node, bool igno
     case NewStringObject:
     case InByVal:
     case InById:
+    case HasPrivateName:
+    case HasPrivateBrand:
     case HasOwnProperty:
     case PushWithScope:
     case CreateActivation:

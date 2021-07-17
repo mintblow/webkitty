@@ -163,12 +163,8 @@ void StorageArea::clear()
         }
     }
 
-    for (auto it = m_eventListeners.begin(), end = m_eventListeners.end(); it != end; ++it) {
-        RunLoop::main().dispatch([connectionID = *it, destinationStorageAreaID = m_identifier] {
-            if (auto* connection = IPC::Connection::connection(connectionID))
-                connection->send(Messages::StorageAreaMap::ClearCache(), destinationStorageAreaID);
-        });
-    }
+    for (auto& listenerUniqueID : m_eventListeners)
+        IPC::Connection::send(listenerUniqueID, Messages::StorageAreaMap::ClearCache(), m_identifier.toUInt64());
 }
 
 LocalStorageDatabase& StorageArea::ensureDatabase() const
@@ -179,7 +175,7 @@ LocalStorageDatabase& StorageArea::ensureDatabase() const
     // We open the database here even if we've already imported our items to ensure that the database is open if we need to write to it.
     if (!m_localStorageDatabase) {
         auto* localStorageDatabaseTracker = m_localStorageNamespace->storageManager()->localStorageDatabaseTracker();
-        m_localStorageDatabase = LocalStorageDatabase::create(localStorageDatabaseTracker->databasePath(m_securityOrigin), m_quotaInBytes);
+        m_localStorageDatabase = LocalStorageDatabase::create(m_queue.copyRef(), localStorageDatabaseTracker->databasePath(m_securityOrigin), m_quotaInBytes);
         m_localStorageDatabase->openIfExisting();
     }
     return *m_localStorageDatabase;
@@ -189,13 +185,9 @@ void StorageArea::dispatchEvents(IPC::Connection::UniqueID sourceConnection, Sto
 {
     ASSERT(!RunLoop::isMain());
     ASSERT(storageAreaImplID);
-    for (auto it = m_eventListeners.begin(), end = m_eventListeners.end(); it != end; ++it) {
-        Optional<StorageAreaImplIdentifier> optionalStorageAreaImplID = *it == sourceConnection ? makeOptional(storageAreaImplID) : WTF::nullopt;
-
-        RunLoop::main().dispatch([connectionID = *it, destinationStorageAreaID = m_identifier, key = key.isolatedCopy(), oldValue = oldValue.isolatedCopy(), newValue = newValue.isolatedCopy(), urlString = urlString.isolatedCopy(), optionalStorageAreaImplID = WTFMove(optionalStorageAreaImplID)] {
-            if (auto* connection = IPC::Connection::connection(connectionID))
-                connection->send(Messages::StorageAreaMap::DispatchStorageEvent(optionalStorageAreaImplID, key, oldValue, newValue, urlString), destinationStorageAreaID);
-        });
+    for (auto& listenerUniqueID : m_eventListeners) {
+        auto optionalStorageAreaImplID = listenerUniqueID == sourceConnection ? std::make_optional(storageAreaImplID) : std::nullopt;
+        IPC::Connection::send(listenerUniqueID, Messages::StorageAreaMap::DispatchStorageEvent(optionalStorageAreaImplID, key, oldValue, newValue, urlString), m_identifier.toUInt64());
     }
 }
 
@@ -205,6 +197,12 @@ void StorageArea::close()
         return;
 
     m_localStorageDatabase->close();
+}
+
+void StorageArea::syncToDatabase()
+{
+    if (m_localStorageDatabase)
+        m_localStorageDatabase->flushToDisk();
 }
 
 void StorageArea::handleLowMemoryWarning()

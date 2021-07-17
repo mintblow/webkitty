@@ -287,6 +287,8 @@ fast/gradients/conic-gradient-alpha.html [ Skip ]
 fast/gradients/conic-gradient-extended-stops.html [ Skip ]
 fast/gradients/conic-gradient.html [ Skip ]
 fast/gradients/conic-two-hints.html [ Skip ]
+fast/canvas/canvas-conic-gradient-angle.html [ Skip ]
+fast/canvas/canvas-conic-gradient-center.html [ Skip ]
 
 # TODO Investigate why these mouse scroll tests are failing.
 fast/events/scroll-in-scaled-page-with-overflow-hidden.html [ Failure ]
@@ -545,10 +547,6 @@ webkit.org/b/58845 fast/dom/title-directionality-removeChild.html [ Skip ]
 # TODO CSS Grid Layout is not yet enabled.
 webkit.org/b/60731 fast/css-grid-layout/ [ Skip ]
 
-# TODO ENABLE(CSS_SCROLL_SNAP) is disabled.
-css3/scroll-snap/ [ Skip ]
-imported/w3c/web-platform-tests/css/css-scroll-snap [ Skip ]
-
 # JSC does not support setIsolatedWorldSecurityOrigin
 webkit.org/b/61540 http/tests/security/isolatedWorld/cross-origin-xhr.html [ Skip ]
 
@@ -559,6 +557,8 @@ webkit.org/b/86914 fast/history/page-cache-closed-audiocontext.html [ Skip ]
 webkit.org/b/86914 fast/history/page-cache-running-audiocontext.html [ Skip ]
 webkit.org/b/86914 fast/history/page-cache-suspended-audiocontext.html [ Skip ]
 webkit.org/b/86914 media/W3C/audio [ Skip ]
+webkit.org/b/86914 http/tests/security/contentSecurityPolicy/audioworklet-script-src-blocked.html [ Skip ]
+webkit.org/b/86914 http/tests/security/contentSecurityPolicy/audioworklet-script-src-allowed.html [ Skip ]
 webkit.org/b/86914 http/tests/security/webaudio-render-remote-audio-allowed-crossorigin.html [ Skip ]
 webkit.org/b/86914 http/tests/security/webaudio-render-remote-audio-blocked-no-crossorigin.html [ Skip ]
 webkit.org/b/86914 http/tests/security/webaudio-render-remote-audio-allowed-crossorigin-redirect.html [ Skip ]
@@ -649,6 +649,7 @@ fast/dom/timer-throttling-hidden-page.html [ Skip ]
 # TODO CSS_COMPOSITING is disabled (CIFilters don't work on Windows)
 css3/blending/ [ Skip ]
 transitions/blendmode-transitions.html [ Skip ]
+fast/css/visited-link-mix-blend-mode.html [ Skip ]
 
 # Backdrop Filters do not work on Windows
 fast/css/will-change/will-change-creates-stacking-context-inline.html [ ImageOnlyFailure ] 
@@ -3457,6 +3458,7 @@ fast/css/image-resolution/image-resolution.html [ Failure ]
 fast/dom/collection-iterators.html [ Failure ]
 fast/events/context-activated-by-key-event.html [ Failure ]
 fast/events/contextmenu-actions-in-selected-text.html [ Failure ImageOnlyFailure ]
+fast/events/contextmenu-lookup-action-for-image.html [ Failure ]
 fast/events/webkit-media-key-events-constructor.html [ Failure ]
 fast/forms/validation-message-maxLength.html [ Failure ]
 fast/mediacapturefromelement/CanvasCaptureMediaStream-2d-events.html [ Failure ]
@@ -4340,6 +4342,7 @@ webkit.org/b/202949 http/tests/websocket/tests/hybi/non-document-mixed-content-b
 webkit.org/b/202949 http/tests/websocket/tests/hybi/non-document-mixed-content-blocked-http-with-embedded-https.html [ Failure ]
 
 webkit.org/b/202954 http/wpt/resource-timing/rt-resources-per-worker.html [ Failure ]
+http/wpt/resource-timing/rt-revalidate-requests-2.html [ Failure ]
 
 webkit.org/b/202951 fast/canvas/drawImage-animated-gif-draws-first-frame-and-no-reset-image.html [ Timeout ]
 
@@ -4407,7 +4410,8 @@ webkit.org/b/207499 webanimations/transform-accelerated-animation-finishes-befor
 
 webkit.org/b/209426 http/wpt/css/css-animations/start-animation-001.html  [ Pass Failure ]
 
-webkit.org/b/209455 http/tests/misc/last-modified-parsing.html [ Failure ]
+webkit.org/b/209455 http/wpt/misc/last-modified-parsing.html [ Failure ]
+webkit.org/b/209455 http/wpt/misc/no-last-modified.html [ Failure ]
 
 webkit.org/b/209583 webanimations/no-scheduling-while-filling-accelerated.html [ Skip ]
 
@@ -4625,10 +4629,27 @@ fast/forms/option-mouseevents.html [ Pass Failure ]
 fast/forms/password-doubleclick-selection.html [ Pass Failure ]
 fast/text/offsetForPosition-complex-fallback.html [ Pass Failure ]
 
+# testRunner.setShouldSwapToEphemeralSessionOnNextNavigation() does not work with window.open() in DRT.
+fast/html/broadcast-channel-between-different-sessions.html [ Skip ]
+
 # This test is skipped because the necessary feature flag functionality specific to the Windows WebKit legacy port is
 # not implemented.  The feature flags in question are CSSCounterStyleAtRulesEnabled and CSSCounterStyleAtRuleImageSymbolsEnabled.
 webexposed/counter-style-image-symbols-not-exposed.html [ Skip ]
 
 fast/text/line-break-with-locale.html [ ImageOnlyFailure ]
 
-fast/canvas/CanvasRenderingContext2DSettings-colorSpace-enabled.html [ Skip ]
+# Non-sRGB color spaces are not currently supported by the Windows port.
+fast/canvas/canvas-color-space-display-p3.html [ Skip ]
+fast/canvas/canvas-color-space-display-p3-ImageData.html [ Skip ]
+storage/indexeddb/structured-clone-image-data-display-p3.html [ Skip ]
+
+# WebXR is not enabled on windows.
+webxr [ Skip ]
+
+# https://bugs.webkit.org/show_bug.cgi?id=226970
+fast/css/parse-border-image-repeat-null-crash.html [ Failure ]
+fast/workers/worker-multi-startup.html [ Pass Timeout ]
+fast/workers/worker-script-error.html [ Pass Timeout ]
+fetch/fetch-worker-crash.html [ Pass Timeout ]
+webanimations/accelerated-transform-animation-to-scale-zero-with-implicit-from-keyframe.html [ Pass ImageOnlyFailure ]
+

@@ -277,24 +277,24 @@ bool AccessibilityObject::hasMisspelling() const
     return isMisspelled;
 }
 
-Optional<SimpleRange> AccessibilityObject::misspellingRange(const SimpleRange& start, AccessibilitySearchDirection direction) const
+std::optional<SimpleRange> AccessibilityObject::misspellingRange(const SimpleRange& start, AccessibilitySearchDirection direction) const
 {
     auto node = this->node();
     if (!node)
-        return WTF::nullopt;
+        return std::nullopt;
 
     Frame* frame = node->document().frame();
     if (!frame)
-        return WTF::nullopt;
+        return std::nullopt;
 
     if (!unifiedTextCheckerEnabled(frame))
-        return WTF::nullopt;
+        return std::nullopt;
 
     Editor& editor = frame->editor();
 
     TextCheckerClient* textChecker = editor.textChecker();
     if (!textChecker)
-        return WTF::nullopt;
+        return std::nullopt;
 
     Vector<TextCheckingResult> misspellings;
     checkTextOfParagraph(*textChecker, stringValue(), TextCheckingType::Spelling, misspellings, frame->selection().selection());
@@ -314,7 +314,7 @@ Optional<SimpleRange> AccessibilityObject::misspellingRange(const SimpleRange& s
         }
     }
 
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 unsigned AccessibilityObject::blockquoteLevel() const
@@ -511,7 +511,7 @@ void AccessibilityObject::findMatchingObjects(AccessibilitySearchCriteria* crite
 // Returns the range that is fewer positions away from the reference range.
 // NOTE: The after range is expected to ACTUALLY be after the reference range and the before
 // range is expected to ACTUALLY be before. These are not checked for performance reasons.
-static Optional<SimpleRange> rangeClosestToRange(const SimpleRange& referenceRange, Optional<SimpleRange>&& afterRange, Optional<SimpleRange>&& beforeRange)
+static std::optional<SimpleRange> rangeClosestToRange(const SimpleRange& referenceRange, std::optional<SimpleRange>&& afterRange, std::optional<SimpleRange>&& beforeRange)
 {
     if (!beforeRange)
         return WTFMove(afterRange);
@@ -522,18 +522,18 @@ static Optional<SimpleRange> rangeClosestToRange(const SimpleRange& referenceRan
     return WTFMove(distanceBefore <= distanceAfter ? beforeRange : afterRange);
 }
 
-Optional<SimpleRange> AccessibilityObject::rangeOfStringClosestToRangeInDirection(const SimpleRange& referenceRange, AccessibilitySearchDirection searchDirection, const Vector<String>& searchStrings) const
+std::optional<SimpleRange> AccessibilityObject::rangeOfStringClosestToRangeInDirection(const SimpleRange& referenceRange, AccessibilitySearchDirection searchDirection, const Vector<String>& searchStrings) const
 {
     Frame* frame = this->frame();
     if (!frame)
-        return WTF::nullopt;
+        return std::nullopt;
     
     bool isBackwardSearch = searchDirection == AccessibilitySearchDirection::Previous;
     FindOptions findOptions { AtWordStarts, AtWordEnds, CaseInsensitive, StartInSelection };
     if (isBackwardSearch)
         findOptions.add(FindOptionFlag::Backwards);
     
-    Optional<SimpleRange> closestStringRange;
+    std::optional<SimpleRange> closestStringRange;
     for (auto& searchString : searchStrings) {
         if (auto foundStringRange = frame->editor().rangeOfString(searchString, referenceRange, findOptions)) {
             bool foundStringIsCloser;
@@ -553,11 +553,11 @@ Optional<SimpleRange> AccessibilityObject::rangeOfStringClosestToRangeInDirectio
 
 // Returns an collapsed range preceding the document contents if there is no selection.
 // FIXME: Why is that behavior more useful than returning null in that case?
-Optional<SimpleRange> AccessibilityObject::selectionRange() const
+std::optional<SimpleRange> AccessibilityObject::selectionRange() const
 {
     auto frame = this->frame();
     if (!frame)
-        return WTF::nullopt;
+        return std::nullopt;
 
     if (auto range = frame->selection().selection().firstRange())
         return *range;
@@ -566,7 +566,7 @@ Optional<SimpleRange> AccessibilityObject::selectionRange() const
     return { { { document, 0 }, { document, 0 } } };
 }
 
-Optional<SimpleRange> AccessibilityObject::elementRange() const
+std::optional<SimpleRange> AccessibilityObject::elementRange() const
 {
     auto node = this->node();
     if (!node)
@@ -574,9 +574,9 @@ Optional<SimpleRange> AccessibilityObject::elementRange() const
     return AXObjectCache::rangeForNodeContents(*node);
 }
 
-Optional<SimpleRange> AccessibilityObject::findTextRange(const Vector<String>& searchStrings, const SimpleRange& start, AccessibilitySearchTextDirection direction) const
+std::optional<SimpleRange> AccessibilityObject::findTextRange(const Vector<String>& searchStrings, const SimpleRange& start, AccessibilitySearchTextDirection direction) const
 {
-    Optional<SimpleRange> found;
+    std::optional<SimpleRange> found;
     if (direction == AccessibilitySearchTextDirection::Forward)
         found = rangeOfStringClosestToRangeInDirection(start, AccessibilitySearchDirection::Next, searchStrings);
     else if (direction == AccessibilitySearchTextDirection::Backward)
@@ -591,7 +591,7 @@ Optional<SimpleRange> AccessibilityObject::findTextRange(const Vector<String>& s
         if (element() && element()->isTextField()) {
             if (!found->startContainer().isDescendantOrShadowDescendantOf(element())
                 || !found->endContainer().isDescendantOrShadowDescendantOf(element()))
-                return WTF::nullopt;
+                return std::nullopt;
         }
     }
     return found;
@@ -599,7 +599,7 @@ Optional<SimpleRange> AccessibilityObject::findTextRange(const Vector<String>& s
 
 Vector<SimpleRange> AccessibilityObject::findTextRanges(const AccessibilitySearchTextCriteria& criteria) const
 {
-    Optional<SimpleRange> range;
+    std::optional<SimpleRange> range;
     if (criteria.start == AccessibilitySearchTextStartFrom::Selection)
         range = selectionRange();
     else
@@ -808,7 +808,7 @@ bool AccessibilityObject::press()
     Element* hitTestElement = nullptr;
     Document* document = this->document();
     if (document) {
-        constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::AccessibilityHitTest };
+        constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::AccessibilityHitTest };
         HitTestResult hitTestResult { clickPoint() };
         document->hitTest(hitType, hitTestResult);
         if (auto* innerNode = hitTestResult.innerNode()) {
@@ -1103,21 +1103,21 @@ VisiblePositionRange AccessibilityObject::visiblePositionRangeForRange(const Pla
     return { startPosition, visiblePositionForIndex(range.start + range.length) };
 }
 
-Optional<SimpleRange> AccessibilityObject::rangeForPlainTextRange(const PlainTextRange& range) const
+std::optional<SimpleRange> AccessibilityObject::rangeForPlainTextRange(const PlainTextRange& range) const
 {
     unsigned textLength = getLengthForTextRange();
     if (range.start + range.length > textLength)
-        return WTF::nullopt;
+        return std::nullopt;
     // Avoid setting selection to uneditable parent node in FrameSelection::setSelectedRange. See webkit.org/b/206093.
     if (range.isNull() && !textLength)
-        return WTF::nullopt;
+        return std::nullopt;
     
     if (AXObjectCache* cache = axObjectCache()) {
         CharacterOffset start = cache->characterOffsetForIndex(range.start, this);
         CharacterOffset end = cache->characterOffsetForIndex(range.start + range.length, this);
         return cache->rangeForUnorderedCharacterOffsets(start, end);
     }
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 VisiblePositionRange AccessibilityObject::lineRangeForPosition(const VisiblePosition& visiblePosition) const
@@ -1160,7 +1160,7 @@ static String listMarkerTextForNode(Node* node)
     // If this is in a list item, we need to manually add the text for the list marker
     // because a RenderListMarker does not have a Node equivalent and thus does not appear
     // when iterating text.
-    return listItem->markerTextWithSuffix();
+    return listItem->markerTextWithSuffix().toString();
 }
 
 // Returns the text associated with a list marker if this node is contained within a list item.
@@ -1956,6 +1956,11 @@ const AtomString& AccessibilityObject::getAttribute(const QualifiedName& attribu
     return nullAtom();
 }
 
+int AccessibilityObject::getIntegralAttribute(const QualifiedName& attributeName) const
+{
+    return parseHTMLInteger(getAttribute(attributeName)).value_or(0);
+}
+
 bool AccessibilityObject::replaceTextInRange(const String& replacementString, const PlainTextRange& range)
 {
     // If this is being called on the web area, redirect it to be on the body, which will have a renderer associated with it.
@@ -2119,6 +2124,8 @@ static void initializeRoleMap()
         { "rowheader"_s, AccessibilityRole::RowHeader },
         { "group"_s, AccessibilityRole::ApplicationGroup },
         { "heading"_s, AccessibilityRole::Heading },
+        // The "image" role is synonymous with the "img" role. https://w3c.github.io/aria/#image
+        { "image"_s, AccessibilityRole::Image },
         { "img"_s, AccessibilityRole::Image },
         { "insertion"_s, AccessibilityRole::Insertion },
         { "link"_s, AccessibilityRole::WebCoreLink },
@@ -2179,6 +2186,7 @@ static void initializeRoleMap()
         gAriaRoleMap->set(roles[i].ariaRole, roles[i].webcoreRole);
         gAriaReverseRoleMap->set(static_cast<int>(roles[i].webcoreRole), roles[i].ariaRole);
     }
+    gAriaReverseRoleMap->set(static_cast<int>(AccessibilityRole::Image), "image"_s);
 }
 
 static ARIARoleMap& ariaRoleMap()
@@ -2663,12 +2671,12 @@ bool AccessibilityObject::supportsPosInSet() const
     
 int AccessibilityObject::setSize() const
 {
-    return getAttribute(aria_setsizeAttr).toInt();
+    return getIntegralAttribute(aria_setsizeAttr);
 }
 
 int AccessibilityObject::posInSet() const
 {
-    return getAttribute(aria_posinsetAttr).toInt();
+    return getIntegralAttribute(aria_posinsetAttr);
 }
     
 String AccessibilityObject::identifierAttribute() const
@@ -3177,17 +3185,17 @@ bool AccessibilityObject::pressedIsPresent() const
     return !getAttribute(aria_pressedAttr).isEmpty();
 }
 
-TextIteratorBehavior AccessibilityObject::textIteratorBehaviorForTextRange() const
+TextIteratorBehaviors AccessibilityObject::textIteratorBehaviorForTextRange() const
 {
-    TextIteratorBehavior behavior = TextIteratorIgnoresStyleVisibility;
+    TextIteratorBehaviors behaviors { TextIteratorBehavior::IgnoresStyleVisibility };
     
 #if USE(ATK)
     // We need to emit replaced elements for GTK, and present
     // them with the 'object replacement character' (0xFFFC).
-    behavior = static_cast<TextIteratorBehavior>(behavior | TextIteratorEmitsObjectReplacementCharacters);
+    behaviors.add(TextIteratorBehavior::EmitsObjectReplacementCharacters);
 #endif
     
-    return behavior;
+    return behaviors;
 }
     
 AccessibilityRole AccessibilityObject::buttonRoleType() const

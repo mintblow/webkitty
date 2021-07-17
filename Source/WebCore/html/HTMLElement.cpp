@@ -28,6 +28,7 @@
 #include "CSSMarkup.h"
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
+#include "CSSValueList.h"
 #include "CSSValuePool.h"
 #include "Chrome.h"
 #include "ChromeClient.h"
@@ -79,12 +80,16 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
 
-#if ENABLE(IMAGE_EXTRACTION)
-#include "ImageExtractionResult.h"
+#if ENABLE(IMAGE_ANALYSIS)
+#include "TextRecognitionResult.h"
 #endif
 
 #if PLATFORM(IOS_FAMILY)
 #include "SelectionGeometry.h"
+#endif
+
+#if ENABLE(DATA_DETECTION)
+#include "DataDetection.h"
 #endif
 
 namespace WebCore {
@@ -129,26 +134,26 @@ unsigned HTMLElement::parseBorderWidthAttribute(const AtomString& value) const
 
 void HTMLElement::applyBorderAttributeToStyle(const AtomString& value, MutableStyleProperties& style)
 {
-    addPropertyToPresentationAttributeStyle(style, CSSPropertyBorderWidth, parseBorderWidthAttribute(value), CSSUnitType::CSS_PX);
-    addPropertyToPresentationAttributeStyle(style, CSSPropertyBorderStyle, CSSValueSolid);
+    addPropertyToPresentationalHintStyle(style, CSSPropertyBorderWidth, parseBorderWidthAttribute(value), CSSUnitType::CSS_PX);
+    addPropertyToPresentationalHintStyle(style, CSSPropertyBorderStyle, CSSValueSolid);
 }
 
 void HTMLElement::mapLanguageAttributeToLocale(const AtomString& value, MutableStyleProperties& style)
 {
     if (!value.isEmpty()) {
         // Have to quote so the locale id is treated as a string instead of as a CSS keyword.
-        addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitLocale, serializeString(value));
+        addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitLocale, serializeString(value));
     } else {
         // The empty string means the language is explicitly unknown.
-        addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitLocale, CSSValueAuto);
+        addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitLocale, CSSValueAuto);
     }
 }
 
-bool HTMLElement::isPresentationAttribute(const QualifiedName& name) const
+bool HTMLElement::hasPresentationalHintsForAttribute(const QualifiedName& name) const
 {
     if (name == alignAttr || name == contenteditableAttr || name == hiddenAttr || name == langAttr || name.matches(XMLNames::langAttr) || name == draggableAttr || name == dirAttr)
         return true;
-    return StyledElement::isPresentationAttribute(name);
+    return StyledElement::hasPresentationalHintsForAttribute(name);
 }
 
 static bool isLTROrRTLIgnoringCase(const AtomString& dirAttributeValue)
@@ -182,13 +187,13 @@ static ContentEditableType contentEditableType(const HTMLElement& element)
     return contentEditableType(element.attributeWithoutSynchronization(contenteditableAttr));
 }
 
-void HTMLElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomString& value, MutableStyleProperties& style)
+void HTMLElement::collectPresentationalHintsForAttribute(const QualifiedName& name, const AtomString& value, MutableStyleProperties& style)
 {
     if (name == alignAttr) {
         if (equalLettersIgnoringASCIICase(value, "middle"))
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign, CSSValueCenter);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyTextAlign, CSSValueCenter);
         else
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyTextAlign, value);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyTextAlign, value);
     } else if (name == contenteditableAttr) {
         CSSValueID userModifyValue = CSSValueReadWrite;
         switch (contentEditableType(value)) {
@@ -201,37 +206,37 @@ void HTMLElement::collectStyleForPresentationAttribute(const QualifiedName& name
             userModifyValue = CSSValueReadWritePlaintextOnly;
             FALLTHROUGH;
         case ContentEditableType::True:
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyWordWrap, CSSValueBreakWord);
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitNbspMode, CSSValueSpace);
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyLineBreak, CSSValueAfterWhiteSpace);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyWordWrap, CSSValueBreakWord);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitNbspMode, CSSValueSpace);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyLineBreak, CSSValueAfterWhiteSpace);
 #if PLATFORM(IOS_FAMILY)
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitTextSizeAdjust, CSSValueNone);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitTextSizeAdjust, CSSValueNone);
 #endif
             break;
         }
-        addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitUserModify, userModifyValue);
+        addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitUserModify, userModifyValue);
     } else if (name == hiddenAttr) {
-        addPropertyToPresentationAttributeStyle(style, CSSPropertyDisplay, CSSValueNone);
+        addPropertyToPresentationalHintStyle(style, CSSPropertyDisplay, CSSValueNone);
     } else if (name == draggableAttr) {
         if (equalLettersIgnoringASCIICase(value, "true")) {
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitUserDrag, CSSValueElement);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitUserDrag, CSSValueElement);
             if (!isDraggableIgnoringAttributes())
-                addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitUserSelect, CSSValueNone);
+                addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitUserSelect, CSSValueNone);
         } else if (equalLettersIgnoringASCIICase(value, "false"))
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyWebkitUserDrag, CSSValueNone);
+            addPropertyToPresentationalHintStyle(style, CSSPropertyWebkitUserDrag, CSSValueNone);
     } else if (name == dirAttr) {
         if (equalLettersIgnoringASCIICase(value, "auto"))
-            addPropertyToPresentationAttributeStyle(style, CSSPropertyUnicodeBidi, unicodeBidiAttributeForDirAuto(*this));
+            addPropertyToPresentationalHintStyle(style, CSSPropertyUnicodeBidi, unicodeBidiAttributeForDirAuto(*this));
         else {
             auto unicodeBidiValue = CSSValueEmbed;
 
             if (isLTROrRTLIgnoringCase(value)) {
-                addPropertyToPresentationAttributeStyle(style, CSSPropertyDirection, value);
+                addPropertyToPresentationalHintStyle(style, CSSPropertyDirection, value);
                 unicodeBidiValue = CSSValueIsolate;
             } 
 
             if (!hasTagName(bdiTag) && !hasTagName(bdoTag) && !hasTagName(outputTag))
-                addPropertyToPresentationAttributeStyle(style, CSSPropertyUnicodeBidi, unicodeBidiValue);
+                addPropertyToPresentationalHintStyle(style, CSSPropertyUnicodeBidi, unicodeBidiValue);
         }
     } else if (name.matches(XMLNames::langAttr))
         mapLanguageAttributeToLocale(value, style);
@@ -240,7 +245,7 @@ void HTMLElement::collectStyleForPresentationAttribute(const QualifiedName& name
         if (!hasAttributeWithoutSynchronization(XMLNames::langAttr))
             mapLanguageAttributeToLocale(value, style);
     } else
-        StyledElement::collectStyleForPresentationAttribute(name, value, style);
+        StyledElement::collectPresentationalHintsForAttribute(name, value, style);
 }
 
 HTMLElement::EventHandlerNameMap HTMLElement::createEventHandlerNameMap()
@@ -265,6 +270,7 @@ HTMLElement::EventHandlerNameMap HTMLElement::createEventHandlerNameMap()
         &oncanplaythroughAttr.get(),
         &onchangeAttr.get(),
         &onclickAttr.get(),
+        &oncloseAttr.get(),
         &oncontextmenuAttr.get(),
         &oncopyAttr.get(),
         &oncutAttr.get(),
@@ -470,7 +476,7 @@ void HTMLElement::parseAttribute(const QualifiedName& name, const AtomString& va
         if (auto optionalTabIndex = parseHTMLInteger(value))
             setTabIndexExplicitly(optionalTabIndex.value());
         else
-            setTabIndexExplicitly(WTF::nullopt);
+            setTabIndexExplicitly(std::nullopt);
         return;
     }
     
@@ -555,7 +561,7 @@ ExceptionOr<void> HTMLElement::setInnerText(const String& text)
     // FIXME: This doesn't take whitespace collapsing into account at all.
 
     if (!text.contains('\n') && !text.contains('\r')) {
-        replaceAllChildrenWithNewText(text);
+        stringReplaceAll(text);
         return { };
     }
 
@@ -565,19 +571,19 @@ ExceptionOr<void> HTMLElement::setInnerText(const String& text)
     auto* r = renderer();
     if ((r && r->style().preserveNewline()) || (isConnected() && isTextControlInnerTextElement())) {
         if (!text.contains('\r')) {
-            replaceAllChildrenWithNewText(text);
+            stringReplaceAll(text);
             return { };
         }
         String textWithConsistentLineBreaks = text;
         textWithConsistentLineBreaks.replace("\r\n", "\n");
         textWithConsistentLineBreaks.replace('\r', '\n');
-        replaceAllChildrenWithNewText(textWithConsistentLineBreaks);
+        stringReplaceAll(textWithConsistentLineBreaks);
         return { };
     }
 
+    // FIXME: This should use replaceAll(), after we fix that to work properly for DocumentFragment.
     // Add text nodes and <br> elements.
     auto fragment = textToFragment(document(), text);
-    // FIXME: This should use a variant of replaceAllChildrenWithNewText() which accepts DocumentFragments as input.
     // It's safe to dispatch events on the new fragment since author scripts have no access to it yet.
     ScriptDisallowedScope::EventAllowedScope allowedScope(fragment.get());
     return replaceChildrenWithFragment(*this, WTFMove(fragment));
@@ -620,6 +626,28 @@ ExceptionOr<void> HTMLElement::setOuterText(const String& text)
     return { };
 }
 
+void HTMLElement::applyAspectRatioFromWidthAndHeightAttributesToStyle(StringView widthAttribute, StringView heightAttribute, MutableStyleProperties& style)
+{
+    if (!document().settings().aspectRatioOfImgFromWidthAndHeightEnabled())
+        return;
+
+    auto dimensionWidth = parseHTMLDimension(widthAttribute);
+    if (!dimensionWidth || dimensionWidth->type != HTMLDimension::Type::Pixel)
+        return;
+    auto dimensionHeight = parseHTMLDimension(heightAttribute);
+    if (!dimensionHeight || dimensionHeight->type != HTMLDimension::Type::Pixel)
+        return;
+
+    auto ratioList = CSSValueList::createSlashSeparated();
+    ratioList->append(CSSValuePool::singleton().createValue(dimensionWidth->number, CSSUnitType::CSS_NUMBER));
+    ratioList->append(CSSValuePool::singleton().createValue(dimensionHeight->number, CSSUnitType::CSS_NUMBER));
+    auto list = CSSValueList::createSpaceSeparated();
+    list->append(CSSValuePool::singleton().createIdentifierValue(CSSValueAuto));
+    list->append(ratioList);
+
+    style.setProperty(CSSPropertyAspectRatio, RefPtr<CSSValue>(WTFMove(list)));
+}
+
 void HTMLElement::applyAlignmentAttributeToStyle(const AtomString& alignment, MutableStyleProperties& style)
 {
     // Vertical alignment with respect to the current baseline of the text
@@ -649,10 +677,10 @@ void HTMLElement::applyAlignmentAttributeToStyle(const AtomString& alignment, Mu
         verticalAlignValue = CSSValueTextTop;
 
     if (floatValue != CSSValueInvalid)
-        addPropertyToPresentationAttributeStyle(style, CSSPropertyFloat, floatValue);
+        addPropertyToPresentationalHintStyle(style, CSSPropertyFloat, floatValue);
 
     if (verticalAlignValue != CSSValueInvalid)
-        addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign, verticalAlignValue);
+        addPropertyToPresentationalHintStyle(style, CSSPropertyVerticalAlign, verticalAlignValue);
 }
 
 bool HTMLElement::hasCustomFocusLogic() const
@@ -989,45 +1017,53 @@ void HTMLElement::adjustDirectionalityIfNeededAfterChildrenChanged(Element* befo
     }
 }
 
-void HTMLElement::addHTMLLengthToStyle(MutableStyleProperties& style, CSSPropertyID propertyID, const String& value)
+void HTMLElement::addHTMLLengthToStyle(MutableStyleProperties& style, CSSPropertyID propertyID, StringView value, AllowPercentage allowPercentage, UseCSSPXAsUnitType useCSSPX, IsMultiLength isMultiLength)
 {
-    // FIXME: This function should not spin up the CSS parser, but should instead just figure out the correct
-    // length unit and make the appropriate parsed value.
-
-    if (StringImpl* string = value.impl()) {
-        unsigned parsedLength = 0;
-
-        while (parsedLength < string->length() && (*string)[parsedLength] <= ' ')
-            ++parsedLength;
-
-        for (; parsedLength < string->length(); ++parsedLength) {
-            UChar cc = (*string)[parsedLength];
-            if (cc > '9')
-                break;
-            if (cc < '0') {
-                if (cc == '%' || cc == '*')
-                    ++parsedLength;
-                if (cc != '.')
-                    break;
-            }
-        }
-
-        if (parsedLength != string->length()) {
-            addPropertyToPresentationAttributeStyle(style, propertyID, string->substring(0, parsedLength));
-            return;
-        }
+    auto dimensionValue = isMultiLength == IsMultiLength::No ? parseHTMLDimension(value) : parseHTMLMultiLength(value);
+    if (!dimensionValue)
+        return;
+    if (dimensionValue->type == HTMLDimension::Type::Percentage) {
+        if (allowPercentage == AllowPercentage::Yes)
+            addPropertyToPresentationalHintStyle(style, propertyID, dimensionValue->number, CSSUnitType::CSS_PERCENTAGE);
+        return;
     }
+    if (useCSSPX == UseCSSPXAsUnitType::Yes)
+        addPropertyToPresentationalHintStyle(style, propertyID, dimensionValue->number, CSSUnitType::CSS_PX);
+    else
+        addPropertyToPresentationalHintStyle(style, propertyID, dimensionValue->number, CSSUnitType::CSS_NUMBER);
+}
 
-    addPropertyToPresentationAttributeStyle(style, propertyID, value);
+// https://www.w3.org/TR/html4/sgml/dtd.html#Length, including pixel and percentage values.
+void HTMLElement::addHTMLLengthToStyle(MutableStyleProperties& style, CSSPropertyID propertyID, StringView value)
+{
+    addHTMLLengthToStyle(style, propertyID, value, AllowPercentage::Yes, UseCSSPXAsUnitType::Yes, IsMultiLength::No);
+}
+
+// https://www.w3.org/TR/html4/sgml/dtd.html#MultiLength, including pixel, percentage, and relative values.
+void HTMLElement::addHTMLMultiLengthToStyle(MutableStyleProperties& style, CSSPropertyID propertyID, StringView value)
+{
+    addHTMLLengthToStyle(style, propertyID, value, AllowPercentage::Yes, UseCSSPXAsUnitType::Yes, IsMultiLength::Yes);
+}
+
+// https://www.w3.org/TR/html4/sgml/dtd.html#Pixels, including pixel value.
+void HTMLElement::addHTMLPixelsToStyle(MutableStyleProperties& style, CSSPropertyID propertyID, StringView value)
+{
+    addHTMLLengthToStyle(style, propertyID, value, AllowPercentage::No, UseCSSPXAsUnitType::Yes, IsMultiLength::No);
+}
+
+// This is specific to <marquee> attributes, including pixel and CSS_NUMBER values.
+void HTMLElement::addHTMLNumberToStyle(MutableStyleProperties& style, CSSPropertyID propertyID, StringView value)
+{
+    addHTMLLengthToStyle(style, propertyID, value, AllowPercentage::Yes, UseCSSPXAsUnitType::No, IsMultiLength::No);
 }
 
 // Color parsing that matches HTML's "rules for parsing a legacy color value"
 // https://html.spec.whatwg.org/#rules-for-parsing-a-legacy-colour-value
-static Optional<SRGBA<uint8_t>> parseLegacyColorValue(StringView string)
+static std::optional<SRGBA<uint8_t>> parseLegacyColorValue(StringView string)
 {
     // An empty string doesn't apply a color.
     if (string.isEmpty())
-        return WTF::nullopt;
+        return std::nullopt;
 
     string = string.stripLeadingAndTrailingMatchedCharacters(isHTMLSpace<UChar>);
     if (string.isEmpty())
@@ -1035,7 +1071,7 @@ static Optional<SRGBA<uint8_t>> parseLegacyColorValue(StringView string)
 
     // "transparent" doesn't apply a color either.
     if (equalLettersIgnoringASCIICase(string, "transparent"))
-        return WTF::nullopt;
+        return std::nullopt;
 
     if (auto namedColor = CSSParser::parseNamedColor(string))
         return namedColor;
@@ -1211,6 +1247,12 @@ static const AtomString& imageOverlayElementIdentifier()
     return identifier;
 }
 
+static const AtomString& imageOverlayDataDetectorClassName()
+{
+    static MainThreadNeverDestroyed<const AtomString> className("image-overlay-data-detector-result", AtomString::ConstructFromLiteral);
+    return className;
+}
+
 bool HTMLElement::shouldExtendSelectionToTargetNode(const Node& targetNode, const VisibleSelection& selectionBeforeUpdate)
 {
     if (!is<HTMLDivElement>(targetNode))
@@ -1254,6 +1296,11 @@ static RefPtr<HTMLElement> imageOverlayHost(const Node& node)
     return element->hasImageOverlay() ? element : nullptr;
 }
 
+bool HTMLElement::isImageOverlayDataDetectorResult() const
+{
+    return imageOverlayHost(*this) && hasClass() && classNames().contains(imageOverlayDataDetectorClassName());
+}
+
 bool HTMLElement::isInsideImageOverlay(const SimpleRange& range)
 {
     auto commonAncestor = makeRefPtr(commonInclusiveAncestor<ComposedTree>(range));
@@ -1291,66 +1338,167 @@ bool HTMLElement::isImageOverlayText(const Node& node)
     return false;
 }
 
-#if ENABLE(IMAGE_EXTRACTION)
+#if ENABLE(IMAGE_ANALYSIS)
 
-void HTMLElement::updateWithImageExtractionResult(ImageExtractionResult&& result)
+IntRect HTMLElement::containerRectForTextRecognition()
 {
-    RefPtr<HTMLDivElement> previousContainer;
-    if (auto shadowRoot = userAgentShadowRoot(); shadowRoot && hasImageOverlay()) {
-        for (auto& child : childrenOfType<HTMLDivElement>(*shadowRoot)) {
+    auto* renderer = this->renderer();
+    if (!is<RenderImage>(renderer))
+        return { };
+
+    if (!renderer->opacity())
+        return { 0, 0, offsetWidth(), offsetHeight() };
+
+    return enclosingIntRect(downcast<RenderImage>(*renderer).replacedContentRect());
+}
+
+void HTMLElement::updateWithTextRecognitionResult(const TextRecognitionResult& result, CacheTextRecognitionResults cacheTextRecognitionResults)
+{
+    static MainThreadNeverDestroyed<const AtomString> imageOverlayLineClass("image-overlay-line", AtomString::ConstructFromLiteral);
+    static MainThreadNeverDestroyed<const AtomString> imageOverlayTextClass("image-overlay-text", AtomString::ConstructFromLiteral);
+
+    struct TextRecognitionLineElements {
+        Ref<HTMLDivElement> line;
+        Vector<Ref<HTMLElement>> children;
+    };
+
+    struct TextRecognitionElements {
+        RefPtr<HTMLDivElement> root;
+        Vector<TextRecognitionLineElements> lines;
+        Vector<Ref<HTMLDivElement>> dataDetectors;
+    };
+
+    bool hadExistingTextRecognitionElements = false;
+    TextRecognitionElements textRecognitionElements;
+
+    if (hasImageOverlay()) {
+        for (auto& child : childrenOfType<HTMLDivElement>(*userAgentShadowRoot())) {
             if (child.getIdAttribute() == imageOverlayElementIdentifier()) {
-                previousContainer = &child;
+                textRecognitionElements.root = &child;
+                hadExistingTextRecognitionElements = true;
                 break;
             }
         }
-        if (previousContainer)
-            previousContainer->remove();
-        else
-            ASSERT_NOT_REACHED();
+    }
+
+    if (textRecognitionElements.root) {
+        for (auto& lineOrDataDetector : childrenOfType<HTMLDivElement>(*textRecognitionElements.root)) {
+            if (!lineOrDataDetector.hasClass())
+                continue;
+
+            if (lineOrDataDetector.classList().contains(imageOverlayLineClass)) {
+                TextRecognitionLineElements lineElements { lineOrDataDetector, { } };
+                for (auto& text : childrenOfType<HTMLDivElement>(lineOrDataDetector))
+                    lineElements.children.append(text);
+                textRecognitionElements.lines.append(WTFMove(lineElements));
+            } else if (lineOrDataDetector.classList().contains(imageOverlayDataDetectorClassName()))
+                textRecognitionElements.dataDetectors.append(lineOrDataDetector);
+        }
+
+        bool canUseExistingTextRecognitionElements = ([&] {
+            if (result.dataDetectors.size() != textRecognitionElements.dataDetectors.size())
+                return false;
+
+            if (result.lines.size() != textRecognitionElements.lines.size())
+                return false;
+
+            for (size_t lineIndex = 0; lineIndex < result.lines.size(); ++lineIndex) {
+                auto& childResults = result.lines[lineIndex].children;
+                auto& childTextElements = textRecognitionElements.lines[lineIndex].children;
+                if (childResults.size() != childTextElements.size())
+                    return false;
+
+                for (size_t childIndex = 0; childIndex < childResults.size(); ++childIndex) {
+                    if (childResults[childIndex].text != childTextElements[childIndex]->textContent().stripWhiteSpace())
+                        return false;
+                }
+            }
+
+            return true;
+        })();
+
+        if (!canUseExistingTextRecognitionElements) {
+            textRecognitionElements.root->remove();
+            textRecognitionElements = { };
+        }
     }
 
     if (result.isEmpty())
         return;
 
-    if (auto* renderer = this->renderer()) {
-        if (!is<RenderImage>(renderer))
-            return;
+    auto shadowRoot = makeRef(ensureUserAgentShadowRoot());
+    bool hasUserSelectNone = renderer() && renderer()->style().userSelect() == UserSelect::None;
+    if (!textRecognitionElements.root) {
+        auto rootContainer = HTMLDivElement::create(document());
+        rootContainer->setIdAttribute(imageOverlayElementIdentifier());
+        if (document().isImageDocument())
+            rootContainer->setInlineStyleProperty(CSSPropertyWebkitUserSelect, CSSValueText);
+        shadowRoot->appendChild(rootContainer);
+        textRecognitionElements.root = rootContainer.copyRef();
+        textRecognitionElements.lines.reserveInitialCapacity(result.lines.size());
+        for (auto& line : result.lines) {
+            auto lineContainer = HTMLDivElement::create(document());
+            lineContainer->classList().add(imageOverlayLineClass);
+            rootContainer->appendChild(lineContainer);
+            TextRecognitionLineElements lineElements { lineContainer, { } };
+            lineElements.children.reserveInitialCapacity(line.children.size());
+            for (size_t childIndex = 0; childIndex < line.children.size(); ++childIndex) {
+                auto& child = line.children[childIndex];
+                auto textContainer = HTMLDivElement::create(document());
+                textContainer->classList().add(imageOverlayTextClass);
+                lineContainer->appendChild(textContainer);
+                textContainer->appendChild(Text::create(document(), child.hasLeadingWhitespace ? makeString('\n', child.text) : child.text));
+                lineElements.children.uncheckedAppend(WTFMove(textContainer));
+            }
 
-        downcast<RenderImage>(*renderer).setHasImageOverlay();
+            lineContainer->appendChild(HTMLBRElement::create(document()));
+            textRecognitionElements.lines.uncheckedAppend(WTFMove(lineElements));
+        }
+
+#if ENABLE(DATA_DETECTION)
+        textRecognitionElements.dataDetectors.reserveInitialCapacity(result.dataDetectors.size());
+        for (auto& dataDetector : result.dataDetectors) {
+            auto dataDetectorContainer = DataDetection::createElementForImageOverlay(document(), dataDetector);
+            dataDetectorContainer->classList().add(imageOverlayDataDetectorClassName());
+            rootContainer->appendChild(dataDetectorContainer);
+            textRecognitionElements.dataDetectors.uncheckedAppend(WTFMove(dataDetectorContainer));
+        }
+#endif // ENABLE(DATA_DETECTION)
+
+        if (document().quirks().needsToForceUserSelectWhenInstallingImageOverlay())
+            setInlineStyleProperty(CSSPropertyWebkitUserSelect, CSSValueText);
     }
 
-    auto shadowRoot = makeRef(ensureUserAgentShadowRoot());
-    if (!previousContainer) {
+    if (!hadExistingTextRecognitionElements) {
         static MainThreadNeverDestroyed<const String> shadowStyle(StringImpl::createWithoutCopying(imageOverlayUserAgentStyleSheet, sizeof(imageOverlayUserAgentStyleSheet)));
         auto style = HTMLStyleElement::create(HTMLNames::styleTag, document(), false);
         style->setTextContent(shadowStyle);
         shadowRoot->appendChild(WTFMove(style));
     }
 
-    auto container = HTMLDivElement::create(document());
-    container->setIdAttribute(imageOverlayElementIdentifier());
-    if (document().isImageDocument())
-        container->setInlineStyleProperty(CSSPropertyWebkitUserSelect, CSSValueText);
-    shadowRoot->appendChild(container);
+    document().updateLayoutIgnorePendingStylesheets();
 
-    if (document().quirks().needsToForceUserSelectWhenInstallingImageOverlay())
-        setInlineStyleProperty(CSSPropertyWebkitUserSelect, CSSValueText);
+    auto* renderer = this->renderer();
+    if (!is<RenderImage>(renderer))
+        return;
 
-    static MainThreadNeverDestroyed<const AtomString> imageOverlayLineClass("image-overlay-line", AtomString::ConstructFromLiteral);
-    static MainThreadNeverDestroyed<const AtomString> imageOverlayTextClass("image-overlay-text", AtomString::ConstructFromLiteral);
+    downcast<RenderImage>(*renderer).setHasImageOverlay();
 
-    bool hasUserSelectNone = renderer() && renderer()->style().userSelect() == UserSelect::None;
-    IntSize containerSize { offsetWidth(), offsetHeight() };
-    for (auto& line : result.lines) {
-        auto lineQuad = line.normalizedQuad;
+    auto containerRect = containerRectForTextRecognition();
+    auto convertToContainerCoordinates = [&](const FloatQuad& normalizedQuad) {
+        auto quad = normalizedQuad;
+        quad.scale(containerRect.width(), containerRect.height());
+        quad.move(containerRect.x(), containerRect.y());
+        return quad;
+    };
+
+    for (size_t lineIndex = 0; lineIndex < result.lines.size(); ++lineIndex) {
+        auto& lineElements = textRecognitionElements.lines[lineIndex];
+        auto& lineContainer = lineElements.line;
+        auto& line = result.lines[lineIndex];
+        auto lineQuad = convertToContainerCoordinates(line.normalizedQuad);
         if (lineQuad.isEmpty())
             continue;
-
-        lineQuad.scale(containerSize.width(), containerSize.height());
-
-        auto lineContainer = HTMLDivElement::create(document());
-        lineContainer->classList().add(imageOverlayLineClass);
-        container->appendChild(lineContainer);
 
         auto lineBounds = rotatedBoundingRectWithMinimumAngleOfRotation(lineQuad, 0.01);
         lineContainer->setInlineStyleProperty(CSSPropertyWidth, lineBounds.size.width(), CSSUnitType::CSS_PX);
@@ -1371,8 +1519,7 @@ void HTMLElement::updateWithImageExtractionResult(ImageExtractionResult&& result
         };
 
         auto offsetsAlongHorizontalAxis = line.children.map([&](auto& child) -> WTF::Range<float> {
-            auto textQuad = child.normalizedQuad;
-            textQuad.scale(containerSize.width(), containerSize.height());
+            auto textQuad = convertToContainerCoordinates(child.normalizedQuad);
             return {
                 offsetAlongHorizontalAxis(textQuad.p1(), textQuad.p4()),
                 offsetAlongHorizontalAxis(textQuad.p2(), textQuad.p3())
@@ -1380,15 +1527,13 @@ void HTMLElement::updateWithImageExtractionResult(ImageExtractionResult&& result
         });
 
         for (size_t childIndex = 0; childIndex < line.children.size(); ++childIndex) {
-            auto& child = line.children[childIndex];
-            if (child.normalizedQuad.isEmpty())
-                continue;
+            auto& textContainer = lineElements.children[childIndex];
+            bool lineHasOneChild = line.children.size() == 1;
+            float horizontalMarginToMinimizeSelectionGaps = lineHasOneChild ? 0 : 0.125;
+            float horizontalOffset = lineHasOneChild ? 0 : -horizontalMarginToMinimizeSelectionGaps;
+            float horizontalExtent = lineHasOneChild ? 0 : horizontalMarginToMinimizeSelectionGaps;
 
-            constexpr float horizontalMarginToMinimizeSelectionGaps = 0.125;
-            float horizontalOffset = -horizontalMarginToMinimizeSelectionGaps;
-            float horizontalExtent = horizontalMarginToMinimizeSelectionGaps;
-
-            if (line.children.size() == 1) {
+            if (lineHasOneChild) {
                 horizontalOffset += offsetsAlongHorizontalAxis[childIndex].begin();
                 horizontalExtent += offsetsAlongHorizontalAxis[childIndex].end();
             } else if (!childIndex) {
@@ -1403,13 +1548,10 @@ void HTMLElement::updateWithImageExtractionResult(ImageExtractionResult&& result
             }
 
             FloatSize targetSize { horizontalExtent - horizontalOffset, lineBounds.size.height() };
-            if (targetSize.isEmpty())
+            if (targetSize.isEmpty()) {
+                textContainer->setInlineStyleProperty(CSSPropertyTransform, "scale(0, 0)");
                 continue;
-
-            auto textContainer = HTMLDivElement::create(document());
-            textContainer->classList().add(imageOverlayTextClass);
-            lineContainer->appendChild(textContainer);
-            textContainer->appendChild(Text::create(document(), makeString('\n', child.text)));
+            }
 
             document().updateLayoutIfDimensionsOutOfDate(textContainer);
 
@@ -1422,7 +1564,7 @@ void HTMLElement::updateWithImageExtractionResult(ImageExtractionResult&& result
             }
 
             if (sizeBeforeTransform.isEmpty()) {
-                textContainer->remove();
+                textContainer->setInlineStyleProperty(CSSPropertyTransform, "scale(0, 0)");
                 continue;
             }
 
@@ -1437,17 +1579,41 @@ void HTMLElement::updateWithImageExtractionResult(ImageExtractionResult&& result
                 textContainer->setInlineStyleProperty(CSSPropertyWebkitUserSelect, CSSValueAll);
         }
 
-        lineContainer->appendChild(HTMLBRElement::create(document()));
-
         if (document().isImageDocument())
             lineContainer->setInlineStyleProperty(CSSPropertyCursor, CSSValueText);
     }
 
+#if ENABLE(DATA_DETECTION)
+    for (size_t index = 0; index < result.dataDetectors.size(); ++index) {
+        auto dataDetectorContainer = textRecognitionElements.dataDetectors[index];
+        auto& dataDetector = result.dataDetectors[index];
+        if (dataDetector.normalizedQuads.isEmpty())
+            continue;
+
+        // FIXME: We should come up with a way to coalesce the bounding quads into one or more rotated rects with the same angle of rotation.
+        auto targetQuad = convertToContainerCoordinates(dataDetector.normalizedQuads.first());
+        auto targetBounds = rotatedBoundingRectWithMinimumAngleOfRotation(targetQuad, 0.01);
+        dataDetectorContainer->setInlineStyleProperty(CSSPropertyWidth, targetBounds.size.width(), CSSUnitType::CSS_PX);
+        dataDetectorContainer->setInlineStyleProperty(CSSPropertyHeight, targetBounds.size.height(), CSSUnitType::CSS_PX);
+        dataDetectorContainer->setInlineStyleProperty(CSSPropertyTransform, makeString(
+            "translate("_s,
+            std::round(targetBounds.center.x() - (targetBounds.size.width() / 2)), "px, "_s,
+            std::round(targetBounds.center.y() - (targetBounds.size.height() / 2)), "px) "_s,
+            targetBounds.angleInRadians ? makeString("rotate("_s, targetBounds.angleInRadians, "rad) "_s) : emptyString()
+        ));
+    }
+#endif // ENABLE(DATA_DETECTION)
+
     if (auto frame = makeRefPtr(document().frame()))
         frame->eventHandler().scheduleCursorUpdate();
+
+    if (cacheTextRecognitionResults == CacheTextRecognitionResults::Yes) {
+        if (auto* page = document().page())
+            page->cacheTextRecognitionResult(*this, containerRect, result);
+    }
 }
 
-#endif // ENABLE(IMAGE_EXTRACTION)
+#endif // ENABLE(IMAGE_ANALYSIS)
 
 #if PLATFORM(IOS_FAMILY)
 

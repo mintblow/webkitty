@@ -102,31 +102,25 @@ void ImageBufferShareableIOSurfaceBackend::drawPattern(GraphicsContext&, const F
     RELEASE_ASSERT_NOT_REACHED();
 }
 
-String ImageBufferShareableIOSurfaceBackend::toDataURL(const String&, Optional<double>, PreserveResolution) const
+String ImageBufferShareableIOSurfaceBackend::toDataURL(const String&, std::optional<double>, PreserveResolution) const
 {
     RELEASE_ASSERT_NOT_REACHED();
     return { };
 }
 
-Vector<uint8_t> ImageBufferShareableIOSurfaceBackend::toData(const String&, Optional<double>) const
+Vector<uint8_t> ImageBufferShareableIOSurfaceBackend::toData(const String&, std::optional<double>) const
 {
     RELEASE_ASSERT_NOT_REACHED();
     return { };
 }
 
-Vector<uint8_t> ImageBufferShareableIOSurfaceBackend::toBGRAData() const
+std::optional<PixelBuffer> ImageBufferShareableIOSurfaceBackend::getPixelBuffer(const PixelBufferFormat&, const IntRect&) const
 {
     RELEASE_ASSERT_NOT_REACHED();
     return { };
 }
 
-RefPtr<ImageData> ImageBufferShareableIOSurfaceBackend::getImageData(AlphaPremultiplication, const IntRect&) const
-{
-    RELEASE_ASSERT_NOT_REACHED();
-    return { };
-}
-
-void ImageBufferShareableIOSurfaceBackend::putImageData(AlphaPremultiplication, const ImageData&, const IntRect&, const IntPoint&, AlphaPremultiplication)
+void ImageBufferShareableIOSurfaceBackend::putPixelBuffer(const PixelBuffer&, const IntRect&, const IntPoint&, AlphaPremultiplication)
 {
     RELEASE_ASSERT_NOT_REACHED();
 }

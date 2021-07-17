@@ -45,6 +45,7 @@
 #include "WebProcessPool.h"
 #include "WebProcessProxy.h"
 #include "WebProcessProxyMessages.h"
+#include <WebCore/LogInitialization.h>
 #include <WebCore/MockRealtimeMediaSourceCenter.h>
 #include <WebCore/RuntimeApplicationChecks.h>
 #include <wtf/CompletionHandler.h>
@@ -118,8 +119,7 @@ GPUProcessProxy* GPUProcessProxy::singletonIfCreated()
 #if USE(SANDBOX_EXTENSIONS_FOR_CACHE_AND_TEMP_DIRECTORY_ACCESS)
 static String gpuProcessCachesDirectory()
 {
-    String path = pathForProcessContainer() + "/Library/Caches/com.apple.WebKit.GPU/";
-    path = stringByResolvingSymlinksInPath(path);
+    String path = WebProcessPool::cacheDirectoryInContainerOrHomeDirectory("/Library/Caches/com.apple.WebKit.GPU/"_s);
 
     FileSystem::makeAllDirectories(path);
     
@@ -162,13 +162,15 @@ GPUProcessProxy::GPUProcessProxy()
 #endif
 #if PLATFORM(IOS_FAMILY)
     if (WebCore::deviceHasAGXCompilerService()) {
-        parameters.compilerServiceExtensionHandles = SandboxExtension::createHandlesForMachLookup(WebCore::agxCompilerServices(), WTF::nullopt);
-        parameters.dynamicIOKitExtensionHandles = SandboxExtension::createHandlesForIOKitClassExtensions(WebCore::agxCompilerClasses(), WTF::nullopt);
+        parameters.compilerServiceExtensionHandles = SandboxExtension::createHandlesForMachLookup(WebCore::agxCompilerServices(), std::nullopt);
+        parameters.dynamicIOKitExtensionHandles = SandboxExtension::createHandlesForIOKitClassExtensions(WebCore::agxCompilerClasses(), std::nullopt);
     }
 
     if (!WebCore::IOSApplication::isMobileSafari())
-        parameters.dynamicMachExtensionHandles = SandboxExtension::createHandlesForMachLookup(nonBrowserServices(), WTF::nullopt);
+        parameters.dynamicMachExtensionHandles = SandboxExtension::createHandlesForMachLookup(nonBrowserServices(), std::nullopt);
 #endif
+
+    platformInitializeGPUProcessParameters(parameters);
 
     // Initialize the GPU process.
     send(Messages::GPUProcess::InitializeGPUProcess(parameters), 0);
@@ -204,13 +206,13 @@ static inline bool addCameraSandboxExtensions(Vector<SandboxExtension::Handle>& 
 #if HAVE(AUDIT_TOKEN)
         if (shouldCreateAppleCameraServiceSandboxExtension()) {
             SandboxExtension::Handle appleCameraServicePathSandboxExtensionHandle;
-            if (!SandboxExtension::createHandleForMachLookup("com.apple.applecamerad"_s, WTF::nullopt, appleCameraServicePathSandboxExtensionHandle)) {
+            if (!SandboxExtension::createHandleForMachLookup("com.apple.applecamerad"_s, std::nullopt, appleCameraServicePathSandboxExtensionHandle)) {
                 RELEASE_LOG_ERROR(WebRTC, "Unable to create com.apple.applecamerad sandbox extension");
                 return false;
             }
 #if HAVE(ADDITIONAL_APPLE_CAMERA_SERVICE)
             SandboxExtension::Handle additionalAppleCameraServicePathSandboxExtensionHandle;
-            if (!SandboxExtension::createHandleForMachLookup("com.apple.appleh13camerad"_s, WTF::nullopt, additionalAppleCameraServicePathSandboxExtensionHandle)) {
+            if (!SandboxExtension::createHandleForMachLookup("com.apple.appleh13camerad"_s, std::nullopt, additionalAppleCameraServicePathSandboxExtensionHandle)) {
                 RELEASE_LOG_ERROR(WebRTC, "Unable to create com.apple.appleh13camerad sandbox extension");
                 return false;
             }
@@ -278,6 +280,10 @@ void GPUProcessProxy::updateCaptureAccess(bool allowAudioCapture, bool allowVide
     sendWithAsyncReply(Messages::GPUProcess::UpdateCaptureAccess { allowAudioCapture, allowVideoCapture, allowDisplayCapture, processID }, WTFMove(completionHandler));
 }
 
+void GPUProcessProxy::updateCaptureOrigin(const WebCore::SecurityOriginData& originData, WebCore::ProcessIdentifier processID)
+{
+    send(Messages::GPUProcess::UpdateCaptureOrigin { originData, processID }, 0);
+}
 
 void GPUProcessProxy::addMockMediaDevice(const WebCore::MockMediaDevice& device)
 {
@@ -322,12 +328,14 @@ void GPUProcessProxy::getGPUProcessConnection(WebProcessProxy& webProcessProxy, 
     addSession(webProcessProxy.websiteDataStore());
 
     RELEASE_LOG(ProcessSuspension, "%p - GPUProcessProxy is taking a background assertion because a web process is requesting a connection", this);
+    startResponsivenessTimer(UseLazyStop::No);
     sendWithAsyncReply(Messages::GPUProcess::CreateGPUConnectionToWebProcess { webProcessProxy.coreProcessIdentifier(), webProcessProxy.sessionID(), parameters }, [this, weakThis = makeWeakPtr(*this), reply = WTFMove(reply)](auto&& identifier) mutable {
         if (!weakThis) {
             RELEASE_LOG_ERROR(Process, "GPUProcessProxy::getGPUProcessConnection: GPUProcessProxy deallocated during connection establishment");
             return reply({ });
         }
 
+        stopResponsivenessTimer();
         if (!identifier) {
             RELEASE_LOG_ERROR(Process, "GPUProcessProxy::getGPUProcessConnection: connection identifier is empty");
             return reply({ });
@@ -355,6 +363,9 @@ void GPUProcessProxy::gpuProcessExited(GPUProcessTerminationReason reason)
         break;
     case GPUProcessTerminationReason::IdleExit:
         RELEASE_LOG(Process, "%p - GPUProcessProxy::gpuProcessExited: reason=idle-exit", this);
+        break;
+    case GPUProcessTerminationReason::Unresponsive:
+        RELEASE_LOG(Process, "%p - GPUProcessProxy::gpuProcessExited: reason=unresponsive", this);
         break;
     }
 
@@ -586,6 +597,23 @@ void GPUProcessProxy::updatePreferences()
     send(Messages::GPUProcess::SetVorbisDecoderEnabled(hasEnabledVorbis), 0);
 #endif
 }
+
+void GPUProcessProxy::didBecomeUnresponsive()
+{
+    RELEASE_LOG_ERROR(Process, "GPUProcessProxy::didBecomeUnresponsive: GPUProcess with PID %d became unresponsive, terminating it", processIdentifier());
+    terminate();
+    gpuProcessExited(GPUProcessTerminationReason::Unresponsive);
+}
+
+#if !PLATFORM(COCOA)
+void GPUProcessProxy::platformInitializeGPUProcessParameters(GPUProcessCreationParameters& parameters)
+{
+#if !LOG_DISABLED || !RELEASE_LOG_DISABLED
+    parameters.webCoreLoggingChannels = WebCore::logLevelString();
+    parameters.webKitLoggingChannels = WebKit::logLevelString();
+#endif
+}
+#endif
 
 } // namespace WebKit
 

@@ -153,7 +153,11 @@ class ProgramMtl : public ProgramImpl, public mtl::RenderPipelineCacheSpecialize
 
     std::array<uint32_t, mtl::kMaxShaderXFBs> getXfbBindings() const { return mXfbBindings; }
     std::string getTranslatedShaderSource(const gl::ShaderType shaderType) const { return mMslShaderTranslateInfo[shaderType].metalShaderSource; }
-
+    
+    mtl::TranslatedShaderInfo getTranslatedShaderInfo(const gl::ShaderType shaderType) const { return mMslShaderTranslateInfo[shaderType]; }
+    
+    bool hasFlatAttribute();
+    
     mtl::RenderPipelineCache *mMetalXfbRenderPipelineCache;
 
   private:
@@ -225,6 +229,7 @@ class ProgramMtl : public ProgramImpl, public mtl::RenderPipelineCacheSpecialize
     
     mtl::BufferPool * getBufferPool(ContextMtl * context);
     
+    bool programHasFlatAttributes() const;
     // State for the default uniform blocks.
     struct DefaultUniformBlock final : private angle::NonCopyable
     {
@@ -276,6 +281,7 @@ class ProgramMtl : public ProgramImpl, public mtl::RenderPipelineCacheSpecialize
     mtl::RenderPipelineCache mMetalRenderPipelineCache;
     std::array<uint32_t, mtl::kMaxShaderXFBs> mXfbBindings;
     mtl::BufferPool * mAuxBufferPool;
+    bool mHasFlatAttribute;
 };
 
 }  // namespace rx

@@ -53,7 +53,7 @@
 #include "HitTestRequest.h"
 #include "HitTestResult.h"
 #include "InlineRunAndOffset.h"
-#include "InlineTextBox.h"
+#include "LegacyInlineTextBox.h"
 #include "Logging.h"
 #include "Page.h"
 #include "Range.h"
@@ -232,6 +232,9 @@ void FrameSelection::moveWithoutValidationTo(const Position& base, const Positio
     case SelectionRevealMode::RevealUpToMainFrame:
         options.add(RevealSelectionUpToMainFrame);
         break;
+    case SelectionRevealMode::DelegateMainFrameScroll:
+        options.add(DelegateMainFrameScroll);
+        break;
     }
     setSelection(newSelection, options, newIntent);
 }
@@ -363,7 +366,7 @@ bool FrameSelection::setSelectionWithoutUpdatingAppearance(const VisibleSelectio
             return false;
         }
 
-        if (!m_document || !m_document->frame()) {
+        if (!m_document || (!m_document->frame() && !newSelection.document())) {
             m_selection = newSelection;
             updateAssociatedLiveRange();
             return false;
@@ -371,10 +374,12 @@ bool FrameSelection::setSelectionWithoutUpdatingAppearance(const VisibleSelectio
 
         bool selectionEndpointsBelongToMultipleDocuments = newSelection.base().document() && !newSelection.document();
         bool selectionIsInAnotherDocument = newSelection.document() && newSelection.document() != m_document.get();
-        if (selectionEndpointsBelongToMultipleDocuments || selectionIsInAnotherDocument) {
+        bool selectionIsInDetachedDocument = newSelection.document() && !newSelection.document()->frame();
+        if (selectionEndpointsBelongToMultipleDocuments || selectionIsInAnotherDocument || selectionIsInDetachedDocument) {
             clear();
             return false;
         }
+        ASSERT(m_document->frame());
 
         if (closeTyping)
             TypingCommand::closeTyping(*m_document);
@@ -408,7 +413,7 @@ bool FrameSelection::setSelectionWithoutUpdatingAppearance(const VisibleSelectio
 
     // Always clear the x position used for vertical arrow navigation.
     // It will be restored by the vertical arrow navigation code if necessary.
-    m_xPosForVerticalArrowNavigation = WTF::nullopt;
+    m_xPosForVerticalArrowNavigation = std::nullopt;
     selectFrameElementInParentIfFullySelected();
     m_document->editor().respondToChangedSelection(oldSelection, options);
     // https://www.w3.org/TR/selection-api/#selectionchange-event
@@ -430,6 +435,8 @@ void FrameSelection::setSelection(const VisibleSelection& selection, OptionSet<S
         m_selectionRevealMode = SelectionRevealMode::RevealUpToMainFrame;
     else if (options & RevealSelection)
         m_selectionRevealMode = SelectionRevealMode::Reveal;
+    else if (options & DelegateMainFrameScroll)
+        m_selectionRevealMode = SelectionRevealMode::DelegateMainFrameScroll;
     else
         m_selectionRevealMode = SelectionRevealMode::DoNotReveal;
     m_alwaysAlignCursorOnScrollWhenRevealingSelection = align == AlignCursorOnScrollAlways;
@@ -444,7 +451,7 @@ void FrameSelection::setSelection(const VisibleSelection& selection, OptionSet<S
     if (frameView && frameView->layoutContext().isLayoutPending())
         return;
 
-    updateAndRevealSelection(intent, options.contains(SmoothScroll) ? ScrollBehavior::Smooth : ScrollBehavior::Instant, options.contains(OverrideSmoothScrollFeatureEnablement) ? SmoothScrollFeatureEnablement::Override : SmoothScrollFeatureEnablement::Default);
+    updateAndRevealSelection(intent, options.contains(SmoothScroll) ? ScrollBehavior::Smooth : ScrollBehavior::Instant);
 
     if (options & IsUserTriggered) {
         if (auto* client = protectedDocument->editor().client())
@@ -471,7 +478,7 @@ void FrameSelection::setNeedsSelectionUpdate(RevealSelectionAfterUpdate revealMo
         view->selection().clear();
 }
 
-void FrameSelection::updateAndRevealSelection(const AXTextStateChangeIntent& intent, ScrollBehavior scrollBehavior, SmoothScrollFeatureEnablement overideFeatureEnablement)
+void FrameSelection::updateAndRevealSelection(const AXTextStateChangeIntent& intent, ScrollBehavior scrollBehavior)
 {
     if (!m_pendingSelectionUpdate)
         return;
@@ -488,7 +495,7 @@ void FrameSelection::updateAndRevealSelection(const AXTextStateChangeIntent& int
         else
             alignment = m_alwaysAlignCursorOnScrollWhenRevealingSelection ? ScrollAlignment::alignTopAlways : ScrollAlignment::alignToEdgeIfNeeded;
 
-        revealSelection(m_selectionRevealMode, alignment, RevealExtent, scrollBehavior, overideFeatureEnablement);
+        revealSelection(m_selectionRevealMode, alignment, RevealExtent, scrollBehavior);
     }
 
     notifyAccessibilityForSelectionChange(intent);
@@ -1848,7 +1855,7 @@ void FrameSelection::debugRenderer(RenderObject* renderer, bool selected) const
                 offset = m_selection.end().computeOffsetInContainerNode();
 
             int pos;
-            InlineTextBox* box = textRenderer.findNextInlineTextBox(offset, pos);
+            LegacyInlineTextBox* box = textRenderer.findNextInlineTextBox(offset, pos);
             text = text.substring(box->start(), box->len());
             
             String show;
@@ -1920,7 +1927,13 @@ bool FrameSelection::contains(const LayoutPoint& point) const
 void FrameSelection::selectFrameElementInParentIfFullySelected()
 {
     // Find the parent frame; if there is none, then we have nothing to do.
-    Frame* parent = m_document->frame()->tree().parent();
+    auto document = makeRefPtr(m_document.get());
+    if (!document)
+        return;
+    auto frame = makeRefPtr(document->frame());
+    if (!frame)
+        return;
+    auto parent = makeRefPtr(frame->tree().parent());
     if (!parent)
         return;
     Page* page = m_document->page();
@@ -1936,10 +1949,10 @@ void FrameSelection::selectFrameElementInParentIfFullySelected()
         return;
 
     // Get to the <iframe> or <frame> (or even <object>) element in the parent frame.
-    Element* ownerElement = m_document->ownerElement();
+    auto ownerElement = makeRefPtr(m_document->ownerElement());
     if (!ownerElement)
         return;
-    ContainerNode* ownerElementParent = ownerElement->parentNode();
+    auto ownerElementParent = makeRefPtr(ownerElement->parentNode());
     if (!ownerElementParent)
         return;
         
@@ -1949,14 +1962,18 @@ void FrameSelection::selectFrameElementInParentIfFullySelected()
 
     // Create compute positions before and after the element.
     unsigned ownerElementNodeIndex = ownerElement->computeNodeIndex();
-    VisiblePosition beforeOwnerElement(VisiblePosition(Position(ownerElementParent, ownerElementNodeIndex, Position::PositionIsOffsetInAnchor)));
-    VisiblePosition afterOwnerElement(VisiblePosition(Position(ownerElementParent, ownerElementNodeIndex + 1, Position::PositionIsOffsetInAnchor), Affinity::Upstream));
+    VisiblePosition beforeOwnerElement(VisiblePosition(Position(ownerElementParent.get(), ownerElementNodeIndex, Position::PositionIsOffsetInAnchor)));
+    VisiblePosition afterOwnerElement(VisiblePosition(Position(ownerElementParent.get(), ownerElementNodeIndex + 1, Position::PositionIsOffsetInAnchor), Affinity::Upstream));
 
     // Focus on the parent frame, and then select from before this element to after.
     VisibleSelection newSelection(beforeOwnerElement, afterOwnerElement);
     if (parent->selection().shouldChangeSelection(newSelection)) {
-        page->focusController().setFocusedFrame(parent);
-        parent->selection().setSelection(newSelection);
+        page->focusController().setFocusedFrame(parent.get());
+        // Previous focus can trigger DOM events, ensure the selection did not become orphan.
+        if (newSelection.isOrphan())
+            parent->selection().clear();
+        else
+            parent->selection().setSelection(newSelection);
     }
 }
 
@@ -2014,7 +2031,7 @@ void FrameSelection::selectAll()
     }
 }
 
-bool FrameSelection::setSelectedRange(const Optional<SimpleRange>& range, Affinity affinity, ShouldCloseTyping closeTyping, EUserTriggered userTriggered)
+bool FrameSelection::setSelectedRange(const std::optional<SimpleRange>& range, Affinity affinity, ShouldCloseTyping closeTyping, EUserTriggered userTriggered)
 {
     if (!range)
         return false;
@@ -2378,7 +2395,7 @@ HTMLFormElement* FrameSelection::currentForm() const
     return scanForForm(start);
 }
 
-void FrameSelection::revealSelection(SelectionRevealMode revealMode, const ScrollAlignment& alignment, RevealExtentOption revealExtentOption, ScrollBehavior scrollBehavior, SmoothScrollFeatureEnablement overrideFeatureEnablement)
+void FrameSelection::revealSelection(SelectionRevealMode revealMode, const ScrollAlignment& alignment, RevealExtentOption revealExtentOption, ScrollBehavior scrollBehavior)
 {
     if (revealMode == SelectionRevealMode::DoNotReveal)
         return;
@@ -2401,7 +2418,7 @@ void FrameSelection::revealSelection(SelectionRevealMode revealMode, const Scrol
             if (!m_scrollingSuppressCount) {
                 auto* scrollableArea = layer->ensureLayerScrollableArea();
                 scrollableArea->setAdjustForIOSCaretWhenScrolling(true);
-                layer->scrollRectToVisible(rect, insideFixed, { revealMode, alignment, alignment, ShouldAllowCrossOriginScrolling::Yes, scrollBehavior, overrideFeatureEnablement});
+                layer->scrollRectToVisible(rect, insideFixed, { revealMode, alignment, alignment, ShouldAllowCrossOriginScrolling::Yes, scrollBehavior});
                 scrollableArea->setAdjustForIOSCaretWhenScrolling(false);
                 updateAppearance();
                 if (m_document->page())
@@ -2412,7 +2429,7 @@ void FrameSelection::revealSelection(SelectionRevealMode revealMode, const Scrol
         // FIXME: This code only handles scrolling the startContainer's layer, but
         // the selection rect could intersect more than just that.
         // See <rdar://problem/4799899>.
-        if (start.deprecatedNode()->renderer()->scrollRectToVisible(rect, insideFixed, { revealMode, alignment, alignment, ShouldAllowCrossOriginScrolling::Yes, scrollBehavior, overrideFeatureEnablement}))
+        if (start.deprecatedNode()->renderer()->scrollRectToVisible(rect, insideFixed, { revealMode, alignment, alignment, ShouldAllowCrossOriginScrolling::Yes, scrollBehavior}))
             updateAppearance();
 #endif
     }
@@ -2511,16 +2528,16 @@ void FrameSelection::expandSelectionToElementContainingCaretSelection()
     setSelection(VisibleSelection(*range));
 }
 
-Optional<SimpleRange> FrameSelection::elementRangeContainingCaretSelection() const
+std::optional<SimpleRange> FrameSelection::elementRangeContainingCaretSelection() const
 {
     auto element = deprecatedEnclosingBlockFlowElement(m_selection.visibleStart().deepEquivalent().deprecatedNode());
     if (!element)
-        return WTF::nullopt;
+        return std::nullopt;
 
     auto start = VisiblePosition(makeContainerOffsetPosition(element, 0));
     auto end = VisiblePosition(makeContainerOffsetPosition(element, element->countChildNodes()));
     if (start.isNull() || end.isNull())
-        return WTF::nullopt;
+        return std::nullopt;
 
     auto selection = m_selection;
     selection.setBase(start);
@@ -2535,7 +2552,7 @@ void FrameSelection::expandSelectionToWordContainingCaretSelection()
         setSelection(selection);
 }
 
-Optional<SimpleRange> FrameSelection::wordRangeContainingCaretSelection()
+std::optional<SimpleRange> FrameSelection::wordRangeContainingCaretSelection()
 {
     return wordSelectionContainingCaretSelection(m_selection).toNormalizedRange();
 }
@@ -2589,12 +2606,12 @@ bool FrameSelection::selectionAtWordStart() const
     return true;
 }
 
-Optional<SimpleRange> FrameSelection::rangeByMovingCurrentSelection(int amount) const
+std::optional<SimpleRange> FrameSelection::rangeByMovingCurrentSelection(int amount) const
 {
     return rangeByAlteringCurrentSelection(AlterationMove, amount);
 }
 
-Optional<SimpleRange> FrameSelection::rangeByExtendingCurrentSelection(int amount) const
+std::optional<SimpleRange> FrameSelection::rangeByExtendingCurrentSelection(int amount) const
 {
     return rangeByAlteringCurrentSelection(AlterationExtend, amount);
 }
@@ -2736,10 +2753,10 @@ bool FrameSelection::selectionAtSentenceStart() const
     return true;
 }
 
-Optional<SimpleRange> FrameSelection::rangeByAlteringCurrentSelection(EAlteration alteration, int amount) const
+std::optional<SimpleRange> FrameSelection::rangeByAlteringCurrentSelection(EAlteration alteration, int amount) const
 {
     if (m_selection.isNone())
-        return WTF::nullopt;
+        return std::nullopt;
 
     if (!amount)
         return m_selection.toNormalizedRange();
@@ -2785,7 +2802,7 @@ void FrameSelection::setCaretColor(const Color& caretColor)
 
 #endif // PLATFORM(IOS_FAMILY)
 
-static bool containsEndpoints(const WeakPtr<Document>& document, const Optional<SimpleRange>& range)
+static bool containsEndpoints(const WeakPtr<Document>& document, const std::optional<SimpleRange>& range)
 {
     return document && range && document->contains(range->start.container) && document->contains(range->end.container);
 }

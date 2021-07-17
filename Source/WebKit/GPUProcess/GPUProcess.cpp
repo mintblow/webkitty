@@ -35,6 +35,7 @@
 #include "GPUConnectionToWebProcess.h"
 #include "GPUProcessConnectionParameters.h"
 #include "GPUProcessCreationParameters.h"
+#include "GPUProcessProxyMessages.h"
 #include "GPUProcessSessionParameters.h"
 #include "Logging.h"
 #include "SandboxExtension.h"
@@ -91,7 +92,20 @@ GPUProcess::~GPUProcess()
 {
 }
 
-void GPUProcess::createGPUConnectionToWebProcess(ProcessIdentifier identifier, PAL::SessionID sessionID, GPUProcessConnectionParameters&& parameters, CompletionHandler<void(Optional<IPC::Attachment>&&)>&& completionHandler)
+void GPUProcess::didReceiveMessage(IPC::Connection& connection, IPC::Decoder& decoder)
+{
+    if (messageReceiverMap().dispatchMessage(connection, decoder))
+        return;
+
+    if (decoder.messageReceiverName() == Messages::AuxiliaryProcess::messageReceiverName()) {
+        AuxiliaryProcess::didReceiveMessage(connection, decoder);
+        return;
+    }
+
+    didReceiveGPUProcessMessage(connection, decoder);
+}
+
+void GPUProcess::createGPUConnectionToWebProcess(ProcessIdentifier identifier, PAL::SessionID sessionID, GPUProcessConnectionParameters&& parameters, CompletionHandler<void(std::optional<IPC::Attachment>&&)>&& completionHandler)
 {
     RELEASE_LOG(Process, "%p - GPUProcess::createGPUConnectionToWebProcess: processIdentifier=%" PRIu64, this, identifier.toUInt64());
     auto ipcConnection = createIPCConnectionPair();
@@ -228,10 +242,19 @@ void GPUProcess::initializeGPUProcess(GPUProcessCreationParameters&& parameters)
     CGImageSourceSetAllowableTypes(emptyArray.get());
 #endif
 
+#if !LOG_DISABLED || !RELEASE_LOG_DISABLED
+    WebCore::initializeLogChannelsIfNecessary(parameters.webCoreLoggingChannels);
+    WebKit::initializeLogChannelsIfNecessary(parameters.webKitLoggingChannels);
+#endif
+
     // Match the QoS of the UIProcess since the GPU process is doing rendering on its behalf.
     WTF::Thread::setCurrentThreadIsUserInteractive(0);
 
     WebCore::setPresentingApplicationPID(parameters.parentPID);
+
+#if USE(OS_STATE)
+    registerWithStateDumper("GPUProcess state"_s);
+#endif
 }
 
 void GPUProcess::prepareToSuspend(bool isSuspensionImminent, CompletionHandler<void()>&& completionHandler)
@@ -291,6 +314,12 @@ void GPUProcess::updateCaptureAccess(bool allowAudioCapture, bool allowVideoCapt
     access.allowDisplayCapture |= allowDisplayCapture;
 
     completionHandler();
+}
+
+void GPUProcess::updateCaptureOrigin(const WebCore::SecurityOriginData& originData, ProcessIdentifier processID)
+{
+    if (auto* connection = webProcessConnection(processID))
+        connection->updateCaptureOrigin(originData);
 }
 
 void GPUProcess::updateSandboxAccess(const Vector<SandboxExtension::Handle>& extensions)
@@ -381,12 +410,6 @@ RemoteAudioSessionProxyManager& GPUProcess::audioSessionManager() const
 #endif
 
 #if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
-WorkQueue& GPUProcess::audioMediaStreamTrackRendererQueue()
-{
-    if (!m_audioMediaStreamTrackRendererQueue)
-        m_audioMediaStreamTrackRendererQueue = WorkQueue::create("RemoteAudioMediaStreamTrackRenderer", WorkQueue::Type::Serial, WorkQueue::QOS::UserInteractive);
-    return *m_audioMediaStreamTrackRendererQueue;
-}
 WorkQueue& GPUProcess::videoMediaStreamTrackRendererQueue()
 {
     if (!m_videoMediaStreamTrackRendererQueue)

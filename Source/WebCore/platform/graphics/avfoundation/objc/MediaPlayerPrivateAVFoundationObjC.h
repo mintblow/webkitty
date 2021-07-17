@@ -171,7 +171,7 @@ private:
     void setVideoFullscreenMode(MediaPlayer::VideoFullscreenMode) final;
     void videoFullscreenStandbyChanged() final;
 #endif
-    void setPlayerRate(double);
+    void setPlayerRate(double, std::optional<MonotonicTime>&& = std::nullopt);
 
 #if PLATFORM(IOS_FAMILY)
     NSArray *timedMetadata() const final;
@@ -224,7 +224,7 @@ private:
     void updateVideoLayerGravity() final;
 
     bool didPassCORSAccessCheck() const final;
-    Optional<bool> wouldTaintOrigin(const SecurityOrigin&) const final;
+    std::optional<bool> wouldTaintOrigin(const SecurityOrigin&) const final;
 
     MediaTime getStartDate() const final;
 
@@ -307,7 +307,7 @@ private:
     void setShouldDisableSleep(bool) final;
     void updateRotationSession();
 
-    Optional<VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() final;
+    std::optional<VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() final;
 
 #if !RELEASE_LOG_DISABLED
     const char* logClassName() const final { return "MediaPlayerPrivateAVFoundationObjC"; }
@@ -323,6 +323,13 @@ private:
 
     void currentMediaTimeDidChange(MediaTime&&) const;
     bool setCurrentTimeDidChangeCallback(MediaPlayer::CurrentTimeDidChangeCallback&&) final;
+
+    bool currentMediaTimeIsBuffered() const;
+
+    bool supportsPlayAtHostTime() const final { return true; }
+    bool supportsPauseAtHostTime() const final { return true; }
+    bool playAtHostTime(const MonotonicTime&) final;
+    bool pauseAtHostTime(const MonotonicTime&) final;
 
     RetainPtr<AVURLAsset> m_avAsset;
     RetainPtr<AVPlayer> m_avPlayer;
@@ -397,7 +404,7 @@ private:
     MediaTime m_cachedDuration;
     mutable MediaPlayer::CurrentTimeDidChangeCallback m_currentTimeDidChangeCallback;
     mutable MediaTime m_cachedCurrentMediaTime;
-    mutable Optional<WallTime> m_wallClockAtCachedCurrentTime;
+    mutable std::optional<WallTime> m_wallClockAtCachedCurrentTime;
     mutable int m_timeControlStatusAtCachedCurrentTime { 0 };
     mutable double m_requestedRateAtCachedCurrentTime { 0 };
     RefPtr<SharedBuffer> m_keyID;
@@ -418,10 +425,11 @@ private:
     bool m_cachedCanPlayFastForward { false };
     bool m_cachedCanPlayFastReverse { false };
     mutable bool m_cachedAssetIsLoaded { false };
-    mutable Optional<bool> m_cachedAssetIsPlayable;
+    mutable std::optional<bool> m_cachedAssetIsPlayable;
     bool m_muted { false };
     bool m_shouldObserveTimeControlStatus { false };
-    mutable Optional<bool> m_tracksArePlayable;
+    mutable std::optional<bool> m_tracksArePlayable;
+    bool m_automaticallyWaitsToMinimizeStalling { false };
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
     mutable bool m_allowsWirelessVideoPlayback { true };
     bool m_shouldPlayToPlaybackTarget { false };

@@ -41,15 +41,15 @@ namespace WebKit {
 
 class NetworkDataTaskSoup final : public NetworkDataTask {
 public:
-    static Ref<NetworkDataTask> create(NetworkSession& session, NetworkDataTaskClient& client, const WebCore::ResourceRequest& request, WebCore::FrameIdentifier frameID, WebCore::PageIdentifier pageID, WebCore::StoredCredentialsPolicy storedCredentialsPolicy, WebCore::ContentSniffingPolicy shouldContentSniff, WebCore::ContentEncodingSniffingPolicy shouldContentEncodingSniff, bool shouldClearReferrerOnHTTPSToHTTPRedirect, PreconnectOnly shouldPreconnectOnly, bool dataTaskIsForMainFrameNavigation)
+    static Ref<NetworkDataTask> create(NetworkSession& session, NetworkDataTaskClient& client, const NetworkLoadParameters& parameters)
     {
-        return adoptRef(*new NetworkDataTaskSoup(session, client, request, frameID, pageID, storedCredentialsPolicy, shouldContentSniff, shouldContentEncodingSniff, shouldClearReferrerOnHTTPSToHTTPRedirect, shouldPreconnectOnly, dataTaskIsForMainFrameNavigation));
+        return adoptRef(*new NetworkDataTaskSoup(session, client, parameters));
     }
 
     ~NetworkDataTaskSoup();
 
 private:
-    NetworkDataTaskSoup(NetworkSession&, NetworkDataTaskClient&, const WebCore::ResourceRequest&, WebCore::FrameIdentifier, WebCore::PageIdentifier, WebCore::StoredCredentialsPolicy, WebCore::ContentSniffingPolicy, WebCore::ContentEncodingSniffingPolicy, bool shouldClearReferrerOnHTTPSToHTTPRedirect, PreconnectOnly shouldPreconnectOnly, bool dataTaskIsForMainFrameNavigation);
+    NetworkDataTaskSoup(NetworkSession&, NetworkDataTaskClient&, const NetworkLoadParameters&);
 
     void cancel() override;
     void resume() override;
@@ -58,6 +58,8 @@ private:
 
     void setPendingDownloadLocation(const String&, SandboxExtension::Handle&&, bool /*allowOverwrite*/) override;
     String suggestedFilename() const override;
+
+    void setPriority(WebCore::ResourceLoadPriority) override;
 
     void timeoutFired();
     void startTimeout();
@@ -100,6 +102,8 @@ private:
 #endif
     void authenticate(WebCore::AuthenticationChallenge&&);
     void continueAuthenticate(WebCore::AuthenticationChallenge&&);
+    void completeAuthentication(const WebCore::AuthenticationChallenge&, const WebCore::Credential&);
+    void cancelAuthentication(const WebCore::AuthenticationChallenge&);
 
     static void skipInputStreamForRedirectionCallback(GInputStream*, GAsyncResult*, NetworkDataTaskSoup*);
     void skipInputStreamForRedirection();
@@ -131,6 +135,8 @@ private:
     static void wroteHeadersCallback(SoupMessage*, NetworkDataTaskSoup*);
     static void wroteBodyCallback(SoupMessage*, NetworkDataTaskSoup*);
     static void gotBodyCallback(SoupMessage*, NetworkDataTaskSoup*);
+    static gboolean requestCertificateCallback(SoupMessage*, GTlsClientConnection*, NetworkDataTaskSoup*);
+    static gboolean requestCertificatePasswordCallback(SoupMessage*, GTlsPassword*, NetworkDataTaskSoup*);
 #endif
 
     void download();
@@ -173,7 +179,7 @@ private:
     static void enumerateFileChildrenCallback(GFile*, GAsyncResult*, NetworkDataTaskSoup*);
     void didReadFile(GRefPtr<GInputStream>&&);
 
-    void didReadDataURL(Optional<WebCore::DataURLDecoder::Result>&&);
+    void didReadDataURL(std::optional<WebCore::DataURLDecoder::Result>&&);
 
     WebCore::FrameIdentifier m_frameID;
     WebCore::PageIdentifier m_pageID;
@@ -186,14 +192,13 @@ private:
     GRefPtr<SoupMultipartInputStream> m_multipartInputStream;
     GRefPtr<GCancellable> m_cancellable;
     GRefPtr<GAsyncResult> m_pendingResult;
-    Optional<WebCore::DataURLDecoder::Result> m_pendingDataURLResult;
+    std::optional<WebCore::DataURLDecoder::Result> m_pendingDataURLResult;
     WebCore::ProtectionSpace m_protectionSpaceForPersistentStorage;
     WebCore::Credential m_credentialForPersistentStorage;
     WebCore::ResourceRequest m_currentRequest;
     WebCore::ResourceResponse m_response;
     CString m_sniffedContentType;
-    Vector<char> m_readBuffer;
-    unsigned m_redirectCount { 0 };
+    Vector<uint8_t> m_readBuffer;
     uint64_t m_bodyDataTotalBytesSent { 0 };
     GRefPtr<GFile> m_downloadDestinationFile;
     GRefPtr<GFile> m_downloadIntermediateFile;
@@ -201,6 +206,7 @@ private:
     bool m_allowOverwriteDownload { false };
     WebCore::NetworkLoadMetrics m_networkLoadMetrics;
     bool m_isBlockingCookies { false };
+    RefPtr<WebCore::SecurityOrigin> m_sourceOrigin;
     RunLoop::Timer<NetworkDataTaskSoup> m_timeoutSource;
 };
 

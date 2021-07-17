@@ -71,7 +71,7 @@ public:
 
     WEBCORE_EXPORT void notifyNetworkStateChange(bool isOnline);
 
-    WEBCORE_EXPORT void startFetch(SWServerConnectionIdentifier, FetchIdentifier, Ref<ServiceWorkerFetch::Client>&&, Optional<ServiceWorkerClientIdentifier>&&, ResourceRequest&&, String&& referrer, FetchOptions&&);
+    WEBCORE_EXPORT void startFetch(SWServerConnectionIdentifier, FetchIdentifier, Ref<ServiceWorkerFetch::Client>&&, std::optional<ServiceWorkerClientIdentifier>&&, ResourceRequest&&, String&& referrer, FetchOptions&&);
     WEBCORE_EXPORT void cancelFetch(SWServerConnectionIdentifier, FetchIdentifier);
     WEBCORE_EXPORT void continueDidReceiveFetchResponse(SWServerConnectionIdentifier, FetchIdentifier);
     WEBCORE_EXPORT void removeFetch(SWServerConnectionIdentifier, FetchIdentifier);
@@ -81,7 +81,8 @@ public:
     void fireActivateEvent();
     void didSaveScriptsToDisk(ScriptBuffer&&, HashMap<URL, ScriptBuffer>&& importedScripts);
 
-    WEBCORE_EXPORT void setLastNavigationWasAppBound(bool);
+    WEBCORE_EXPORT void setLastNavigationWasAppInitiated(bool);
+    WEBCORE_EXPORT bool lastNavigationWasAppInitiated();
 
 private:
     WEBCORE_EXPORT ServiceWorkerThreadProxy(PageConfiguration&&, ServiceWorkerContextData&&, String&& userAgent, CacheStorageProvider&, StorageBlockingPolicy);

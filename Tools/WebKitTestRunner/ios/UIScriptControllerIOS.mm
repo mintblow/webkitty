@@ -58,6 +58,16 @@ SOFT_LINK_CLASS(UIKit, UIPhysicalKeyboardEvent)
 
 namespace WTR {
 
+static BOOL returnYes()
+{
+    return YES;
+}
+
+static BOOL returnNo()
+{
+    return NO;
+}
+
 static NSDictionary *toNSDictionary(CGRect rect)
 {
     return @{
@@ -742,16 +752,16 @@ double UIScriptControllerIOS::maximumZoomScale() const
     return webView().scrollView.maximumZoomScale;
 }
 
-Optional<bool> UIScriptControllerIOS::stableStateOverride() const
+std::optional<bool> UIScriptControllerIOS::stableStateOverride() const
 {
     TestRunnerWKWebView *webView = this->webView();
     if (webView._stableStateOverride)
         return webView._stableStateOverride.boolValue;
 
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
-void UIScriptControllerIOS::setStableStateOverride(Optional<bool> overrideValue)
+void UIScriptControllerIOS::setStableStateOverride(std::optional<bool> overrideValue)
 {
     TestRunnerWKWebView *webView = this->webView();
     if (overrideValue)
@@ -839,7 +849,7 @@ JSObjectRef UIScriptControllerIOS::selectionRangeViewRects() const
 
 JSObjectRef UIScriptControllerIOS::inputViewBounds() const
 {
-    return JSValueToObject(m_context->jsContext(), [JSValue valueWithObject:toNSDictionary(webView()._inputViewBounds) inContext:[JSContext contextWithJSGlobalContextRef:m_context->jsContext()]].JSValueRef, nullptr);
+    return JSValueToObject(m_context->jsContext(), [JSValue valueWithObject:toNSDictionary(webView()._inputViewBoundsInWindow) inContext:[JSContext contextWithJSGlobalContextRef:m_context->jsContext()]].JSValueRef, nullptr);
 }
 
 JSRetainPtr<JSStringRef> UIScriptControllerIOS::scrollingTreeAsText() const
@@ -966,6 +976,16 @@ void UIScriptControllerIOS::setDidHideKeyboardCallback(JSValueRef callback)
         if (!m_context)
             return;
         m_context->fireCallback(CallbackTypeDidHideKeyboard);
+    }).get();
+}
+
+void UIScriptControllerIOS::setWillStartInputSessionCallback(JSValueRef callback)
+{
+    UIScriptController::setWillStartInputSessionCallback(callback);
+    webView().willStartInputSessionCallback = makeBlockPtr([this, strongThis = makeRef(*this)] {
+        if (!m_context)
+            return;
+        m_context->fireCallback(CallbackTypeWillStartInputSession);
     }).get();
 }
 
@@ -1210,6 +1230,7 @@ JSObjectRef UIScriptControllerIOS::calendarType() const
 void UIScriptControllerIOS::setHardwareKeyboardAttached(bool attached)
 {
     GSEventSetHardwareKeyboardAttached(attached, 0);
+    method_setImplementation(class_getClassMethod([UIKeyboard class], @selector(isInHardwareKeyboardMode)), reinterpret_cast<IMP>(attached ? returnYes : returnNo));
 }
 
 void UIScriptControllerIOS::setAllowsViewportShrinkToFit(bool allows)
@@ -1259,6 +1280,16 @@ void UIScriptControllerIOS::installTapGestureOnWindow(JSValueRef callback)
             return;
         m_context->fireCallback(CallbackTypeWindowTapRecognized);
     }).get();
+}
+
+bool UIScriptControllerIOS::suppressSoftwareKeyboard() const
+{
+    return webView()._suppressSoftwareKeyboard;
+}
+
+void UIScriptControllerIOS::setSuppressSoftwareKeyboard(bool suppressSoftwareKeyboard)
+{
+    webView()._suppressSoftwareKeyboard = suppressSoftwareKeyboard;
 }
 
 }

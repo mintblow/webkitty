@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -136,11 +136,9 @@ public:
     explicit WebProcessPool(API::ProcessPoolConfiguration&);        
     virtual ~WebProcessPool();
 
-    void notifyThisWebProcessPoolWasCreated();
-
     API::ProcessPoolConfiguration& configuration() { return m_configuration.get(); }
 
-    static const Vector<WebProcessPool*>& allProcessPools();
+    static Vector<Ref<WebProcessPool>> allProcessPools();
 
     template <typename T>
     T* supplement()
@@ -238,7 +236,7 @@ public:
 #endif
 
 #if HAVE(CVDISPLAYLINK)
-    Optional<WebCore::FramesPerSecond> nominalFramesPerSecondForDisplay(WebCore::PlatformDisplayID);
+    std::optional<WebCore::FramesPerSecond> nominalFramesPerSecondForDisplay(WebCore::PlatformDisplayID);
     void startDisplayLink(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID, WebCore::FramesPerSecond);
     void stopDisplayLink(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID);
     void setDisplayLinkPreferredFramesPerSecond(IPC::Connection&, DisplayLinkObserverID, WebCore::PlatformDisplayID, WebCore::FramesPerSecond);
@@ -299,8 +297,7 @@ public:
     };
     static Statistics& statistics();    
 
-    void clearCachedCredentials(const PAL::SessionID&);
-    void terminateNetworkProcess();
+    void clearCachedCredentials(PAL::SessionID);
     void terminateAllWebContentProcesses();
     void sendNetworkProcessPrepareToSuspendForTesting(CompletionHandler<void()>&&);
     void sendNetworkProcessWillSuspendImminentlyForTesting();
@@ -318,7 +315,7 @@ public:
 
     bool shouldTerminate(WebProcessProxy&);
 
-    void disableProcessTermination() { m_processTerminationEnabled = false; }
+    void disableProcessTermination();
     void enableProcessTermination();
 
     void updateAutomationCapabilities() const;
@@ -442,9 +439,6 @@ public:
     void clearPermanentCredentialsForProtectionSpace(WebCore::ProtectionSpace&&);
 #endif
 
-    static uint64_t registerProcessPoolCreationListener(Function<void(WebProcessPool&)>&&);
-    static void unregisterProcessPoolCreationListener(uint64_t identifier);
-
     ForegroundWebProcessToken foregroundWebProcessToken() const { return ForegroundWebProcessToken(m_foregroundWebProcessCounter.count()); }
     BackgroundWebProcessToken backgroundWebProcessToken() const { return BackgroundWebProcessToken(m_backgroundWebProcessCounter.count()); }
     bool hasForegroundWebProcesses() const { return m_foregroundWebProcessCounter.value(); }
@@ -498,7 +492,7 @@ public:
     static bool useSeparateServiceWorkerProcess() { return s_useSeparateServiceWorkerProcess; }
 
 #if ENABLE(CFPREFS_DIRECT_MODE)
-    void notifyPreferencesChanged(const String& domain, const String& key, const Optional<String>& encodedValue);
+    void notifyPreferencesChanged(const String& domain, const String& key, const std::optional<String>& encodedValue);
 #endif
 
 #if PLATFORM(PLAYSTATION)
@@ -511,6 +505,7 @@ public:
     static Vector<String> urlSchemesWithCustomProtocolHandlers();
 
 #if PLATFORM(IOS_FAMILY)
+    static String cacheDirectoryInContainerOrHomeDirectory(const String& subpath);
     static String cookieStorageDirectory();
     static String parentBundleDirectory();
     static String networkingCachesDirectory();
@@ -576,6 +571,14 @@ private:
 #endif
 #endif
 
+#if PLATFORM(COCOA)
+    static void accessibilityPreferencesChangedCallback(CFNotificationCenterRef, void *observer, CFStringRef name, const void *, CFDictionaryRef userInfo);
+#endif
+
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+    static void mediaAccessibilityPreferencesChangedCallback(CFNotificationCenterRef, void *observer, CFStringRef name, const void *, CFDictionaryRef userInfo);
+#endif
+
 #if PLATFORM(MAC)
     static void colorPreferencesDidChangeCallback(CFNotificationCenterRef, void *observer, CFStringRef name, const void *, CFDictionaryRef userInfo);
 #endif
@@ -592,6 +595,10 @@ private:
     void systemDidWake() final;
 #endif
 
+#if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
+    void setMediaAccessibilityPreferences(WebProcessProxy&);
+#endif
+
     Ref<API::ProcessPoolConfiguration> m_configuration;
 
     IPC::MessageReceiverMap m_messageReceiverMap;
@@ -605,7 +612,7 @@ private:
     static WeakHashSet<WebProcessProxy>& serviceWorkerProcesses();
     bool m_waitingForWorkerContextProcessConnection { false };
     String m_serviceWorkerUserAgent;
-    Optional<WebPreferencesStore> m_serviceWorkerPreferences;
+    std::optional<WebPreferencesStore> m_serviceWorkerPreferences;
     RefPtr<WebUserContentControllerProxy> m_userContentControllerForServiceWorker;
 #endif
 
@@ -764,12 +771,12 @@ private:
     WebProcessWithAudibleMediaCounter m_webProcessWithAudibleMediaCounter;
 
     struct AudibleMediaActivity {
-        UniqueRef<ProcessAssertion> uiProcessMediaPlaybackAssertion;
+        Ref<ProcessAssertion> uiProcessMediaPlaybackAssertion;
 #if ENABLE(GPU_PROCESS)
-        std::unique_ptr<ProcessAssertion> gpuProcessMediaPlaybackAssertion;
+        RefPtr<ProcessAssertion> gpuProcessMediaPlaybackAssertion;
 #endif
     };
-    Optional<AudibleMediaActivity> m_audibleMediaActivity;
+    std::optional<AudibleMediaActivity> m_audibleMediaActivity;
 
 #if PLATFORM(PLAYSTATION)
     int32_t m_userId { -1 };

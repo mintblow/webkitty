@@ -34,8 +34,6 @@ fast/zooming/ios [ Pass ]
 http/tests/preload/viewport [ Pass ]
 http/tests/gzip-content-encoding [ Pass ]
 
-imported/w3c/web-platform-tests/dom/events/document-level-touchmove-event-listener-passive-by-default.html [ Pass ]
-
 imported/w3c/web-platform-tests/speech-api/ [ Pass ]
 
 #//////////////////////////////////////////////////////////////////////////////////////////
@@ -402,6 +400,10 @@ editing/selection/user-select-all-image-with-single-click.html [ Skip ]
 editing/selection/user-select-all-selection.html [ Skip ]
 editing/selection/user-select-all-with-shift.html [ Skip ]
 editing/selection/user-select-all-with-single-click.html [ Skip ]
+editing/selection/select-out-of-floated-non-editable-13.html [ Skip ]
+editing/selection/selecting-content-by-overshooting-the-flex-container.html [ Skip ]
+editing/selection/selecting-content-by-overshooting-the-deprecated-flex-container.html [ Skip ]
+editing/selection/selecting-content-by-overshooting-the-grid-container.html [ Skip ]
 editing/spelling/context-menu-suggestions-multiword-selection.html [ Skip ]
 editing/spelling/context-menu-suggestions-subword-selection.html [ Skip ]
 editing/spelling/context-menu-suggestions.html [ Skip ]
@@ -454,6 +456,7 @@ fast/events/click-range-slider.html [ Skip ]
 fast/events/clientXY-in-zoom-and-scroll.html [ Skip ]
 fast/events/context-onmousedown-event.html [ Skip ]
 fast/events/contextmenu-actions-in-selected-text.html [ Skip ]
+fast/events/contextmenu-lookup-action-for-image.html [ Skip ]
 fast/events/contextmenu-scrolled-page-with-frame.html [ Skip ]
 fast/events/data-transfer-files-attribute-identity.html [ Skip ]
 fast/events/dblclick-addEventListener.html [ Skip ]
@@ -805,9 +808,6 @@ webkit.org/b/164888 fast/shadow-dom/focus-navigation-passes-shadow-host.html [ S
 webkit.org/b/164888 fast/shadow-dom/focus-navigation-passes-svg-use-element.html [ Skip ]
 webkit.org/b/202497 imported/w3c/web-platform-tests/shadow-dom/focus/ [ Skip ]
 imported/w3c/web-platform-tests/shadow-dom/focus/focus-pseudo-matches-on-shadow-host.html [ Pass ]
-imported/w3c/web-platform-tests/shadow-dom/focus/focus-pseudo-on-shadow-host-1.html [ Pass ]
-imported/w3c/web-platform-tests/shadow-dom/focus/focus-pseudo-on-shadow-host-2.html [ Pass ]
-imported/w3c/web-platform-tests/shadow-dom/focus/focus-pseudo-on-shadow-host-3.html [ Pass ]
 
 # This test needs to be rewritten to use runUIScript to work on iOS
 webkit.org/b/152993 http/tests/contentdispositionattachmentsandbox/form-submission-disabled.html [ Skip ]
@@ -1092,7 +1092,6 @@ css3/color-filters/color-filter-caret-color.html [ Skip ]
 css3/color-filters/color-filter-ignore-semantic.html [ Skip ]
 
 # WebCryptoAPI features that enabled only for iOS 11/High Sierra+
-imported/w3c/web-platform-tests/WebCryptoAPI/wrapKey_unwrapKey/test_wrapKey_unwrapKey.https.html [ Pass Failure ]
 crypto/subtle/rsa-pss-generate-export-key-jwk-sha1.html [ Pass ]
 crypto/subtle/rsa-pss-generate-export-key-jwk-sha224.html [ Pass ]
 crypto/subtle/rsa-pss-generate-export-key-jwk-sha256.html [ Pass ]
@@ -2117,6 +2116,9 @@ accessibility/attachment-element.html [ Pass ]
 # Enable Text marker tests for iOS
 webkit.org/b/153292 accessibility/text-marker [ Pass ]
 
+# Skip accessibility text recognition tests on iOS 14 and earlier.
+accessibility/ios-simulator/image-overlay-elements.html
+
 # More flaky tests (Sept 18, 2015)
 
 fast/forms/select-element-focus-ring.html [ Failure Pass ]
@@ -2151,9 +2153,6 @@ imported/blink/fast/text/soft-hyphen-simple-text.html [ ImageOnlyFailure Pass ]
 imported/blink/fast/transforms/mirror-transform-tiled-scaled-background.html [ ImageOnlyFailure Pass ]
 imported/blink/fullscreen/full-screen-detached-document.html [ Skip ]
 imported/blink/http/tests/plugins/get-url-notify-on-removal.html [ Skip ]
-imported/blink/http/tests/security/referrer-policy-attribute-img-origin-when-crossorigin.html [ ImageOnlyFailure Pass ]
-imported/blink/http/tests/security/referrer-policy-attribute-img-origin.html [ ImageOnlyFailure Pass ]
-imported/blink/http/tests/security/referrer-policy-attribute-img-picture.html [ ImageOnlyFailure Pass ]
 imported/blink/plugins/empty-per-context-data.html [ Skip ]
 imported/blink/svg/as-background-image/overflow-auto.html [ ImageOnlyFailure Pass ]
 imported/blink/svg/as-image/overflow-auto.html [ ImageOnlyFailure Pass ]
@@ -2193,7 +2192,6 @@ webkit.org/b/152442 fast/scrolling/rtl-point-in-iframe.html [ Skip ]
 
 webkit.org/b/152701 fast/animation/request-animation-frame-disabled.html [ Skip ]
 
-webkit.org/b/152282 css3/filters/composited-during-animation-layertree.html [ Failure ]
 webkit.org/b/152282 css3/filters/composited-during-transition-layertree.html [ Failure ]
 
 webkit.org/b/152935 fast/scrolling/scroll-position-on-reload-rtl.html [ Failure ]
@@ -2289,6 +2287,7 @@ fast/dom/Window/child-window-focus.html
 # iOS does not allow you to scroll by dragging the scrollbar thumb.
 webkit.org/b/157201 fast/scrolling/rtl-drag-vertical-scroller.html [ Failure ]
 webkit.org/b/157201 css3/scroll-snap/scroll-snap-drag-scrollbar-thumb.html [ Failure ]
+webkit.org/b/157201 css3/scroll-snap/scroll-snap-drag-scrollbar-thumb-with-relayouts.html [ Failure ]
 
 # DumpRenderTree doesn't support logging calls to runOpenPanel and iOS's WebKitTestRunner doesn't support eventSender.mouseDown.
 fast/forms/file/open-file-panel.html [ Skip ]
@@ -2312,9 +2311,6 @@ webkit.org/b/159214 fast/multicol/fixed-stack.html [ ImageOnlyFailure ]
 webkit.org/b/157592 fast/images/composited-animated-gif-outside-viewport.html [ Pass Timeout ]
 
 webkit.org/b/156561 perf/rel-list-remove.html [ Pass Timeout Failure ]
-
-webkit.org/b/163332 imported/w3c/web-platform-tests/fetch/api/request/request-cache-reload.html [ Pass Failure ]
-webkit.org/b/163332 imported/w3c/web-platform-tests/fetch/api/request/request-cache-only-if-cached.html [ Pass Failure ]
 
 webkit.org/b/172403 imported/blink/storage/indexeddb/blob-valid-after-deletion.html [ Pass Timeout ]
 
@@ -2890,6 +2886,7 @@ webkit.org/b/198543 imported/w3c/web-platform-tests/css/css-text/line-break/line
 fast/dynamic/mail-autosize-viewport-unit.html [ Failure ]
 fast/dynamic/size-to-content-autosize-with-viewport-units.html [ Failure ]
 fast/dynamic/size-to-content-autosize-with-percent-document-height.html [ Failure ]
+fast/dynamic/mail-autosize-with-iframe.html [ Failure ]
 
 # LFC
 fast/block/basic/inline-content-with-floating-image.html [ Failure ]
@@ -3034,6 +3031,7 @@ fast/forms/password-scrolled-after-caps-lock-toggled.html [ Pass ]
 # <rdar://problem/48781098> HEIF and HEICS images are supported only on iOS 13
 fast/images/animated-heics-draw.html [ Pass ]
 fast/images/animated-heics-verify.html [ Pass ]
+fast/images/heic-as-background-image.html [ Pass ]
 
 # <rdar://problem/40172428> REGRESSION: LayoutTests fast/text/font-collection.html and fast/text/woff2.html are failing
 webkit.org/b/212172 fast/text/font-collection.html [ ImageOnlyFailure ]
@@ -3179,8 +3177,6 @@ webkit.org/b/202003 imported/w3c/web-platform-tests/websockets/bufferedAmount-un
 
 webkit.org/b/213516 imported/w3c/web-platform-tests/websockets/Close-reason-unpaired-surrogates.any.html [ Pass Failure ]
 webkit.org/b/213516 imported/w3c/web-platform-tests/websockets/Close-reason-unpaired-surrogates.any.worker.html [ Pass Failure ]
-webkit.org/b/213516 imported/w3c/web-platform-tests/websockets/Secure-Close-Reason-Unpaired-surrogates.any.html [ Pass Failure ]
-webkit.org/b/213516 imported/w3c/web-platform-tests/websockets/Secure-Close-Reason-Unpaired-surrogates.any.worker.html [ Pass Failure ]
 
 webkit.org/b/207762 http/wpt/service-workers/check-service-worker-header.https.html [ Pass Failure ]
 
@@ -3248,6 +3244,7 @@ webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-
 webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-013.html [ Skip ]
 webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-019.html [ Skip ]
 webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-021.html [ Skip ]
+webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-022.tentative.html [ Skip ]
 webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-script-focus-004.html [ Skip ]
 webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-script-focus-005.html [ Skip ]
 webkit.org/b/209734 imported/w3c/web-platform-tests/css/selectors/focus-visible-script-focus-012.html [ Skip ]
@@ -3303,7 +3300,6 @@ fast/forms/datetimelocal/datetimelocal-show-hide-picker.html [ Skip ]
 
 # <rdar://problem/59636115> REGRESSION: [ iOS & macOS ] two imported/w3c/web-platform-tests/WebCryptoAPI are failing
 imported/w3c/web-platform-tests/WebCryptoAPI/import_export/rsa_importKey.https.worker.html [ Failure ]
-imported/w3c/web-platform-tests/WebCryptoAPI/import_export/test_rsa_importKey.https.html [ Failure ]
 
 # <rdar://problem/57029120> Reenable crypto/workers/subtle/rsa-postMessage-worker.html and crypto/subtle/aes-cbc-import-key-wrap-jwk-rsa-key-private.html for iOS
 crypto/workers/subtle/rsa-postMessage-worker.html [ Skip ]
@@ -3337,8 +3333,8 @@ webkit.org/b/215515 imported/w3c/web-platform-tests/user-timing/measure_navigati
 media/media-continues-playing-after-replace-source.html [ Pass Failure ]
 
 imported/w3c/web-platform-tests/speech-api/SpeechSynthesis-speak-twice.html [ Skip ]
-imported/w3c/web-platform-tests/speech-api/SpeechSynthesis-speak-with-activation-succeeds.html [ Skip ]
 imported/w3c/web-platform-tests/speech-api/SpeechSynthesis-speak-without-activation-fails.tentative.html [ Skip ]
+webkit.org/b/227501 [ Debug ] imported/w3c/web-platform-tests/speech-api/SpeechSynthesis-speak-events.html [ Skip ]
 
 # This test fails in iOS due to subpixel differences for the marker position
 imported/w3c/web-platform-tests/css/css-lists/list-style-type-string-002.html [ ImageOnlyFailure ]
@@ -3353,12 +3349,22 @@ webkit.org/b/219105 platform/ios/ios/fast/text/opticalFontWithTextStyle.html [ F
 
 webkit.org/b/219460 imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-perfect-negotiation.https.html [ Skip ]
 
+webkit.org/b/226906 editing/deleting/smart-delete-paragraph-004.html [ Pass Failure ]
+
 # The system font does not handle all the various width values on iOS.
 fast/text/system-font-width-4.html [ ImageOnlyFailure ]
 fast/text/system-font-width-6.html [ ImageOnlyFailure ]
 fast/text/system-font-width-7.html [ ImageOnlyFailure ]
 fast/text/system-font-width-8.html [ ImageOnlyFailure ]
 fast/text/system-font-width-9.html [ ImageOnlyFailure ]
+
+# rdar://80345578 ([ Mac iOS Debug ] imported/w3c/web-platform-tests/webaudio/the-audio-api/the-audiobuffersourcenode-interface/sub-sample-buffer-stitching.html is flaky crashing)
+imported/w3c/web-platform-tests/webaudio/the-audio-api/the-audiobuffersourcenode-interface/sub-sample-buffer-stitching.html [ Pass Failure Crash ]
+
+webkit.org/b/225606 imported/w3c/web-platform-tests/css/css-fonts/font-feature-resolution-001.html [ ImageOnlyFailure ]
+webkit.org/b/225606 imported/w3c/web-platform-tests/css/css-fonts/font-feature-resolution-002.html [ ImageOnlyFailure ]
+
+webkit.org/b/225607 imported/w3c/web-platform-tests/css/css-color-adjust/rendering/dark-color-scheme/color-scheme-system-colors.html [ Failure ]
 
 webkit.org/b/221486 imported/w3c/web-platform-tests/shadow-dom/nested-slot-remove-crash.html [ Skip ]
 
@@ -3378,3 +3384,10 @@ webkit.org/b/222844 imported/blink/compositing/draws-content/webgl-simple-backgr
 webkit.org/b/222239 webgl/conformance/extensions/khr-parallel-shader-compile.html [ Skip ]
 
 fast/text/line-break-with-locale.html [ ImageOnlyFailure ]
+
+# Skip WebXR tests on iOS
+imported/w3c/web-platform-tests/webxr [ Skip ]
+http/wpt/webxr [ Skip ]
+
+# WebM is not supported on iOS
+http/tests/media/video-webm-stall.html [ Skip ]

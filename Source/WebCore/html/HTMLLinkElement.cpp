@@ -64,6 +64,7 @@
 #include <wtf/Ref.h>
 #include <wtf/Scope.h>
 #include <wtf/StdLibExtras.h>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 
@@ -171,10 +172,6 @@ void HTMLLinkElement::parseAttribute(const QualifiedName& name, const AtomString
         return;
     }
     if (name == hrefAttr) {
-        bool wasLink = isLink();
-        setIsLink(!value.isNull() && !shouldProhibitLinks(this));
-        if (wasLink != isLink())
-            invalidateStyleForSubtree();
         process();
         return;
     }
@@ -285,9 +282,11 @@ void HTMLLinkElement::process()
     if (!treatAsStyleSheet)
         treatAsStyleSheet = document().settings().treatsAnyTextCSSLinkAsStylesheet() && m_type.containsIgnoringASCIICase("text/css");
 
+    LOG_WITH_STREAM(StyleSheets, stream << "HTMLLinkElement " << this << " process() - treatAsStyleSheet " << treatAsStyleSheet);
+
     if (m_disabledState != Disabled && treatAsStyleSheet && document().frame() && url.isValid()) {
         String charset = attributeWithoutSynchronization(charsetAttr);
-        if (charset.isEmpty())
+        if (!TextEncoding { charset }.isValid())
             charset = document().charset();
 
         if (m_cachedSheet) {
@@ -308,7 +307,7 @@ void HTMLLinkElement::process()
 
         bool mediaQueryMatches = true;
         if (!m_media.isEmpty()) {
-            Optional<RenderStyle> documentStyle;
+            std::optional<RenderStyle> documentStyle;
             if (document().hasLivingRenderTree())
                 documentStyle = Style::resolveForDocument(document());
             auto media = MediaQuerySet::create(m_media, MediaQueryParserContext(document()));
@@ -322,7 +321,7 @@ void HTMLLinkElement::process()
         addPendingSheet(isActive ? ActiveSheet : InactiveSheet);
 
         // Load stylesheets that are not needed for the rendering immediately with low priority.
-        Optional<ResourceLoadPriority> priority;
+        std::optional<ResourceLoadPriority> priority;
         if (!isActive)
             priority = DefaultResourceLoadPriority::inactiveStyleSheet;
 
@@ -415,7 +414,7 @@ void HTMLLinkElement::finishParsingChildren()
 void HTMLLinkElement::initializeStyleSheet(Ref<StyleSheetContents>&& styleSheet, const CachedCSSStyleSheet& cachedStyleSheet, MediaQueryParserContext context)
 {
     // FIXME: originClean should be turned to false except if fetch mode is CORS.
-    Optional<bool> originClean;
+    std::optional<bool> originClean;
     if (cachedStyleSheet.options().mode == FetchOptions::Mode::Cors)
         originClean = cachedStyleSheet.isCORSSameOrigin();
 
@@ -607,7 +606,7 @@ const AtomString& HTMLLinkElement::type() const
     return attributeWithoutSynchronization(typeAttr);
 }
 
-Optional<LinkIconType> HTMLLinkElement::iconType() const
+std::optional<LinkIconType> HTMLLinkElement::iconType() const
 {
     return m_relAttribute.iconType;
 }
@@ -677,8 +676,13 @@ String HTMLLinkElement::referrerPolicyForBindings() const
 ReferrerPolicy HTMLLinkElement::referrerPolicy() const
 {
     if (document().settings().referrerPolicyAttributeEnabled())
-        return parseReferrerPolicy(attributeWithoutSynchronization(referrerpolicyAttr), ReferrerPolicySource::ReferrerPolicyAttribute).valueOr(ReferrerPolicy::EmptyString);
+        return parseReferrerPolicy(attributeWithoutSynchronization(referrerpolicyAttr), ReferrerPolicySource::ReferrerPolicyAttribute).value_or(ReferrerPolicy::EmptyString);
     return ReferrerPolicy::EmptyString;
+}
+
+String HTMLLinkElement::debugDescription() const
+{
+    return makeString(HTMLElement::debugDescription(), ' ', type(), ' ', href().string());
 }
 
 } // namespace WebCore

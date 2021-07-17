@@ -128,7 +128,7 @@ public:
 
     // Geolocation.
     void setGeolocationPermission(bool);
-    void setMockGeolocationPosition(double latitude, double longitude, double accuracy, Optional<double> altitude, Optional<double> altitudeAccuracy, Optional<double> heading, Optional<double> speed, Optional<double> floorLevel);
+    void setMockGeolocationPosition(double latitude, double longitude, double accuracy, std::optional<double> altitude, std::optional<double> altitudeAccuracy, std::optional<double> heading, std::optional<double> speed, std::optional<double> floorLevel);
     void setMockGeolocationPositionUnavailableError(WKStringRef errorMessage);
     void handleGeolocationPermissionRequest(WKGeolocationPermissionRequestRef);
     bool isGeolocationProviderActive() const;
@@ -262,8 +262,9 @@ public:
     void clearLoadedSubresourceDomains();
     void clearAppBoundSession();
     void reinitializeAppBoundDomains();
-    void appBoundRequestContextDataForDomain(WKStringRef);
-    void clearAppBoundNavigationData();
+    void clearAppPrivacyReportTestingData();
+    bool didLoadAppInitiatedRequest();
+    bool didLoadNonAppInitiatedRequest();
 
     void updateBundleIdentifierInNetworkProcess(const std::string& bundleIdentifier);
     void clearBundleIdentifierInNetworkProcess();
@@ -361,7 +362,7 @@ public:
     void completeMediaKeySystemPermissionCheck(WKMediaKeySystemPermissionCallbackRef);
     void setIsMediaKeySystemPermissionGranted(bool);
 
-    void didNotHandleTapAsMeaningfulClick();
+    void didHandleTap(bool wasMeaningful);
 
 private:
     WKRetainPtr<WKPageConfigurationRef> generatePageConfiguration(const TestOptions&);
@@ -467,8 +468,8 @@ private:
     bool downloadDidReceiveServerRedirectToURL(WKDownloadRef, WKURLRequestRef);
     static void downloadDidReceiveAuthenticationChallenge(WKDownloadRef, WKAuthenticationChallengeRef, const void *clientInfo);
     
-    static void processDidCrash(WKPageRef, const void* clientInfo);
-    void processDidCrash();
+    static void webProcessDidTerminate(WKPageRef,  WKProcessTerminationReason, const void* clientInfo);
+    void webProcessDidTerminate(WKProcessTerminationReason);
 
     static void didBeginNavigationGesture(WKPageRef, const void*);
     static void willEndNavigationGesture(WKPageRef, WKBackForwardListItemRef, const void*);

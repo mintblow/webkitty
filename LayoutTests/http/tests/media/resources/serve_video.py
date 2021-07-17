@@ -146,9 +146,9 @@ if settings['setIcyData'] == 'yes':
         # be create previously.
         #
         # Check the instructions about how to create it from the
-        # create-id3-db.php script file in this same directory.
+        # create-id3-db script file in LayoutTests/media/content.
 
-        sys.stderr.write('The metadata database doesn\'t exist. To create one, check the script \'create-id3-db.php\'.\n')
+        sys.stderr.write('The metadata database doesn\'t exist. To create one, check the script \'LayoutTests/media/content/create-id3-db\'.\n')
         answering()
 
     play_files = {}
@@ -158,7 +158,7 @@ if settings['setIcyData'] == 'yes':
 
     for play_file in play_files:
         file_index_in_db += 1
-        if file_name.split('/')[-1] == play_file['fileName']:
+        if os.path.basename(file_name) == play_file['fileName']:
             file_in_db = True
             break
 

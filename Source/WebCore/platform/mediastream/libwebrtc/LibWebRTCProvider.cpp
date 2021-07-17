@@ -238,6 +238,12 @@ void LibWebRTCProvider::callOnWebRTCSignalingThread(Function<void()>&& callback)
     threads.signalingThread->Post(RTC_FROM_HERE, &threads, 1, new ThreadMessageData(WTFMove(callback)));
 }
 
+rtc::Thread& LibWebRTCProvider::signalingThread()
+{
+    PeerConnectionFactoryAndThreads& threads = staticFactoryAndThreads();
+    return *threads.signalingThread;
+}
+
 void LibWebRTCProvider::setLoggingLevel(WTFLogLevel level)
 {
     setRTCLogging(level);
@@ -264,7 +270,7 @@ rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> LibWebRTCProvider::cr
 {
     auto audioModule = rtc::scoped_refptr<webrtc::AudioDeviceModule>(new rtc::RefCountedObject<LibWebRTCAudioModule>());
 
-    return webrtc::CreatePeerConnectionFactory(networkThread, signalingThread, signalingThread, WTFMove(audioModule), webrtc::CreateBuiltinAudioEncoderFactory(), webrtc::CreateBuiltinAudioDecoderFactory(), createEncoderFactory(), createDecoderFactory(), nullptr, nullptr);
+    return webrtc::CreatePeerConnectionFactory(networkThread, signalingThread, signalingThread, WTFMove(audioModule), webrtc::CreateBuiltinAudioEncoderFactory(), webrtc::CreateBuiltinAudioDecoderFactory(), createEncoderFactory(), createDecoderFactory(), nullptr, nullptr, nullptr);
 }
 
 std::unique_ptr<webrtc::VideoDecoderFactory> LibWebRTCProvider::createDecoderFactory()
@@ -279,7 +285,8 @@ std::unique_ptr<webrtc::VideoEncoderFactory> LibWebRTCProvider::createEncoderFac
 
 void LibWebRTCProvider::setPeerConnectionFactory(rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface>&& factory)
 {
-    m_factory = webrtc::PeerConnectionFactoryProxy::Create(getStaticFactoryAndThreads(m_useNetworkThreadWithSocketServer).signalingThread.get(), WTFMove(factory));
+    auto* thread = getStaticFactoryAndThreads(m_useNetworkThreadWithSocketServer).signalingThread.get();
+    m_factory = webrtc::PeerConnectionFactoryProxy::Create(thread, thread, WTFMove(factory));
 }
 
 void LibWebRTCProvider::disableEnumeratingAllNetworkInterfaces()
@@ -353,7 +360,11 @@ rtc::scoped_refptr<webrtc::PeerConnectionInterface> LibWebRTCProvider::createPee
     dependencies.allocator = WTFMove(portAllocator);
     dependencies.async_resolver_factory = WTFMove(asyncResolveFactory);
 
-    return m_factory->CreatePeerConnection(configuration, WTFMove(dependencies));
+    auto peerConnectionOrError = m_factory->CreatePeerConnectionOrError(configuration, WTFMove(dependencies));
+    if (!peerConnectionOrError.ok())
+        return nullptr;
+
+    return peerConnectionOrError.MoveValue();
 }
 
 void LibWebRTCProvider::prepareCertificateGenerator(Function<void(rtc::RTCCertificateGenerator&)>&& callback)
@@ -368,7 +379,7 @@ void LibWebRTCProvider::prepareCertificateGenerator(Function<void(rtc::RTCCertif
     });
 }
 
-static inline Optional<cricket::MediaType> typeFromKind(const String& kind)
+static inline std::optional<cricket::MediaType> typeFromKind(const String& kind)
 {
     if (kind == "audio"_s)
         return cricket::MediaType::MEDIA_TYPE_AUDIO;
@@ -382,7 +393,7 @@ static inline String fromStdString(const std::string& value)
     return String::fromUTF8(value.data(), value.length());
 }
 
-static inline Optional<uint16_t> toChannels(absl::optional<int> numChannels)
+static inline std::optional<uint16_t> toChannels(absl::optional<int> numChannels)
 {
     if (!numChannels)
         return { };
@@ -414,7 +425,7 @@ static inline RTCRtpCapabilities toRTCRtpCapabilities(const webrtc::RtpCapabilit
     return capabilities;
 }
 
-Optional<RTCRtpCapabilities> LibWebRTCProvider::receiverCapabilities(const String& kind)
+std::optional<RTCRtpCapabilities> LibWebRTCProvider::receiverCapabilities(const String& kind)
 {
     auto mediaType = typeFromKind(kind);
     if (!mediaType)
@@ -427,7 +438,7 @@ Optional<RTCRtpCapabilities> LibWebRTCProvider::receiverCapabilities(const Strin
     return toRTCRtpCapabilities(factory->GetRtpReceiverCapabilities(*mediaType));
 }
 
-Optional<RTCRtpCapabilities> LibWebRTCProvider::senderCapabilities(const String& kind)
+std::optional<RTCRtpCapabilities> LibWebRTCProvider::senderCapabilities(const String& kind)
 {
     auto mediaType = typeFromKind(kind);
     if (!mediaType)

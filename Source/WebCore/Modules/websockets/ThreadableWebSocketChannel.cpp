@@ -85,11 +85,11 @@ ThreadableWebSocketChannel::ThreadableWebSocketChannel()
 {
 }
 
-Optional<ThreadableWebSocketChannel::ValidatedURL> ThreadableWebSocketChannel::validateURL(Document& document, const URL& requestedURL)
+std::optional<ThreadableWebSocketChannel::ValidatedURL> ThreadableWebSocketChannel::validateURL(Document& document, const URL& requestedURL)
 {
     ValidatedURL validatedURL { requestedURL, true };
     if (auto* page = document.page()) {
-        if (!page->loadsFromNetwork())
+        if (!page->allowsLoadFromURL(requestedURL))
             return { };
 #if ENABLE(CONTENT_EXTENSIONS)
         if (auto* documentLoader = document.loader()) {
@@ -109,7 +109,7 @@ Optional<ThreadableWebSocketChannel::ValidatedURL> ThreadableWebSocketChannel::v
     return validatedURL;
 }
 
-Optional<ResourceRequest> ThreadableWebSocketChannel::webSocketConnectRequest(Document& document, const URL& url)
+std::optional<ResourceRequest> ThreadableWebSocketChannel::webSocketConnectRequest(Document& document, const URL& url)
 {
     auto validatedURL = validateURL(document, url);
     if (!validatedURL)

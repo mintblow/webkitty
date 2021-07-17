@@ -574,7 +574,7 @@ LengthBox RenderThemeIOS::popupInternalPaddingBox(const RenderStyle& style, cons
     float padding = MenuListButtonPaddingAfter;
     if (settings.iOSFormControlRefreshEnabled()) {
         auto emSize = CSSPrimitiveValue::create(1.0, CSSUnitType::CSS_EMS);
-        padding = emSize->computeLength<float>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, WTF::nullopt));
+        padding = emSize->computeLength<float>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt));
     }
 
     if (style.appearance() == MenulistButtonPart) {
@@ -1123,7 +1123,7 @@ void RenderThemeIOS::adjustButtonStyle(RenderStyle& style, const Element* elemen
     // Since the element might not be in a document, just pass nullptr for the root element style,
     // the parent element style, and the render view.
     auto emSize = CSSPrimitiveValue::create(1.0, CSSUnitType::CSS_EMS);
-    int pixels = emSize->computeLength<int>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, WTF::nullopt));
+    int pixels = emSize->computeLength<int>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt));
     style.setPaddingBox(LengthBox(0, pixels, 0, pixels));
 
     if (!element)
@@ -1229,15 +1229,15 @@ Color RenderThemeIOS::platformInactiveSelectionBackgroundColor(OptionSet<StyleCo
     return Color::transparentBlack;
 }
 
-static Optional<Color>& cachedFocusRingColor()
+static std::optional<Color>& cachedFocusRingColor()
 {
-    static NeverDestroyed<Optional<Color>> color;
+    static NeverDestroyed<std::optional<Color>> color;
     return color;
 }
 
 Color RenderThemeIOS::systemFocusRingColor()
 {
-    if (!cachedFocusRingColor().hasValue()) {
+    if (!cachedFocusRingColor().has_value()) {
         // FIXME: Should be using -keyboardFocusIndicatorColor. For now, work around <rdar://problem/50838886>.
         cachedFocusRingColor() = colorFromUIColor([PAL::getUIColorClass() systemBlueColor]);
     }
@@ -1325,7 +1325,8 @@ static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformat
             { CSSValueAppleSystemQuaternaryLabel, @selector(quaternaryLabelColor) },
             { CSSValueAppleSystemPlaceholderText, @selector(placeholderTextColor) },
             { CSSValueAppleSystemSeparator, @selector(separatorColor) },
-            { CSSValueAppleSystemOpaqueSeparator, @selector(opaqueSeparatorColor) },
+            // FIXME: <rdar://problem/79471528> Adopt [UIColor opaqueSeparatorColor] once it has a high contrast variant.
+            { CSSValueAppleSystemOpaqueSeparator, @selector(separatorColor), true },
             { CSSValueAppleSystemContainerBorder, @selector(separatorColor) },
             { CSSValueAppleSystemControlBackground, @selector(systemBackgroundColor) },
             { CSSValueAppleSystemGrid, @selector(separatorColor) },
@@ -1340,7 +1341,7 @@ static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformat
     return cssValueSystemColorInformationList;
 }
 
-static inline Optional<Color> systemColorFromCSSValueSystemColorInformation(CSSValueSystemColorInformation systemColorInformation, bool useDarkAppearance)
+static inline std::optional<Color> systemColorFromCSSValueSystemColorInformation(CSSValueSystemColorInformation systemColorInformation, bool useDarkAppearance)
 {
     if (auto color = wtfObjCMsgSend<UIColor *>(PAL::getUIColorClass(), systemColorInformation.selector)) {
         Color systemColor = { color.CGColor, Color::Flags::Semantic };
@@ -1354,10 +1355,10 @@ static inline Optional<Color> systemColorFromCSSValueSystemColorInformation(CSSV
         return systemColor;
     }
 
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
-static Optional<Color> systemColorFromCSSValueID(CSSValueID cssValueID, bool useDarkAppearance, bool useElevatedUserInterfaceLevel)
+static std::optional<Color> systemColorFromCSSValueID(CSSValueID cssValueID, bool useDarkAppearance, bool useElevatedUserInterfaceLevel)
 {
     LocalCurrentTraitCollection localTraitCollection(useDarkAppearance, useElevatedUserInterfaceLevel);
 
@@ -1366,7 +1367,7 @@ static Optional<Color> systemColorFromCSSValueID(CSSValueID cssValueID, bool use
             return systemColorFromCSSValueSystemColorInformation(cssValueSystemColorInformation, useDarkAppearance);
     }
 
-    return WTF::nullopt;
+    return std::nullopt;
 }
 
 static RenderThemeIOS::CSSValueToSystemColorMap& globalCSSValueToSystemColorMap()
@@ -1983,11 +1984,11 @@ void RenderThemeIOS::paintSystemPreviewBadge(Image& image, const PaintInfo& pain
     IOSurfaceRef surface;
     if (useSmallBadge) {
         if (!m_smallBadgeSurface)
-            m_smallBadgeSurface = IOSurface::create({ smallBadgeDimension, smallBadgeDimension }, sRGBColorSpaceRef());
+            m_smallBadgeSurface = IOSurface::create({ smallBadgeDimension, smallBadgeDimension }, DestinationColorSpace::SRGB());
         surface = m_smallBadgeSurface->surface();
     } else {
         if (!m_largeBadgeSurface)
-            m_largeBadgeSurface = IOSurface::create({ largeBadgeDimension, largeBadgeDimension }, sRGBColorSpaceRef());
+            m_largeBadgeSurface = IOSurface::create({ largeBadgeDimension, largeBadgeDimension }, DestinationColorSpace::SRGB());
         surface = m_largeBadgeSurface->surface();
     }
     [m_ciContext.get() render:translatedImage toIOSurface:surface bounds:badgeRect colorSpace:sRGBColorSpaceRef()];
@@ -2025,17 +2026,30 @@ void RenderThemeIOS::paintSystemPreviewBadge(Image& image, const PaintInfo& pain
 
 constexpr auto nativeControlBorderWidth = 1.0f;
 
+constexpr auto checkboxRadioBorderWidth = 1.5f;
+constexpr auto checkboxRadioBorderDisabledOpacity = 0.3f;
+
+Color RenderThemeIOS::checkboxRadioBorderColor(OptionSet<ControlStates::States> states, OptionSet<StyleColor::Options> styleColorOptions)
+{
+    auto defaultBorderColor = systemColor(CSSValueAppleSystemSecondaryLabel, styleColorOptions);
+
+    if (!states.contains(ControlStates::States::Enabled))
+        return defaultBorderColor.colorWithAlphaMultipliedBy(checkboxRadioBorderDisabledOpacity);
+
+    if (states.contains(ControlStates::States::Pressed))
+        return defaultBorderColor.colorWithAlphaMultipliedBy(pressedStateOpacity);
+
+    return defaultBorderColor;
+}
+
 Color RenderThemeIOS::checkboxRadioBackgroundColor(OptionSet<ControlStates::States> states, OptionSet<StyleColor::Options> styleColorOptions)
 {
+    bool empty = !states.containsAny({ ControlStates::States::Checked, ControlStates::States::Indeterminate });
+
     if (!states.contains(ControlStates::States::Enabled))
-        return systemColor(CSSValueAppleSystemOpaqueSecondaryFillDisabled, styleColorOptions);
+        return systemColor(empty ? CSSValueWebkitControlBackground : CSSValueAppleSystemOpaqueTertiaryFill, styleColorOptions);
 
-    Color enabledBackgroundColor;
-    if (states.containsAny({ ControlStates::States::Checked, ControlStates::States::Indeterminate }))
-        enabledBackgroundColor = systemColor(CSSValueAppleSystemBlue, styleColorOptions);
-    else
-        enabledBackgroundColor = systemColor(CSSValueAppleSystemOpaqueSecondaryFill, styleColorOptions);
-
+    auto enabledBackgroundColor = systemColor(empty ? CSSValueWebkitControlBackground : CSSValueAppleSystemBlue, styleColorOptions);
     if (states.contains(ControlStates::States::Pressed))
         return enabledBackgroundColor.colorWithAlphaMultipliedBy(pressedStateOpacity);
 
@@ -2070,20 +2084,25 @@ bool RenderThemeIOS::paintCheckbox(const RenderObject& box, const PaintInfo& pai
     auto controlStates = extractControlStatesForRenderer(box);
     auto styleColorOptions = box.styleColorOptions();
 
-    context.fillRoundedRect(checkboxRect, systemColor(CSSValueWebkitControlBackground, styleColorOptions));
-
-    FloatRoundedRect checkboxInnerRoundedRect(checkboxRect);
-    checkboxInnerRoundedRect.inflateWithRadii(-nativeControlBorderWidth);
-
-    context.fillRoundedRect(checkboxInnerRoundedRect, checkboxRadioBackgroundColor(controlStates, styleColorOptions));
-
-    FloatRect checkboxInnerRect(checkboxInnerRoundedRect.rect());
+    auto backgroundColor = checkboxRadioBackgroundColor(controlStates, styleColorOptions);
 
     bool checked = controlStates.contains(ControlStates::States::Checked);
     bool indeterminate = controlStates.contains(ControlStates::States::Indeterminate);
+    bool empty = !checked && !indeterminate;
 
-    if (!checked && !indeterminate)
+    if (empty) {
+        Path path;
+        path.addRoundedRect(checkboxRect);
+        context.setStrokeColor(checkboxRadioBorderColor(controlStates, styleColorOptions));
+        context.setStrokeThickness(checkboxRadioBorderWidth * 2);
+        context.setStrokeStyle(SolidStroke);
+        context.setFillColor(backgroundColor);
+        context.clipPath(path);
+        context.drawPath(path);
         return false;
+    }
+
+    context.fillRoundedRect(checkboxRect, backgroundColor);
 
     Path path;
     if (checked) {
@@ -2102,18 +2121,18 @@ bool RenderThemeIOS::paintCheckbox(const RenderObject& box, const PaintInfo& pai
         path.addBezierCurveTo({ 23.536f, 67.675f }, { 25.536f, 68.652f }, { 28.174f, 68.652f });
 
         const FloatSize checkmarkSize(72.0f, 69.0f);
-        float scale = (0.65f * checkboxInnerRect.width()) / checkmarkSize.width();
+        float scale = (0.65f * rect.width()) / checkmarkSize.width();
 
         AffineTransform transform;
-        transform.translate(checkboxInnerRect.center() - (checkmarkSize * scale * 0.5f));
+        transform.translate(rect.center() - (checkmarkSize * scale * 0.5f));
         transform.scale(scale);
         path.transform(transform);
     } else {
         const FloatSize indeterminateBarRoundingRadii(1.25f, 1.25f);
         constexpr float indeterminateBarPadding = 2.5f;
-        float height = 0.12f * checkboxInnerRect.height();
+        float height = 0.12f * rect.height();
 
-        FloatRect indeterminateBarRect(checkboxInnerRect.x() + indeterminateBarPadding, checkboxInnerRect.center().y() - height / 2.0f, checkboxInnerRect.width() - indeterminateBarPadding * 2, height);
+        FloatRect indeterminateBarRect(rect.x() + indeterminateBarPadding, rect.center().y() - height / 2.0f, rect.width() - indeterminateBarPadding * 2, height);
         path.addRoundedRect(indeterminateBarRect, indeterminateBarRoundingRadii);
     }
 
@@ -2134,26 +2153,31 @@ bool RenderThemeIOS::paintRadio(const RenderObject& box, const PaintInfo& paintI
     auto controlStates = extractControlStatesForRenderer(box);
     auto styleColorOptions = box.styleColorOptions();
 
-    context.setFillColor(systemColor(CSSValueWebkitControlBackground, styleColorOptions));
-    context.fillEllipse(rect);
-
-    FloatRect radioRect(rect);
-    radioRect.inflate(-nativeControlBorderWidth);
-
-    context.setFillColor(checkboxRadioBackgroundColor(controlStates, styleColorOptions));
-    context.fillEllipse(radioRect);
+    auto backgroundColor = checkboxRadioBackgroundColor(controlStates, styleColorOptions);
 
     if (controlStates.contains(ControlStates::States::Checked)) {
+        context.setFillColor(backgroundColor);
+        context.fillEllipse(rect);
+
         // The inner circle is 6 / 14 the size of the surrounding circle,
         // leaving 8 / 14 around it. (8 / 14) / 2 = 2 / 7.
         constexpr float innerInverseRatio = 2 / 7.0f;
 
-        FloatRect innerCircleRect(radioRect);
+        FloatRect innerCircleRect(rect);
         innerCircleRect.inflateX(-innerCircleRect.width() * innerInverseRatio);
         innerCircleRect.inflateY(-innerCircleRect.height() * innerInverseRatio);
 
         context.setFillColor(checkboxRadioIndicatorColor(controlStates, styleColorOptions));
         context.fillEllipse(innerCircleRect);
+    } else {
+        Path path;
+        path.addEllipse(rect);
+        context.setStrokeColor(checkboxRadioBorderColor(controlStates, styleColorOptions));
+        context.setStrokeThickness(checkboxRadioBorderWidth * 2);
+        context.setStrokeStyle(SolidStroke);
+        context.setFillColor(backgroundColor);
+        context.clipPath(path);
+        context.drawPath(path);
     }
 
     return false;
@@ -2562,7 +2586,7 @@ void RenderThemeIOS::paintMenuListButtonDecorationsWithFormControlRefresh(const 
     }
 
     auto emSize = CSSPrimitiveValue::create(1.0, CSSUnitType::CSS_EMS);
-    auto emPixels = emSize->computeLength<float>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, WTF::nullopt));
+    auto emPixels = emSize->computeLength<float>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt));
     auto glyphScale = 0.65f * emPixels / glyphSize.width();
     glyphSize = glyphScale * glyphSize;
 
@@ -2590,7 +2614,7 @@ void RenderThemeIOS::adjustSearchFieldDecorationPartStyle(RenderStyle& style, co
     constexpr int searchFieldDecorationEmSize = 1;
     constexpr int searchFieldDecorationMargin = 4;
 
-    CSSToLengthConversionData conversionData(&style, nullptr, nullptr, nullptr, 1.0, WTF::nullopt);
+    CSSToLengthConversionData conversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt);
 
     auto emSize = CSSPrimitiveValue::create(searchFieldDecorationEmSize, CSSUnitType::CSS_EMS);
     auto size = emSize->computeLength<float>(conversionData);

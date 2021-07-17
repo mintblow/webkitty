@@ -35,7 +35,6 @@
 #include "DFGJITCode.h"
 #include "DFGToFTLDeferredCompilationCallback.h"
 #include "DFGToFTLForOSREntryDeferredCompilationCallback.h"
-#include "DFGWorklist.h"
 #include "DateInstance.h"
 #include "DefinePropertyAttributes.h"
 #include "DirectArguments.h"
@@ -44,6 +43,7 @@
 #include "FrameTracers.h"
 #include "HasOwnPropertyCache.h"
 #include "Interpreter.h"
+#include "JITWorklist.h"
 #include "JSArrayInlines.h"
 #include "JSArrayIterator.h"
 #include "JSAsyncGenerator.h"
@@ -63,7 +63,7 @@
 #include "JSWeakMapInlines.h"
 #include "JSWeakSet.h"
 #include "NumberConstructor.h"
-#include "ObjectConstructor.h"
+#include "ObjectConstructorInlines.h"
 #include "Operations.h"
 #include "ParseInt.h"
 #include "RegExpGlobalDataInlines.h"
@@ -117,7 +117,7 @@ ALWAYS_INLINE static void putByValInternal(JSGlobalObject* globalObject, VM& vm,
     JSValue property = JSValue::decode(encodedProperty);
     JSValue value = JSValue::decode(encodedValue);
 
-    if (Optional<uint32_t> index = property.tryGetAsUint32Index()) {
+    if (std::optional<uint32_t> index = property.tryGetAsUint32Index()) {
         scope.release();
         putByVal<strict, direct>(globalObject, vm, baseValue, *index, value);
         return;
@@ -131,7 +131,7 @@ ALWAYS_INLINE static void putByValInternal(JSGlobalObject* globalObject, VM& vm,
     if (direct) {
         RELEASE_ASSERT(baseValue.isObject());
         JSObject* baseObject = asObject(baseValue);
-        if (Optional<uint32_t> index = parseIndex(propertyName)) {
+        if (std::optional<uint32_t> index = parseIndex(propertyName)) {
             scope.release();
             baseObject->putDirectIndex(globalObject, index.value(), value, 0, strict ? PutDirectIndexShouldThrow : PutDirectIndexShouldNotThrow);
             return;
@@ -151,7 +151,7 @@ ALWAYS_INLINE static void putByValCellInternal(JSGlobalObject* globalObject, VM&
     if (direct) {
         RELEASE_ASSERT(base->isObject());
         JSObject* baseObject = asObject(base);
-        if (Optional<uint32_t> index = parseIndex(propertyName)) {
+        if (std::optional<uint32_t> index = parseIndex(propertyName)) {
             baseObject->putDirectIndex(globalObject, index.value(), value, 0, strict ? PutDirectIndexShouldThrow : PutDirectIndexShouldNotThrow);
             return;
         }
@@ -302,6 +302,100 @@ JSC_DEFINE_JIT_OPERATION(operationObjectCreateObject, JSCell*, (JSGlobalObject* 
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
     return constructEmptyObject(globalObject, prototype);
+}
+
+JSC_DEFINE_JIT_OPERATION(operationObjectAssignObject, void, (JSGlobalObject* globalObject, JSObject* target, JSObject* source))
+{
+    VM& vm = globalObject->vm();
+    CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
+    JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    bool targetCanPerformFastPut = jsDynamicCast<JSFinalObject*>(vm, target) && target->canPerformFastPutInlineExcludingProto(vm) && target->isStructureExtensible(vm);
+
+    if (targetCanPerformFastPut) {
+        Vector<RefPtr<UniquedStringImpl>, 8> properties;
+        MarkedArgumentBuffer values;
+        if (!source->staticPropertiesReified(vm)) {
+            source->reifyAllStaticProperties(globalObject);
+            RETURN_IF_EXCEPTION(scope, void());
+        }
+
+        if (canPerformFastPropertyEnumerationForObjectAssign(source->structure(vm))) {
+            // |source| Structure does not have any getters. And target can perform fast put.
+            // So enumerating properties and putting properties are non observable.
+
+            // FIXME: It doesn't seem like we should have to do this in two phases, but
+            // we're running into crashes where it appears that source is transitioning
+            // under us, and even ends up in a state where it has a null butterfly. My
+            // leading hypothesis here is that we fire some value replacement watchpoint
+            // that ends up transitioning the structure underneath us.
+            // https://bugs.webkit.org/show_bug.cgi?id=187837
+
+            // FIXME: This fast path is very similar to ObjectConstructor' one. But extracting it to a function caused performance
+            // regression in object-assign-replace. Since the code is small and fast path, we keep both.
+
+            // Do not clear since Vector::clear shrinks the backing store.
+            properties.resize(0);
+            values.clear();
+            source->structure(vm)->forEachProperty(vm, [&] (const PropertyMapEntry& entry) -> bool {
+                if (entry.attributes & PropertyAttribute::DontEnum)
+                    return true;
+
+                PropertyName propertyName(entry.key);
+                if (propertyName.isPrivateName())
+                    return true;
+
+                properties.append(entry.key);
+                values.appendWithCrashOnOverflow(source->getDirect(entry.offset));
+
+                return true;
+            });
+
+            for (size_t i = 0; i < properties.size(); ++i) {
+                // FIXME: We could put properties in a batching manner to accelerate Object.assign more.
+                // https://bugs.webkit.org/show_bug.cgi?id=185358
+                PutPropertySlot putPropertySlot(target, true);
+                target->putOwnDataProperty(vm, properties[i].get(), values.at(i), putPropertySlot);
+            }
+            return;
+        }
+    }
+
+    scope.release();
+    objectAssignGeneric(globalObject, vm, target, source);
+}
+
+JSC_DEFINE_JIT_OPERATION(operationObjectAssignUntyped, void, (JSGlobalObject* globalObject, JSObject* target, EncodedJSValue encodedSource))
+{
+    VM& vm = globalObject->vm();
+    CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
+    JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+
+    bool targetCanPerformFastPut = jsDynamicCast<JSFinalObject*>(vm, target) && target->canPerformFastPutInlineExcludingProto(vm) && target->isStructureExtensible(vm);
+
+    JSValue sourceValue = JSValue::decode(encodedSource);
+    if (sourceValue.isUndefinedOrNull())
+        return;
+    JSObject* source = sourceValue.toObject(globalObject);
+    RETURN_IF_EXCEPTION(scope, void());
+
+    if (targetCanPerformFastPut) {
+        if (!source->staticPropertiesReified(vm)) {
+            source->reifyAllStaticProperties(globalObject);
+            RETURN_IF_EXCEPTION(scope, void());
+        }
+
+        if (canPerformFastPropertyEnumerationForObjectAssign(source->structure(vm))) {
+            Vector<RefPtr<UniquedStringImpl>, 8> properties;
+            MarkedArgumentBuffer values;
+            objectAssignFast(vm, target, source, properties, values);
+            return;
+        }
+    }
+
+    scope.release();
+    objectAssignGeneric(globalObject, vm, target, source);
 }
 
 JSC_DEFINE_JIT_OPERATION(operationCreateThis, JSCell*, (JSGlobalObject* globalObject, JSObject* constructor, uint32_t inlineCapacity))
@@ -662,7 +756,7 @@ JSC_DEFINE_JIT_OPERATION(operationGetByValCell, EncodedJSValue, (JSGlobalObject*
 
     JSValue property = JSValue::decode(encodedProperty);
 
-    if (Optional<uint32_t> index = property.tryGetAsUint32Index())
+    if (std::optional<uint32_t> index = property.tryGetAsUint32Index())
         RELEASE_AND_RETURN(scope, getByValWithIndex(globalObject, base, *index));
 
     if (property.isString()) {
@@ -1039,7 +1133,9 @@ JSC_DEFINE_JIT_OPERATION(operationArrayPushMultiple, EncodedJSValue, (JSGlobalOb
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+    ActiveScratchBufferScope activeScratchBufferScope(ScratchBuffer::fromData(buffer), elementCount);
     auto scope = DECLARE_THROW_SCOPE(vm);
+
 
     // We assume that multiple JSArray::push calls with ArrayWithInt32/ArrayWithContiguous do not cause JS traps.
     // If it can cause any JS interactions, we can call the caller JS function of this function and overwrite the
@@ -1064,6 +1160,7 @@ JSC_DEFINE_JIT_OPERATION(operationArrayPushDoubleMultiple, EncodedJSValue, (JSGl
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+    // Don't need a ActiveScratchBufferScope here because the scratch buffer only contains double values for this call.
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     // We assume that multiple JSArray::push calls with ArrayWithDouble do not cause JS traps.
@@ -1559,7 +1656,7 @@ JSC_DEFINE_JIT_OPERATION(operationGetByValWithThis, EncodedJSValue, (JSGlobalObj
     }
     
     PropertySlot slot(thisVal, PropertySlot::PropertySlot::InternalMethodType::Get);
-    if (Optional<uint32_t> index = subscript.tryGetAsUint32Index()) {
+    if (std::optional<uint32_t> index = subscript.tryGetAsUint32Index()) {
         uint32_t i = *index;
         if (isJSString(baseValue) && asString(baseValue)->canGetIndex(i))
             return JSValue::encode(asString(baseValue)->getIndex(globalObject, i));
@@ -1732,7 +1829,8 @@ JSC_DEFINE_JIT_OPERATION(operationNewArray, char*, (JSGlobalObject* globalObject
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    
+    ActiveScratchBufferScope activeScratchBufferScope(ScratchBuffer::fromData(buffer), size);
+
     return bitwise_cast<char*>(constructArray(globalObject, arrayStructure, static_cast<JSValue*>(buffer), size));
 }
 
@@ -1822,7 +1920,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewInt8ArrayWithOneArgument, char*, (JSGlobalO
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSInt8Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSInt8Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewInt16ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1838,7 +1936,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewInt16ArrayWithOneArgument, char*, (JSGlobal
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSInt16Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSInt16Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewInt32ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1854,7 +1952,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewInt32ArrayWithOneArgument, char*, (JSGlobal
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSInt32Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSInt32Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewUint8ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1870,7 +1968,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewUint8ArrayWithOneArgument, char*, (JSGlobal
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint8Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint8Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewUint8ClampedArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1886,7 +1984,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewUint8ClampedArrayWithOneArgument, char*, (J
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint8ClampedArray>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint8ClampedArray>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewUint16ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1902,7 +2000,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewUint16ArrayWithOneArgument, char*, (JSGloba
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint16Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint16Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewUint32ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1918,7 +2016,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewUint32ArrayWithOneArgument, char*, (JSGloba
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint32Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSUint32Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewFloat32ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1934,7 +2032,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewFloat32ArrayWithOneArgument, char*, (JSGlob
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSFloat32Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSFloat32Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewFloat64ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1950,7 +2048,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewFloat64ArrayWithOneArgument, char*, (JSGlob
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSFloat64Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSFloat64Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewBigInt64ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1966,7 +2064,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewBigInt64ArrayWithOneArgument, char*, (JSGlo
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSBigInt64Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSBigInt64Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewBigUint64ArrayWithSize, char*, (JSGlobalObject* globalObject, Structure* structure, int32_t length, char* vector))
@@ -1982,7 +2080,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewBigUint64ArrayWithOneArgument, char*, (JSGl
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSBigUint64Array>(globalObject, structure, encodedValue, 0, WTF::nullopt));
+    return reinterpret_cast<char*>(constructGenericTypedArrayViewWithArguments<JSBigUint64Array>(globalObject, structure, encodedValue, 0, std::nullopt));
 }
 
 JSC_DEFINE_JIT_OPERATION(operationNewArrayIterator, JSCell*, (VM* vmPointer, Structure* structure))
@@ -2560,6 +2658,15 @@ JSC_DEFINE_JIT_OPERATION(operationDoubleToStringWithValidRadix, char*, (JSGlobal
     return reinterpret_cast<char*>(numberToString(vm, value, radix));
 }
 
+JSC_DEFINE_JIT_OPERATION(operationFunctionToString, JSString*, (JSGlobalObject* globalObject, JSFunction* function))
+{
+    VM& vm = globalObject->vm();
+    CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
+    JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+
+    return function->toString(globalObject);
+}
+
 JSC_DEFINE_JIT_OPERATION(operationSingleCharacterString, JSString*, (VM* vmPointer, int32_t character))
 {
     VM& vm = *vmPointer;
@@ -3030,10 +3137,11 @@ JSC_DEFINE_JIT_OPERATION(operationNewArrayWithSpreadSlow, JSCell*, (JSGlobalObje
     VM& vm = globalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
+    ActiveScratchBufferScope activeScratchBufferScope(ScratchBuffer::fromData(buffer), numItems);
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     EncodedJSValue* values = static_cast<EncodedJSValue*>(buffer);
-    Checked<unsigned, RecordOverflow> checkedLength = 0;
+    CheckedUint32 checkedLength = 0;
     for (unsigned i = 0; i < numItems; i++) {
         JSValue value = JSValue::decode(values[i]);
         if (JSImmutableButterfly* array = jsDynamicCast<JSImmutableButterfly*>(vm, value))
@@ -3047,7 +3155,7 @@ JSC_DEFINE_JIT_OPERATION(operationNewArrayWithSpreadSlow, JSCell*, (JSGlobalObje
         return nullptr;
     }
 
-    unsigned length = checkedLength.unsafeGet();
+    unsigned length = checkedLength;
     if (UNLIKELY(length >= MIN_ARRAY_STORAGE_CONSTRUCTION_LENGTH)) {
         throwOutOfMemoryError(globalObject, scope);
         return nullptr;
@@ -3616,7 +3724,7 @@ JSC_DEFINE_JIT_OPERATION(operationLinkDirectCall, void, (CallLinkInfo* callLinkI
             codePtr = functionExecutable->entrypointFor(kind, ArityCheckNotRequired);
     }
     
-    linkDirectFor(callFrame, *callLinkInfo, codeBlock, codePtr);
+    linkDirectCall(callFrame, *callLinkInfo, codeBlock, codePtr);
 }
 
 JSC_DEFINE_JIT_OPERATION(operationTriggerReoptimizationNow, void, (CodeBlock* codeBlock, CodeBlock* optimizedCodeBlock, OSRExitBase* exit))
@@ -3701,14 +3809,10 @@ static void triggerFTLReplacementCompile(VM& vm, CodeBlock* codeBlock, JITCode* 
         return;
     }
     
-    Worklist::State worklistState;
-    if (Worklist* worklist = existingGlobalFTLWorklistOrNull()) {
-        worklistState = worklist->completeAllReadyPlansForVM(
-            vm, CompilationKey(codeBlock->baselineVersion(), FTLMode));
-    } else
-        worklistState = Worklist::NotKnown;
+    JITWorklist::State worklistState = JITWorklist::ensureGlobalWorklist().completeAllReadyPlansForVM(
+        vm, JITCompilationKey(codeBlock->baselineVersion(), JITCompilationMode::FTL));
     
-    if (worklistState == Worklist::Compiling) {
+    if (worklistState == JITWorklist::Compiling) {
         CODEBLOCK_LOG_EVENT(codeBlock, "delayFTLCompile", ("still compiling"));
         jitCode->setOptimizationThresholdBasedOnCompilationResult(
             codeBlock, CompilationDeferred);
@@ -3723,7 +3827,7 @@ static void triggerFTLReplacementCompile(VM& vm, CodeBlock* codeBlock, JITCode* 
         return;
     }
     
-    if (worklistState == Worklist::Compiled) {
+    if (worklistState == JITWorklist::Compiled) {
         CODEBLOCK_LOG_EVENT(codeBlock, "delayFTLCompile", ("compiled and failed"));
         // This means that we finished compiling, but failed somehow; in that case the
         // thresholds will be set appropriately.
@@ -3734,8 +3838,8 @@ static void triggerFTLReplacementCompile(VM& vm, CodeBlock* codeBlock, JITCode* 
     CODEBLOCK_LOG_EVENT(codeBlock, "triggerFTLReplacement", ());
     // We need to compile the code.
     compile(
-        vm, codeBlock->newReplacement(), codeBlock, FTLMode, BytecodeIndex(),
-        Operands<Optional<JSValue>>(), ToFTLDeferredCompilationCallback::create());
+        vm, codeBlock->newReplacement(), codeBlock, JITCompilationMode::FTL, BytecodeIndex(),
+        Operands<std::optional<JSValue>>(), ToFTLDeferredCompilationCallback::create());
 
     // If we reached here, the counter has not be reset. Do that now.
     jitCode->setOptimizationThresholdBasedOnCompilationResult(
@@ -3790,12 +3894,8 @@ static char* tierUpCommon(VM& vm, CallFrame* callFrame, BytecodeIndex originByte
     CodeBlock* codeBlock = callFrame->codeBlock();
 
     // Resolve any pending plan for OSR Enter on this function.
-    Worklist::State worklistState;
-    if (Worklist* worklist = existingGlobalFTLWorklistOrNull()) {
-        worklistState = worklist->completeAllReadyPlansForVM(
-            vm, CompilationKey(codeBlock->baselineVersion(), FTLForOSREntryMode));
-    } else
-        worklistState = Worklist::NotKnown;
+    JITWorklist::State worklistState = JITWorklist::ensureGlobalWorklist().completeAllReadyPlansForVM(
+        vm, JITCompilationKey(codeBlock->baselineVersion(), JITCompilationMode::FTLForOSREntry));
 
     JITCode* jitCode = codeBlock->jitCode()->dfg();
     
@@ -3823,7 +3923,7 @@ static char* tierUpCommon(VM& vm, CallFrame* callFrame, BytecodeIndex originByte
         }
     }
 
-    if (worklistState == Worklist::Compiling) {
+    if (worklistState == JITWorklist::Compiling) {
         CODEBLOCK_LOG_EVENT(codeBlock, "delayFTLCompile", ("still compiling"));
         jitCode->setOptimizationThresholdBasedOnCompilationResult(codeBlock, CompilationDeferred);
         return nullptr;
@@ -3874,7 +3974,7 @@ static char* tierUpCommon(VM& vm, CallFrame* callFrame, BytecodeIndex originByte
         }
     }
 
-    if (worklistState == Worklist::Compiled) {
+    if (worklistState == JITWorklist::Compiled) {
         CODEBLOCK_LOG_EVENT(codeBlock, "delayFTLCompile", ("compiled and failed"));
         // This means that compilation failed and we already set the thresholds.
         dataLogLnIf(Options::verboseOSR(), "Code block ", *codeBlock, " was compiled but it doesn't have an optimized replacement.");
@@ -3978,14 +4078,14 @@ static char* tierUpCommon(VM& vm, CallFrame* callFrame, BytecodeIndex originByte
 
     JITCode::TriggerReason* triggerAddress = &(triggerIterator->value);
 
-    Operands<Optional<JSValue>> mustHandleValues;
+    Operands<std::optional<JSValue>> mustHandleValues;
     unsigned streamIndex = jitCode->bytecodeIndexToStreamIndex.get(originBytecodeIndex);
     jitCode->reconstruct(callFrame, codeBlock, CodeOrigin(originBytecodeIndex), streamIndex, mustHandleValues);
     CodeBlock* replacementCodeBlock = codeBlock->newReplacement();
 
     CODEBLOCK_LOG_EVENT(codeBlock, "triggerFTLOSR", ());
     CompilationResult forEntryResult = compile(
-        vm, replacementCodeBlock, codeBlock, FTLForOSREntryMode, originBytecodeIndex,
+        vm, replacementCodeBlock, codeBlock, JITCompilationMode::FTLForOSREntry, originBytecodeIndex,
         mustHandleValues, ToFTLForOSREntryDeferredCompilationCallback::create(triggerAddress));
 
     if (jitCode->neverExecutedEntry)

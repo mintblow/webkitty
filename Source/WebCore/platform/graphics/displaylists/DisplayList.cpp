@@ -285,8 +285,14 @@ void DisplayList::append(ItemHandle item)
     case ItemType::FillRectWithRoundedHole:
         return append<FillRectWithRoundedHole>(item.get<FillRectWithRoundedHole>());
 #if ENABLE(INLINE_PATH_DATA)
-    case ItemType::FillInlinePath:
-        return append<FillInlinePath>(item.get<FillInlinePath>());
+    case ItemType::FillLine:
+        return append<FillLine>(item.get<FillLine>());
+    case ItemType::FillArc:
+        return append<FillArc>(item.get<FillArc>());
+    case ItemType::FillQuadCurve:
+        return append<FillQuadCurve>(item.get<FillQuadCurve>());
+    case ItemType::FillBezierCurve:
+        return append<FillBezierCurve>(item.get<FillBezierCurve>());
 #endif
     case ItemType::FillPath:
         return append<FillPath>(item.get<FillPath>());
@@ -298,10 +304,10 @@ void DisplayList::append(ItemHandle item)
         return append<MetaCommandChangeDestinationImageBuffer>(item.get<MetaCommandChangeDestinationImageBuffer>());
     case ItemType::MetaCommandChangeItemBuffer:
         return append<MetaCommandChangeItemBuffer>(item.get<MetaCommandChangeItemBuffer>());
-    case ItemType::GetImageData:
-        return append<GetImageData>(item.get<GetImageData>());
-    case ItemType::PutImageData:
-        return append<PutImageData>(item.get<PutImageData>());
+    case ItemType::GetPixelBuffer:
+        return append<GetPixelBuffer>(item.get<GetPixelBuffer>());
+    case ItemType::PutPixelBuffer:
+        return append<PutPixelBuffer>(item.get<PutPixelBuffer>());
 #if ENABLE(VIDEO)
     case ItemType::PaintFrameForMedia:
         return append<PaintFrameForMedia>(item.get<PaintFrameForMedia>());
@@ -311,8 +317,12 @@ void DisplayList::append(ItemHandle item)
     case ItemType::StrokeLine:
         return append<StrokeLine>(item.get<StrokeLine>());
 #if ENABLE(INLINE_PATH_DATA)
-    case ItemType::StrokeInlinePath:
-        return append<StrokeInlinePath>(item.get<StrokeInlinePath>());
+    case ItemType::StrokeArc:
+        return append<StrokeArc>(item.get<StrokeArc>());
+    case ItemType::StrokeQuadCurve:
+        return append<StrokeQuadCurve>(item.get<StrokeQuadCurve>());
+    case ItemType::StrokeBezierCurve:
+        return append<StrokeBezierCurve>(item.get<StrokeBezierCurve>());
 #endif
     case ItemType::StrokePath:
         return append<StrokePath>(item.get<StrokePath>());

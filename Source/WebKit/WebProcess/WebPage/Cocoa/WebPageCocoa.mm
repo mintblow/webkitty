@@ -42,6 +42,7 @@
 #import <WebCore/EventNames.h>
 #import <WebCore/FocusController.h>
 #import <WebCore/FrameView.h>
+#import <WebCore/GraphicsContextCG.h>
 #import <WebCore/HTMLConverter.h>
 #import <WebCore/HTMLOListElement.h>
 #import <WebCore/HTMLUListElement.h>
@@ -86,7 +87,7 @@ void WebPage::platformDidReceiveLoadParameters(const LoadParameters& parameters)
 #if PLATFORM(IOS)
     if (parameters.contentFilterExtensionHandle)
         SandboxExtension::consumePermanently(*parameters.contentFilterExtensionHandle);
-    ParentalControlsContentFilter::setHasConsumedSandboxExtension(parameters.contentFilterExtensionHandle.hasValue());
+    ParentalControlsContentFilter::setHasConsumedSandboxExtension(parameters.contentFilterExtensionHandle.has_value());
 
     if (parameters.frontboardServiceExtensionHandle)
         SandboxExtension::consumePermanently(*parameters.frontboardServiceExtensionHandle);
@@ -121,7 +122,7 @@ void WebPage::performDictionaryLookupAtLocation(const FloatPoint& floatPoint)
     }
     
     // Find the frame the point is over.
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::DisallowUserAgentShadowContent, HitTestRequest::AllowChildFrameContent };
+    constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::DisallowUserAgentShadowContent, HitTestRequest::Type::AllowChildFrameContent };
     auto result = m_page->mainFrame().eventHandler().hitTestResultAtPoint(m_page->mainFrame().view()->windowToContents(roundedIntPoint(floatPoint)), hitType);
 
     auto* frame = result.innerNonSharedNode() ? result.innerNonSharedNode()->document().frame() : &m_page->focusController().focusedOrMainFrame();
@@ -199,6 +200,9 @@ DictionaryPopupInfo WebPage::dictionaryPopupInfoForRange(Frame& frame, const Sim
 #endif // PLATFORM(MAC)
 
     OptionSet<TextIndicatorOption> indicatorOptions { TextIndicatorOption::UseBoundingRectAndPaintAllContentForComplexRanges };
+    if (HTMLElement::isInsideImageOverlay(range))
+        indicatorOptions.add({ TextIndicatorOption::PaintAllContent, TextIndicatorOption::PaintBackgrounds });
+
     if (presentationTransition == TextIndicatorPresentationTransition::BounceAndCrossfade)
         indicatorOptions.add(TextIndicatorOption::IncludeSnapshotWithSelectionHighlight);
     
@@ -317,7 +321,7 @@ RetainPtr<CFDataRef> WebPage::pdfSnapshotAtSize(IntRect rect, IntSize bitmapSize
 
         CGPDFContextBeginPage(pdfContext.get(), dictionary);
 
-        GraphicsContext graphicsContext { pdfContext.get() };
+        GraphicsContextCG graphicsContext { pdfContext.get() };
         graphicsContext.scale({ 1, -1 });
         graphicsContext.translate(0, -bitmapSize.height());
 
@@ -439,13 +443,13 @@ void WebPage::getPDFFirstPageSize(WebCore::FrameIdentifier frameID, CompletionHa
     completionHandler(FloatSize(plugin->pdfDocumentSizeForPrinting()));
 }
 
-#if ENABLE(WEBXR)
-PlatformXRSystemProxy& WebPage::xrSystemProxy()
+#if ENABLE(DATA_DETECTION)
+
+void WebPage::handleClickForDataDetectionResult(const DataDetectorElementInfo& info, const IntPoint& clickLocation)
 {
-    if (!m_xrSystemProxy)
-        m_xrSystemProxy = std::unique_ptr<PlatformXRSystemProxy>(new PlatformXRSystemProxy(*this));
-    return *m_xrSystemProxy;
+    send(Messages::WebPageProxy::HandleClickForDataDetectionResult(info, clickLocation));
 }
+
 #endif
 
 } // namespace WebKit

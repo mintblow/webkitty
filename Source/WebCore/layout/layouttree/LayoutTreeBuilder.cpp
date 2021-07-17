@@ -30,6 +30,7 @@
 
 #include "CachedImage.h"
 #include "HTMLNames.h"
+#include "HTMLParserIdioms.h"
 #include "HTMLTableCellElement.h"
 #include "HTMLTableColElement.h"
 #include "HTMLTableElement.h"
@@ -87,7 +88,7 @@ static void appendChild(ContainerBox& parent, Box& newChild)
     parent.setLastChild(newChild);
 }
 
-static Optional<LayoutSize> accumulatedOffsetForInFlowPositionedContinuation(const RenderBox& block)
+static std::optional<LayoutSize> accumulatedOffsetForInFlowPositionedContinuation(const RenderBox& block)
 {
     // FIXE: This is a workaround of the continuation logic when the relatively positioned parent inline box
     // becomes a sibling box of this block and only reachable through the continuation link which we don't have here.
@@ -132,7 +133,7 @@ TreeBuilder::TreeBuilder(LayoutTree& layoutTree)
 {
 }
 
-Box& TreeBuilder::createReplacedBox(Optional<Box::ElementAttributes> elementAttributes, RenderStyle&& style)
+Box& TreeBuilder::createReplacedBox(std::optional<Box::ElementAttributes> elementAttributes, RenderStyle&& style)
 {
     auto newBox = makeUnique<ReplacedBox>(elementAttributes, WTFMove(style));
     auto& box = *newBox;
@@ -156,7 +157,7 @@ Box& TreeBuilder::createLineBreakBox(bool isOptional, RenderStyle&& style)
     return box;
 }
 
-ContainerBox& TreeBuilder::createContainer(Optional<Box::ElementAttributes> elementAttributes, RenderStyle&& style)
+ContainerBox& TreeBuilder::createContainer(std::optional<Box::ElementAttributes> elementAttributes, RenderStyle&& style)
 {
     auto newContainer = makeUnique<ContainerBox>(elementAttributes, WTFMove(style));
     auto& container = *newContainer;
@@ -166,7 +167,7 @@ ContainerBox& TreeBuilder::createContainer(Optional<Box::ElementAttributes> elem
 
 Box* TreeBuilder::createLayoutBox(const ContainerBox& parentContainer, const RenderObject& childRenderer)
 {
-    auto elementAttributes = [] (const RenderElement& renderer) -> Optional<Box::ElementAttributes> {
+    auto elementAttributes = [] (const RenderElement& renderer) -> std::optional<Box::ElementAttributes> {
         if (renderer.isDocumentElementRenderer())
             return Box::ElementAttributes { Box::ElementType::Document };
         if (auto* element = renderer.element()) {
@@ -178,7 +179,7 @@ Box* TreeBuilder::createLayoutBox(const ContainerBox& parentContainer, const Ren
                 return Box::ElementAttributes { Box::ElementType::IFrame };
             return Box::ElementAttributes { Box::ElementType::GenericElement };
         }
-        return WTF::nullopt;
+        return std::nullopt;
     };
 
     Box* childLayoutBox = nullptr;
@@ -258,7 +259,7 @@ Box* TreeBuilder::createLayoutBox(const ContainerBox& parentContainer, const Ren
                 auto& tableColElement = static_cast<HTMLTableColElement&>(*renderer.element());
                 auto columnWidth = tableColElement.width();
                 if (!columnWidth.isEmpty())
-                    childLayoutBox->setColumnWidth(columnWidth.toInt());
+                    childLayoutBox->setColumnWidth(parseHTMLInteger(columnWidth).value_or(0));
                 if (tableColElement.span() > 1)
                     childLayoutBox->setColumnSpan(tableColElement.span());
             } else {
@@ -276,7 +277,6 @@ Box* TreeBuilder::createLayoutBox(const ContainerBox& parentContainer, const Ren
                 auto rowSpan = cellElement.rowSpan();
                 if (rowSpan > 1)
                     childLayoutBox->setRowSpan(rowSpan);
-
                 auto columnSpan = cellElement.colSpan();
                 if (columnSpan > 1)
                     childLayoutBox->setColumnSpan(columnSpan);
@@ -395,7 +395,8 @@ void showInlineTreeAndRuns(TextStream& stream, const LayoutState& layoutState, c
         addSpacing();
         auto& line = lines[lineIndex];
         auto& lineBoxLogicalRect = line.lineBoxLogicalRect();
-        stream << "line at (" << lineBoxLogicalRect.left() << "," << lineBoxLogicalRect.top() << ") size (" << lineBoxLogicalRect.width() << "x" << lineBoxLogicalRect.height() << ") baseline (" << line.baseline() << ")";
+        auto enclosingTopAndBottom = line.enclosingTopAndBottom();
+        stream << "line at (" << lineBoxLogicalRect.left() << "," << lineBoxLogicalRect.top() << ") size (" << lineBoxLogicalRect.width() << "x" << lineBoxLogicalRect.height() << ") baseline (" << line.baseline() << ") enclosing top (" << enclosingTopAndBottom.top << ") bottom (" << enclosingTopAndBottom.bottom << ")";
         stream.nextLine();
 
         addSpacing();
@@ -427,7 +428,7 @@ void showInlineTreeAndRuns(TextStream& stream, const LayoutState& layoutState, c
                 << " size (" << logicalRect.width() << "x" << logicalRect.height() << ")"
                 << " baseline (" << logicalRect.top() + inlineLevelBox.baseline() << ")"
                 << " ascent (" << inlineLevelBox.baseline() << "/" << inlineLevelBox.layoutBounds().ascent << ")"
-                << " descent (" << inlineLevelBox.descent().valueOr(0.0f) << "/" << inlineLevelBox.layoutBounds().descent << ")";
+                << " descent (" << inlineLevelBox.descent().value_or(0.0f) << "/" << inlineLevelBox.layoutBounds().descent << ")";
             stream.nextLine();
         };
         outputInlineLevelBox(lineBox.rootInlineBox());

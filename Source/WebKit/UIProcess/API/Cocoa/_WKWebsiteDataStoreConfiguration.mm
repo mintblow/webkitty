@@ -242,16 +242,6 @@ static void checkURLArgument(NSURL *url)
     _configuration->setSourceApplicationSecondaryIdentifier(identifier);
 }
 
-- (void)setAttributedBundleIdentifier:(NSString *)identifier
-{
-    _configuration->setAttributedBundleIdentifier(identifier);
-}
-
-- (NSString *)attributedBundleIdentifier
-{
-    return _configuration->attributedBundleIdentifier();
-}
-
 - (NSURL *)applicationCacheDirectory
 {
     return [NSURL fileURLWithPath:_configuration->applicationCacheDirectory() isDirectory:YES];
@@ -487,6 +477,16 @@ static void checkURLArgument(NSURL *url)
 - (void)setEnableInAppBrowserPrivacyForTesting:(BOOL)enable
 {
     _configuration->setEnableInAppBrowserPrivacyForTesting(enable);
+}
+
+- (BOOL)allowsHSTSWithUntrustedRootCertificate
+{
+    return _configuration->allowsHSTSWithUntrustedRootCertificate();
+}
+
+- (void)setAllowsHSTSWithUntrustedRootCertificate:(BOOL)allows
+{
+    _configuration->setAllowsHSTSWithUntrustedRootCertificate(allows);
 }
 
 - (BOOL)allLoadsBlockedByDeviceManagementRestrictionsForTesting

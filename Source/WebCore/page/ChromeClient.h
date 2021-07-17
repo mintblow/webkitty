@@ -35,6 +35,7 @@
 #include "GraphicsContext.h"
 #include "GraphicsLayer.h"
 #include "HTMLMediaElementEnums.h"
+#include "HighlightVisibility.h"
 #include "HostWindow.h"
 #include "Icon.h"
 #include "ImageBuffer.h"
@@ -75,6 +76,10 @@ class WAKResponder;
 #if ENABLE(MEDIA_USAGE)
 #include "MediaSessionIdentifier.h"
 #include "MediaUsageInfo.h"
+#endif
+
+#if HAVE(ARKIT_INLINE_PREVIEW)
+class HTMLModelElement;
 #endif
 
 #if ENABLE(WEBXR)
@@ -121,10 +126,12 @@ class MediaPlayerRequestInstallMissingPluginsCallback;
 struct AppHighlight;
 struct ContactsRequestData;
 struct ContentRuleListResults;
+struct DataDetectorElementInfo;
 struct DateTimeChooserParameters;
 struct GraphicsDeviceAdapter;
 struct MockWebAuthenticationConfiguration;
 struct ShareDataWithParsedURL;
+struct TextIndicatorData;
 struct ViewportArguments;
 struct WindowFeatures;
 
@@ -188,7 +195,7 @@ public:
 
     virtual bool hoverSupportedByPrimaryPointingDevice() const = 0;
     virtual bool hoverSupportedByAnyAvailablePointingDevice() const = 0;
-    virtual Optional<PointerCharacteristics> pointerCharacteristicsOfPrimaryPointingDevice() const = 0;
+    virtual std::optional<PointerCharacteristics> pointerCharacteristicsOfPrimaryPointingDevice() const = 0;
     virtual OptionSet<PointerCharacteristics> pointerCharacteristicsOfAllAvailablePointingDevices() const = 0;
 
     virtual bool supportsImmediateInvalidation() { return false; }
@@ -221,7 +228,9 @@ public:
 
     virtual void contentsSizeChanged(Frame&, const IntSize&) const = 0;
     virtual void intrinsicContentsSizeChanged(const IntSize&) const = 0;
-    virtual void scrollRectIntoView(const IntRect&) const { }; // Currently only Mac has a non empty implementation.
+
+    virtual void scrollContainingScrollViewsToRevealRect(const IntRect&) const { }; // Currently only Mac has a non empty implementation.
+    virtual void scrollMainFrameToRevealRect(const IntRect&) const { };
 
     virtual bool shouldUnavailablePluginMessageBeButton(RenderEmbeddedObject::PluginUnavailabilityReason) const { return false; }
     virtual void unavailablePluginButtonClicked(Element&, RenderEmbeddedObject::PluginUnavailabilityReason) const { }
@@ -234,6 +243,10 @@ public:
     virtual void themeColorChanged() const { }
     virtual void pageExtendedBackgroundColorDidChange() const { }
     virtual void sampledPageTopColorChanged() const { }
+    
+#if ENABLE(APP_HIGHLIGHTS)
+    virtual WebCore::HighlightVisibility appHighlightsVisiblility() const { return HighlightVisibility::Hidden; };
+#endif
 
     virtual void exceededDatabaseQuota(Frame&, const String& databaseName, DatabaseDetails) = 0;
 
@@ -315,9 +328,11 @@ public:
     virtual void storeAppHighlight(WebCore::AppHighlight&&) const = 0;
 #endif
 
+    virtual void setTextIndicator(const TextIndicatorData&) const = 0;
+
     virtual void runOpenPanel(Frame&, FileChooser&) = 0;
     virtual void showShareSheet(ShareDataWithParsedURL&, WTF::CompletionHandler<void(bool)>&& callback) { callback(false); }
-    virtual void showContactPicker(const ContactsRequestData&, WTF::CompletionHandler<void(Optional<Vector<ContactInfo>>&&)>&& callback) { callback(WTF::nullopt); }
+    virtual void showContactPicker(const ContactsRequestData&, WTF::CompletionHandler<void(std::optional<Vector<ContactInfo>>&&)>&& callback) { callback(std::nullopt); }
     
     // Asynchronous request to load an icon for specified filenames.
     virtual void loadIconForFiles(const Vector<String>&, FileIconLoader&) = 0;
@@ -336,7 +351,7 @@ public:
     
     virtual DisplayRefreshMonitorFactory* displayRefreshMonitorFactory() const { return nullptr; }
 
-    virtual RefPtr<ImageBuffer> createImageBuffer(const FloatSize&, RenderingMode, RenderingPurpose, float, DestinationColorSpace, PixelFormat) const { return nullptr; }
+    virtual RefPtr<ImageBuffer> createImageBuffer(const FloatSize&, RenderingMode, RenderingPurpose, float, const DestinationColorSpace&, PixelFormat) const { return nullptr; }
 
 #if ENABLE(WEBGL)
     virtual RefPtr<GraphicsContextGL> createGraphicsContextGL(const GraphicsContextGLAttributes&, WebCore::PlatformDisplayID) const { return nullptr; }
@@ -459,7 +474,7 @@ public:
     virtual void notifyScrollerThumbIsVisibleInRect(const IntRect&) { }
     virtual void recommendedScrollbarStyleDidChange(ScrollbarStyle) { }
 
-    virtual Optional<ScrollbarOverlayStyle> preferredScrollbarOverlayStyle() { return WTF::nullopt; }
+    virtual std::optional<ScrollbarOverlayStyle> preferredScrollbarOverlayStyle() { return std::nullopt; }
 
     virtual void wheelEventHandlersChanged(bool hasHandlers) = 0;
         
@@ -487,7 +502,7 @@ public:
 
     virtual bool shouldUseTiledBackingForFrameView(const FrameView&) const { return false; }
 
-    virtual void isPlayingMediaDidChange(MediaProducer::MediaStateFlags, uint64_t) { }
+    virtual void isPlayingMediaDidChange(MediaProducer::MediaStateFlags) { }
     virtual void handleAutoplayEvent(AutoplayEvent, OptionSet<AutoplayEventFlags>) { }
 
 #if ENABLE(WEB_CRYPTO)
@@ -497,6 +512,10 @@ public:
 
 #if ENABLE(TELEPHONE_NUMBER_DETECTION) && PLATFORM(MAC)
     virtual void handleTelephoneNumberClick(const String&, const IntPoint&) { }
+#endif
+
+#if ENABLE(DATA_DETECTION)
+    virtual void handleClickForDataDetectionResult(const DataDetectorElementInfo&, const IntPoint&) { }
 #endif
 
 #if ENABLE(SERVICE_CONTROLS)
@@ -562,8 +581,8 @@ public:
     virtual void changeUniversalAccessZoomFocus(const IntRect&, const IntRect&) { }
 #endif
 
-#if ENABLE(IMAGE_EXTRACTION)
-    virtual void requestImageExtraction(Element&, CompletionHandler<void(RefPtr<Element>&&)>&& completion = { })
+#if ENABLE(IMAGE_ANALYSIS)
+    virtual void requestTextRecognition(Element&, CompletionHandler<void(RefPtr<Element>&&)>&& completion = { })
     {
         if (completion)
             completion({ });
@@ -581,6 +600,13 @@ public:
 
 #if ENABLE(TEXT_AUTOSIZING)
     virtual void textAutosizingUsesIdempotentModeChanged() { }
+#endif
+
+#if HAVE(ARKIT_INLINE_PREVIEW_IOS)
+    virtual void takeModelElementFullscreen(WebCore::GraphicsLayer::PlatformLayerID) const { }
+#endif
+#if HAVE(ARKIT_INLINE_PREVIEW_MAC)
+    virtual void modelElementDidCreatePreview(WebCore::HTMLModelElement&, const URL&, const String&, const WebCore::FloatSize&) const { };
 #endif
 
 protected:

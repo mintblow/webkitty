@@ -30,8 +30,11 @@ struct DrawCommandRange
     uint32_t count;
     size_t offset;
 };
+
+// Inclusive range of consecutive primitive restart value indexes.
 struct IndexRange
 {
+    IndexRange(size_t begin, size_t end) : restartBegin(begin), restartEnd(end) {}
     size_t restartBegin;
     size_t restartEnd;
 };
@@ -95,7 +98,7 @@ class BufferHolderMtl
     // a queue of mtl::Buffer and only let CPU modifies a free mtl::Buffer.
     // So, in order to let GPU use the most recent modified content, one must call this method
     // right before the draw call to retrieved the most up-to-date mtl::Buffer.
-    mtl::BufferRef getCurrentBuffer() { return mIsWeak ? mBufferWeakRef.lock() : mBuffer; }
+    mtl::BufferRef getCurrentBuffer() const { return mIsWeak ? mBufferWeakRef.lock() : mBuffer; }
 
   protected:
     mtl::BufferRef mBuffer;

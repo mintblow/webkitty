@@ -48,7 +48,7 @@ class PlatformCALayerClient;
 
 typedef Vector<RefPtr<PlatformCALayer>> PlatformCALayerList;
 
-class WEBCORE_EXPORT PlatformCALayer : public ThreadSafeRefCounted<PlatformCALayer> {
+class WEBCORE_EXPORT PlatformCALayer : public ThreadSafeRefCounted<PlatformCALayer, WTF::DestructionThread::Main> {
 #if PLATFORM(COCOA)
     friend class PlatformCALayerCocoa;
 #elif PLATFORM(WIN)
@@ -252,7 +252,15 @@ public:
 
 #if HAVE(CORE_ANIMATION_SEPARATED_LAYERS)
     virtual bool isSeparated() const = 0;
-    virtual void setSeparated(bool) = 0;
+    virtual void setIsSeparated(bool) = 0;
+    
+#if HAVE(CORE_ANIMATION_SEPARATED_PORTALS)
+    virtual bool isSeparatedPortal() const = 0;
+    virtual void setIsSeparatedPortal(bool) = 0;
+
+    virtual bool isDescendentOfSeparatedPortal() const = 0;
+    virtual void setIsDescendentOfSeparatedPortal(bool) = 0;
+#endif
 #endif
 
     virtual TiledBacking* tiledBacking() = 0;

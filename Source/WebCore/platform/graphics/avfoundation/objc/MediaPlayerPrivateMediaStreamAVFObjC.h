@@ -33,6 +33,7 @@
 #include "SampleBufferDisplayLayer.h"
 #include <wtf/Deque.h>
 #include <wtf/Forward.h>
+#include <wtf/Lock.h>
 #include <wtf/LoggerHelper.h>
 
 OBJC_CLASS AVSampleBufferDisplayLayer;
@@ -243,7 +244,7 @@ private:
     float m_volume { 1 };
     DisplayMode m_displayMode { None };
     PlaybackState m_playbackState { PlaybackState::None };
-    Optional<CGAffineTransform> m_videoTransform;
+    std::optional<CGAffineTransform> m_videoTransform;
 
     // Used on both main thread and sample thread.
     std::unique_ptr<SampleBufferDisplayLayer> m_sampleBufferDisplayLayer;
@@ -265,7 +266,7 @@ private:
     RetainPtr<WebRootSampleBufferBoundsChangeListener> m_boundsChangeListener;
 
     Lock m_currentVideoSampleLock;
-    RefPtr<MediaSample> m_currentVideoSample;
+    RefPtr<MediaSample> m_currentVideoSample WTF_GUARDED_BY_LOCK(m_currentVideoSampleLock);
 
     bool m_playing { false };
     bool m_muted { false };

@@ -26,6 +26,8 @@ import re
 import time
 
 from datetime import datetime
+from mock import patch
+
 from webkitcorepy import mocks, OutputCapture, StringIO
 from webkitscmpy import local, Commit, Contributor
 from webkitscmpy.program.canonicalize.committer import main as committer_main
@@ -251,7 +253,7 @@ nothing to commit, working tree clean
                         'AuthorDate: {date}\n'
                         'Commit:     {author} <{email}>\n'
                         'CommitDate: {date}\n'
-                        '\n{log}'.format(
+                        '\n{log}\n'.format(
                             hash=commit.hash,
                             author=commit.author.name,
                             email=commit.author.email,
@@ -265,6 +267,31 @@ nothing to commit, working tree clean
                                    commit.revision,
                             )] if git_svn else []),
                         )) for commit in self.commits_in_range(args[3].split('...')[-1], args[3].split('...')[0])
+                    ])
+                )
+            ), mocks.Subprocess.Route(
+                self.executable, 'log', re.compile(r'.+'),
+                cwd=self.path,
+                generator=lambda *args, **kwargs: mocks.ProcessCompletion(
+                    returncode=0,
+                    stdout='\n'.join([
+                        'commit {hash}\n'
+                        'Author: {author} <{email}>\n'
+                        'Date:   {date}\n'
+                        '\n{log}\n'.format(
+                            hash=commit.hash,
+                            author=commit.author.name,
+                            email=commit.author.email,
+                            date=datetime.utcfromtimestamp(commit.timestamp + time.timezone).strftime('%a %b %d %H:%M:%S %Y +0000'),
+                            log='\n'.join([
+                                ('    ' + line) if line else '' for line in commit.message.splitlines()
+                            ] + ([
+                                '    git-svn-id: https://svn.{}/repository/{}/trunk@{} 268f45cc-cd09-0410-ab3c-d52691b4dbfc'.format(
+                                    self.remote.split('@')[-1].split(':')[0],
+                                    os.path.basename(path),
+                                   commit.revision,
+                            )] if git_svn else []),
+                        )) for commit in self.commits_in_range(self.commits[self.default_branch][0].hash, args[2])
                     ])
                 )
             ), mocks.Subprocess.Route(
@@ -328,6 +355,12 @@ nothing to commit, working tree clean
             ), *git_svn_routes
         )
 
+    def __enter__(self):
+        # TODO: Use shutil directly when Python 2.7 is removed
+        from whichcraft import which
+        self.patches.append(patch('whichcraft.which', lambda cmd: dict(git=self.executable).get(cmd, which(cmd))))
+        return super(Git, self).__enter__()
+
     @property
     def branch(self):
         return self.head.branch
@@ -345,7 +378,7 @@ nothing to commit, working tree clean
                     return self.commits[self.default_branch][found.branch_point - difference - 1]
                 return None
 
-        something = str(something)
+        something = str(something).replace('remotes/', '')
         if '..' in something:
             a, b = something.split('..')
             a = self.find(a)
@@ -493,28 +526,43 @@ nothing to commit, working tree clean
         )
 
     def commits_in_range(self, begin, end):
+        begin = begin.replace('remotes/', '') if begin else begin
+        end = end.replace('remotes/', '') if end else end
+
+        if begin and self.remotes.get(begin):
+            begin = self.remotes.get(begin).hash
+        if end and self.remotes.get(end):
+            end = self.remotes.get(end).hash
+
         branches = [self.default_branch]
-        for branch, commits in self.commits.items():
-            if branch == self.default_branch:
-                continue
-            for commit in commits:
-                if commit.hash == end:
-                    branches.insert(0, branch)
+        if end in self.commits.keys() and end != self.default_branch:
+            branches.insert(0, end)
+        else:
+            for branch, commits in self.commits.items():
+                if branch == self.default_branch:
+                    continue
+                for commit in commits:
+                    if commit.hash.startswith(end):
+                        branches.insert(0, branch)
+                        break
+                if len(branches) > 1:
                     break
-            if len(branches) > 1:
-                break
 
         in_range = False
         previous = None
         for branch in branches:
             for commit in reversed(self.commits[branch]):
-                if commit.hash == end:
+                if branch == begin:
+                    break
+                if commit.hash.startswith(end) or end == branch:
                     in_range = True
                 if in_range and (not previous or commit.hash != previous.hash):
                     yield commit
                 previous = commit
-                if commit.hash == begin:
+                if begin and commit.hash.startswith(begin):
                     in_range = False
+                    break
+
             in_range = False
             if not previous or branch == self.default_branch:
                 continue

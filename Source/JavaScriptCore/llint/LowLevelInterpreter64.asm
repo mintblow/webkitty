@@ -488,8 +488,8 @@ macro cagedPrimitive(ptr, length, scratch, scratch2)
     if GIGACAGE_ENABLED
         cagePrimitive(GigacageConfig + Gigacage::Config::basePtrs + GigacagePrimitiveBasePtrOffset, constexpr Gigacage::primitiveGigacageMask, source, scratch)
         if ARM64E
-            const numberOfPACBits = constexpr MacroAssembler::numberOfPACBits
-            bfiq scratch2, 0, 64 - numberOfPACBits, ptr
+            const maxNumberOfAllowedPACBits = constexpr MacroAssembler::maxNumberOfAllowedPACBits
+            bfiq scratch2, 0, 64 - maxNumberOfAllowedPACBits, ptr
         end
     end
     if ARM64E
@@ -512,8 +512,8 @@ macro cagedPrimitiveMayBeNull(ptr, length, scratch, scratch2)
     if GIGACAGE_ENABLED
         cagePrimitive(GigacageConfig + Gigacage::Config::basePtrs + GigacagePrimitiveBasePtrOffset, constexpr Gigacage::primitiveGigacageMask, source, scratch)
         if ARM64E
-            const numberOfPACBits = constexpr MacroAssembler::numberOfPACBits
-            bfiq scratch2, 0, 64 - numberOfPACBits, ptr
+            const maxNumberOfAllowedPACBits = constexpr MacroAssembler::maxNumberOfAllowedPACBits
+            bfiq scratch2, 0, 64 - maxNumberOfAllowedPACBits, ptr
         end
     end
     if ARM64E
@@ -2160,6 +2160,52 @@ macro compareUnsignedJumpOp(opcodeName, opcodeStruct, integerCompareMacro)
 end
 
 
+macro compareOp(opcodeName, opcodeStruct, integerCompareAndSet, doubleCompareAndSet)
+    llintOpWithReturn(op_%opcodeName%, opcodeStruct, macro (size, get, dispatch, return)
+        get(m_lhs, t2)
+        get(m_rhs, t0)
+        loadConstantOrVariable(size, t0, t1)
+        loadConstantOrVariable(size, t2, t0)
+        bqb t0, numberTag, .op1NotInt
+        bqb t1, numberTag, .op2NotInt
+        integerCompareAndSet(t0, t1, t0)
+        orq ValueFalse, t0
+        return(t0)
+
+    .op1NotInt:
+        btqz t0, numberTag, .slow
+        bqb t1, numberTag, .op1NotIntOp2NotInt
+        ci2ds t1, ft1
+        jmp .op1NotIntReady
+
+    .op1NotIntOp2NotInt:
+        btqz t1, numberTag, .slow
+        addq numberTag, t1
+        fq2d t1, ft1
+
+    .op1NotIntReady:
+        addq numberTag, t0
+        fq2d t0, ft0
+        doubleCompareAndSet(ft0, ft1, t0)
+        orq ValueFalse, t0
+        return(t0)
+
+    .op2NotInt:
+        ci2ds t0, ft0
+        btqz t1, numberTag, .slow
+        addq numberTag, t1
+        fq2d t1, ft1
+        doubleCompareAndSet(ft0, ft1, t0)
+        orq ValueFalse, t0
+        return(t0)
+
+    .slow:
+        callSlowPath(_slow_path_%opcodeName%)
+        dispatch()
+    end)
+end
+
+
 macro compareUnsignedOp(opcodeName, opcodeStruct, integerCompareAndSet)
     llintOpWithReturn(op_%opcodeName%, opcodeStruct, macro (size, get, dispatch, return)
         get(m_lhs, t2)
@@ -2710,7 +2756,7 @@ llintOpWithMetadata(op_put_to_scope, OpPutToScope, macro (size, get, dispatch, m
         storeq t2, JSLexicalEnvironment_variables[t0, t1, 8]
     end
 
-    macro putLocalClosureVar()
+    macro putResolvedClosureVar()
         get(m_value, t1)
         loadConstantOrVariable(size, t1, t2)
         loadp OpPutToScope::Metadata::m_watchpointSet[t5], t3
@@ -2736,10 +2782,10 @@ llintOpWithMetadata(op_put_to_scope, OpPutToScope, macro (size, get, dispatch, m
     loadi OpPutToScope::Metadata::m_getPutInfo + GetPutInfo::m_operand[t5], t0
     andi ResolveTypeMask, t0
 
-#pLocalClosureVar:
-    bineq t0, LocalClosureVar, .pGlobalProperty
+#pResolvedClosureVar:
+    bineq t0, ResolvedClosureVar, .pGlobalProperty
     loadVariable(get, m_scope, t0)
-    putLocalClosureVar()
+    putResolvedClosureVar()
     writeBarrierOnOperands(size, get, m_scope, m_value)
     dispatch()
 

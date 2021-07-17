@@ -32,6 +32,8 @@
 #import "GraphicsContextCG.h"
 #import "Logging.h"
 #import "LocalSampleBufferDisplayLayer.h"
+#import "MediaPlayer.h"
+#import "MediaSessionManagerCocoa.h"
 #import "MediaStreamPrivate.h"
 #import "PixelBufferConformerCV.h"
 #import "VideoLayerManagerObjC.h"
@@ -120,7 +122,6 @@
 @end
 
 namespace WebCore {
-using namespace PAL;
 
 #pragma mark -
 #pragma mark MediaPlayerPrivateMediaStreamAVFObjC
@@ -174,6 +175,12 @@ MediaPlayerPrivateMediaStreamAVFObjC::~MediaPlayerPrivateMediaStreamAVFObjC()
 #pragma mark MediaPlayer Factory Methods
 
 class MediaPlayerFactoryMediaStreamAVFObjC final : public MediaPlayerFactory {
+public:
+    MediaPlayerFactoryMediaStreamAVFObjC()
+    {
+        MediaSessionManagerCocoa::ensureCodecsRegistered();
+    }
+
 private:
     MediaPlayerEnums::MediaEngineIdentifier identifier() const final { return MediaPlayerEnums::MediaEngineIdentifier::AVFoundationMediaStream; };
 
@@ -203,7 +210,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::registerMediaEngine(MediaEngineRegist
 
 bool MediaPlayerPrivateMediaStreamAVFObjC::isAvailable()
 {
-    return isAVFoundationFrameworkAvailable() && isCoreMediaFrameworkAvailable() && getAVSampleBufferDisplayLayerClass();
+    return PAL::isAVFoundationFrameworkAvailable() && PAL::isCoreMediaFrameworkAvailable() && PAL::getAVSampleBufferDisplayLayerClass();
 }
 
 void MediaPlayerPrivateMediaStreamAVFObjC::getSupportedTypes(HashSet<String, ASCIICaseInsensitiveHash>& types)
@@ -223,7 +230,7 @@ MediaPlayer::SupportsType MediaPlayerPrivateMediaStreamAVFObjC::supportsType(con
 static inline CGAffineTransform videoTransformationMatrix(MediaSample& sample)
 {
     CMSampleBufferRef sampleBuffer = sample.platformSample().sample.cmSampleBuffer;
-    CVPixelBufferRef pixelBuffer = static_cast<CVPixelBufferRef>(CMSampleBufferGetImageBuffer(sampleBuffer));
+    CVPixelBufferRef pixelBuffer = static_cast<CVPixelBufferRef>(PAL::CMSampleBufferGetImageBuffer(sampleBuffer));
     size_t width = CVPixelBufferGetWidth(pixelBuffer);
     size_t height = CVPixelBufferGetHeight(pixelBuffer);
     if (!width || !height)
@@ -247,9 +254,9 @@ void MediaPlayerPrivateMediaStreamAVFObjC::enqueueVideoSample(MediaSample& sampl
     if (!m_visible)
         return;
 
-    auto locker = tryHoldLock(m_sampleBufferDisplayLayerLock);
-    if (!locker)
+    if (!m_sampleBufferDisplayLayerLock.tryLock())
         return;
+    Locker locker { AdoptLock, m_sampleBufferDisplayLayerLock };
 
     if (!m_canEnqueueDisplayLayer || !m_sampleBufferDisplayLayer || m_sampleBufferDisplayLayer->didFail())
         return;
@@ -272,7 +279,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample(MediaSample& sa
 {
     if (!isMainThread()) {
         {
-            auto locker = holdLock(m_currentVideoSampleLock);
+            Locker locker { m_currentVideoSampleLock };
             m_currentVideoSample = &sample;
         }
         callOnMainThread([weakThis = makeWeakPtr(this), hasChangedOrientation]() mutable {
@@ -284,7 +291,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample(MediaSample& sa
 
             RefPtr<MediaSample> sample;
             {
-                auto locker = holdLock(weakThis->m_currentVideoSampleLock);
+                Locker locker { weakThis->m_currentVideoSampleLock };
                 sample = WTFMove(weakThis->m_currentVideoSample);
             }
             if (!sample)
@@ -396,7 +403,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::layersAreInitialized(IntSize size, bo
 
 void MediaPlayerPrivateMediaStreamAVFObjC::destroyLayers()
 {
-    auto locker = holdLock(m_sampleBufferDisplayLayerLock);
+    Locker locker { m_sampleBufferDisplayLayerLock };
 
     m_canEnqueueDisplayLayer = false;
     if (m_sampleBufferDisplayLayer)
@@ -953,7 +960,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::updateCurrentFrameImage()
     if (!m_imagePainter.pixelBufferConformer)
         return;
 
-    auto pixelBuffer = static_cast<CVPixelBufferRef>(CMSampleBufferGetImageBuffer(m_imagePainter.mediaSample->platformSample().sample.cmSampleBuffer));
+    auto pixelBuffer = static_cast<CVPixelBufferRef>(PAL::CMSampleBufferGetImageBuffer(m_imagePainter.mediaSample->platformSample().sample.cmSampleBuffer));
     m_imagePainter.cgImage = NativeImage::create(m_imagePainter.pixelBufferConformer->createImageFromPixelBuffer(pixelBuffer));
 }
 
@@ -979,7 +986,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::paintCurrentFrameInContext(GraphicsCo
     if (!m_videoTransform)
         m_videoTransform = videoTransformationMatrix(*m_imagePainter.mediaSample);
     AffineTransform videoTransform = *m_videoTransform;
-    FloatRect transformedDestRect = videoTransform.inverse().valueOr(AffineTransform()).mapRect(destRect);
+    FloatRect transformedDestRect = videoTransform.inverse().value_or(AffineTransform()).mapRect(destRect);
     context.concatCTM(videoTransform);
     context.drawNativeImage(*image, imageRect.size(), transformedDestRect, imageRect);
 }
@@ -1055,7 +1062,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::CurrentFramePainter::reset()
 
 void MediaPlayerPrivateMediaStreamAVFObjC::rootLayerBoundsDidChange()
 {
-    auto locker = holdLock(m_sampleBufferDisplayLayerLock);
+    Locker locker { m_sampleBufferDisplayLayerLock };
     if (m_sampleBufferDisplayLayer)
         m_sampleBufferDisplayLayer->updateBoundsAndPosition(m_sampleBufferDisplayLayer->rootLayer().bounds, m_videoRotation);
 }

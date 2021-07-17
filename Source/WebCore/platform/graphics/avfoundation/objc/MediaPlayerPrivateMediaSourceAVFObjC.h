@@ -178,10 +178,10 @@ private:
     bool supportsFullscreen() const override { return true; }
 
     void play() override;
-    void playInternal();
+    void playInternal(std::optional<MonotonicTime>&& = std::nullopt);
 
     void pause() override;
-    void pauseInternal();
+    void pauseInternal(std::optional<MonotonicTime>&& = std::nullopt);
 
     bool paused() const override;
 
@@ -242,7 +242,7 @@ private:
 
     size_t extraMemoryCost() const override;
 
-    Optional<VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() override;
+    std::optional<VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() override;
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
     bool isCurrentPlaybackTargetWireless() const override;
@@ -262,6 +262,15 @@ private:
     bool shouldBePlaying() const;
 
     bool isVideoOutputAvailable() const;
+
+    bool setCurrentTimeDidChangeCallback(MediaPlayer::CurrentTimeDidChangeCallback&&) final;
+
+#if HAVE(AVSAMPLEBUFFERRENDERSYNCHRONIZER_RATEATHOSTTIME)
+    bool supportsPlayAtHostTime() const final { return true; }
+    bool supportsPauseAtHostTime() const final { return true; }
+    bool playAtHostTime(const MonotonicTime&) final;
+    bool pauseAtHostTime(const MonotonicTime&) final;
+#endif
 
     friend class MediaSourcePrivateAVFObjC;
 
@@ -295,6 +304,8 @@ private:
     HashMap<RetainPtr<CFTypeRef>, AudioRendererProperties> m_sampleBufferAudioRendererMap;
     RetainPtr<AVSampleBufferRenderSynchronizer> m_synchronizer;
     ALLOW_NEW_API_WITHOUT_GUARDS_END
+    mutable MediaPlayer::CurrentTimeDidChangeCallback m_currentTimeDidChangeCallback;
+    RetainPtr<id> m_timeChangedObserver;
     RetainPtr<id> m_timeJumpedObserver;
     RetainPtr<id> m_durationObserver;
     RetainPtr<id> m_performTaskObserver;

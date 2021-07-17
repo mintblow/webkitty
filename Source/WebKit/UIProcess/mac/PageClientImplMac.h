@@ -76,7 +76,7 @@ private:
     bool isViewInWindow() override;
     bool isVisuallyIdle() override;
     LayerHostingMode viewLayerHostingMode() override;
-    ColorSpaceData colorSpace() override;
+    WebCore::DestinationColorSpace colorSpace() override;
     void setRemoteLayerTreeRootNode(RemoteLayerTreeNode*) override;
     CALayer *acceleratedCompositingRootLayer() const override;
 
@@ -130,9 +130,9 @@ private:
 
     void doneWithKeyEvent(const NativeWebKeyboardEvent&, bool wasEventHandled) override;
 
-#if ENABLE(IMAGE_EXTRACTION)
-    void requestImageExtraction(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::ImageExtractionResult&&)>&&) override;
-    void computeCanRevealImage(const URL&, ShareableBitmap&, CompletionHandler<void(bool)>&&) override;
+#if ENABLE(IMAGE_ANALYSIS)
+    void requestTextRecognition(const URL& imageURL, const ShareableBitmap::Handle& imageData, CompletionHandler<void(WebCore::TextRecognitionResult&&)>&&) override;
+    void computeHasImageAnalysisResults(const URL&, ShareableBitmap&, ImageAnalysisType, CompletionHandler<void(bool)>&&) override;
 #endif
 
     RefPtr<WebPopupMenuProxy> createPopupMenuProxy(WebPageProxy&) override;
@@ -156,8 +156,8 @@ private:
 
     Ref<WebCore::ValidationBubble> createValidationBubble(const String& message, const WebCore::ValidationBubble::Settings&) final;
 
-    void setTextIndicator(Ref<WebCore::TextIndicator>, WebCore::TextIndicatorWindowLifetime) override;
-    void clearTextIndicator(WebCore::TextIndicatorWindowDismissalAnimation) override;
+    void setTextIndicator(Ref<WebCore::TextIndicator>, WebCore::TextIndicatorLifetime) override;
+    void clearTextIndicator(WebCore::TextIndicatorDismissalAnimation) override;
     void setTextIndicatorAnimationProgress(float) override;
 
     void enterAcceleratedCompositingMode(const LayerTreeContext&) override;
@@ -165,7 +165,7 @@ private:
     void updateAcceleratedCompositingMode(const LayerTreeContext&) override;
     void didFirstLayerFlush(const LayerTreeContext&) override;
 
-    RefPtr<ViewSnapshot> takeViewSnapshot(Optional<WebCore::IntRect>&&) override;
+    RefPtr<ViewSnapshot> takeViewSnapshot(std::optional<WebCore::IntRect>&&) override;
     void wheelEventWasNotHandledByWebCore(const NativeWebWheelEvent&) override;
 #if ENABLE(MAC_GESTURE_EVENTS)
     void gestureEventWasNotHandledByWebCore(const NativeWebGestureEvent&) override;
@@ -272,6 +272,7 @@ private:
     void refView() override;
     void derefView() override;
 
+    void pageDidScroll(const WebCore::IntPoint&) override;
     void didRestoreScrollPosition() override;
     bool windowIsFrontWindowUnderMouse(const NativeWebMouseEvent&) override;
 
@@ -285,6 +286,12 @@ private:
     bool canHandleContextMenuTranslation() const override;
     void handleContextMenuTranslation(const WebCore::TranslationContextMenuInfo&) override;
 #endif
+
+#if ENABLE(DATA_DETECTION)
+    void handleClickForDataDetectionResult(const WebCore::DataDetectorElementInfo&, const WebCore::IntPoint&) final;
+#endif
+        
+    void requestScrollToRect(const WebCore::FloatRect& targetRect, const WebCore::FloatPoint& origin) override;
 
     NSView *m_view;
     WeakPtr<WebViewImpl> m_impl;

@@ -28,8 +28,8 @@
 
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
 
-#include <WebCore/GraphicsContext.h>
-#include <WebCore/ImageData.h>
+#include <WebCore/GraphicsContextCG.h>
+#include <WebCore/PixelBuffer.h>
 #include <WebKitAdditions/CGDisplayListImageBufferAdditions.h>
 #include <wtf/IsoMallocInlines.h>
 
@@ -55,7 +55,7 @@ std::unique_ptr<CGDisplayListImageBufferBackend> CGDisplayListImageBufferBackend
     if (!cgContext)
         return nullptr;
 
-    auto context = makeUnique<WebCore::GraphicsContext>(cgContext.get());
+    auto context = makeUnique<WebCore::GraphicsContextCG>(cgContext.get());
     return std::unique_ptr<CGDisplayListImageBufferBackend>(new CGDisplayListImageBufferBackend(parameters, WTFMove(context)));
 }
 
@@ -99,19 +99,13 @@ RefPtr<WebCore::NativeImage> CGDisplayListImageBufferBackend::copyNativeImage(We
     return nullptr;
 }
 
-Vector<uint8_t> CGDisplayListImageBufferBackend::toBGRAData() const
+std::optional<WebCore::PixelBuffer> CGDisplayListImageBufferBackend::getPixelBuffer(const WebCore::PixelBufferFormat&, const WebCore::IntRect&) const
 {
     ASSERT_NOT_REACHED();
     return { };
 }
 
-RefPtr<WebCore::ImageData> CGDisplayListImageBufferBackend::getImageData(WebCore::AlphaPremultiplication outputFormat, const WebCore::IntRect& srcRect) const
-{
-    ASSERT_NOT_REACHED();
-    return nullptr;
-}
-
-void CGDisplayListImageBufferBackend::putImageData(WebCore::AlphaPremultiplication inputFormat, const WebCore::ImageData& imageData, const WebCore::IntRect& srcRect, const WebCore::IntPoint& destPoint, WebCore::AlphaPremultiplication destFormat)
+void CGDisplayListImageBufferBackend::putPixelBuffer(const WebCore::PixelBuffer&, const WebCore::IntRect&, const WebCore::IntPoint&, WebCore::AlphaPremultiplication)
 {
     ASSERT_NOT_REACHED();
 }

@@ -27,9 +27,9 @@
 #include "Frame.h"
 #include "HTMLFrameSetElement.h"
 #include "HTMLNames.h"
+#include "HTMLParserIdioms.h"
 #include "RenderFrame.h"
 #include <wtf/IsoMallocInlines.h>
-#include <wtf/text/StringToIntegerConversion.h>
 
 namespace WebCore {
 
@@ -83,7 +83,7 @@ int HTMLFrameElement::defaultTabIndex() const
 void HTMLFrameElement::parseAttribute(const QualifiedName& name, const AtomString& value)
 {
     if (name == frameborderAttr) {
-        m_frameBorder = parseIntegerAllowingTrailingJunk<int>(value).valueOr(0);
+        m_frameBorder = parseHTMLInteger(value).value_or(0);
         m_frameBorderSet = !value.isNull();
         // FIXME: If we are already attached, this has no effect.
     } else if (name == noresizeAttr) {

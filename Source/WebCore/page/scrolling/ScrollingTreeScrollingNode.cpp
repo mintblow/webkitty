@@ -74,7 +74,6 @@ void ScrollingTreeScrollingNode::commitStateBeforeChildren(const ScrollingStateN
     if (state.hasChangedProperty(ScrollingStateNode::Property::ScrollOrigin))
         m_scrollOrigin = state.scrollOrigin();
 
-#if ENABLE(CSS_SCROLL_SNAP)
     if (state.hasChangedProperty(ScrollingStateNode::Property::SnapOffsetsInfo))
         m_snapOffsetsInfo = state.snapOffsetsInfo();
 
@@ -83,7 +82,6 @@ void ScrollingTreeScrollingNode::commitStateBeforeChildren(const ScrollingStateN
 
     if (state.hasChangedProperty(ScrollingStateNode::Property::CurrentVerticalSnapOffsetIndex))
         m_currentVerticalSnapPointIndex = state.currentVerticalSnapPointIndex();
-#endif
 
     if (state.hasChangedProperty(ScrollingStateNode::Property::ScrollableAreaParams))
         m_scrollableAreaParameters = state.scrollableAreaParameters();
@@ -270,7 +268,7 @@ void ScrollingTreeScrollingNode::currentScrollPositionChanged(ScrollType, Scroll
     scrollingTree().scrollingTreeNodeDidScroll(*this, action);
 }
 
-bool ScrollingTreeScrollingNode::scrollPositionAndLayoutViewportMatch(const FloatPoint& position, Optional<FloatRect>)
+bool ScrollingTreeScrollingNode::scrollPositionAndLayoutViewportMatch(const FloatPoint& position, std::optional<FloatRect>)
 {
     return position == m_currentScrollPosition;
 }
@@ -281,7 +279,7 @@ void ScrollingTreeScrollingNode::applyLayerPositions()
     repositionRelatedLayers();
 }
 
-void ScrollingTreeScrollingNode::wasScrolledByDelegatedScrolling(const FloatPoint& position, Optional<FloatRect> overrideLayoutViewport, ScrollingLayerPositionAction scrollingLayerPositionAction)
+void ScrollingTreeScrollingNode::wasScrolledByDelegatedScrolling(const FloatPoint& position, std::optional<FloatRect> overrideLayoutViewport, ScrollingLayerPositionAction scrollingLayerPositionAction)
 {
     bool scrollPositionChanged = !scrollPositionAndLayoutViewportMatch(position, overrideLayoutViewport);
     if (!scrollPositionChanged && scrollingLayerPositionAction != ScrollingLayerPositionAction::Set)
@@ -311,7 +309,6 @@ void ScrollingTreeScrollingNode::dumpProperties(TextStream& ts, ScrollingStateTr
     if (m_scrollOrigin != IntPoint())
         ts.dumpProperty("scroll origin", m_scrollOrigin);
 
-#if ENABLE(CSS_SCROLL_SNAP)
     if (m_snapOffsetsInfo.horizontalSnapOffsets.size())
         ts.dumpProperty("horizontal snap offsets", m_snapOffsetsInfo.horizontalSnapOffsets);
 
@@ -323,8 +320,6 @@ void ScrollingTreeScrollingNode::dumpProperties(TextStream& ts, ScrollingStateTr
 
     if (m_currentVerticalSnapPointIndex)
         ts.dumpProperty("current vertical snap point index", m_currentVerticalSnapPointIndex);
-    
-#endif
 
     ts.dumpProperty("scrollable area parameters", m_scrollableAreaParameters);
 
@@ -334,12 +329,30 @@ void ScrollingTreeScrollingNode::dumpProperties(TextStream& ts, ScrollingStateTr
 #endif
 }
 
-#if ENABLE(CSS_SCROLL_SNAP)
 const FloatScrollSnapOffsetsInfo& ScrollingTreeScrollingNode::snapOffsetsInfo() const
 {
     return m_snapOffsetsInfo;
 }
-#endif
+
+std::optional<unsigned> ScrollingTreeScrollingNode::currentHorizontalSnapPointIndex() const
+{
+    return m_currentHorizontalSnapPointIndex;
+}
+
+std::optional<unsigned> ScrollingTreeScrollingNode::currentVerticalSnapPointIndex() const
+{
+    return m_currentVerticalSnapPointIndex;
+}
+
+void ScrollingTreeScrollingNode::setCurrentHorizontalSnapPointIndex(std::optional<unsigned> index)
+{
+    m_currentHorizontalSnapPointIndex = index;
+}
+
+void ScrollingTreeScrollingNode::setCurrentVerticalSnapPointIndex(std::optional<unsigned> index)
+{
+    m_currentVerticalSnapPointIndex = index;
+}
 
 } // namespace WebCore
 

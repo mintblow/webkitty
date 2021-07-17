@@ -69,7 +69,7 @@ public:
     void updateRegistration(const URL& scopeURL, const URL& scriptURL, WorkerType, RefPtr<DeferredPromise>&&);
 
     void getRegistration(const String& clientURL, Ref<DeferredPromise>&&);
-    void updateRegistrationState(ServiceWorkerRegistrationIdentifier, ServiceWorkerRegistrationState, const Optional<ServiceWorkerData>&);
+    void updateRegistrationState(ServiceWorkerRegistrationIdentifier, ServiceWorkerRegistrationState, const std::optional<ServiceWorkerData>&);
     void updateWorkerState(ServiceWorkerIdentifier, ServiceWorkerState);
     void queueTaskToFireUpdateFoundEvent(ServiceWorkerRegistrationIdentifier);
     void queueTaskToDispatchControllerChangeEvent();
@@ -88,8 +88,6 @@ public:
     void startMessages();
 
     bool isStopped() const { return m_isStopped; };
-
-    bool isAlwaysOnLoggingAllowed() const;
 
     NavigatorBase* navigator() { return &m_navigator; }
 

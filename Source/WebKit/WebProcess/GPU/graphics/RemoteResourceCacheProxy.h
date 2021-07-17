@@ -51,17 +51,20 @@ public:
 
     void cacheNativeImage(WebCore::NativeImage&);
 
-    using ImageBufferHashMap = HashMap<WebCore::RenderingResourceIdentifier, WeakPtr<WebCore::ImageBuffer>>;
-    const ImageBufferHashMap& imageBuffers() const { return m_imageBuffers; }
-
     void cacheFont(WebCore::Font&);
     void didFinalizeRenderingUpdate();
+
+    void remoteResourceCacheWasDestroyed();
     void releaseMemory();
 
 private:
+    using ImageBufferHashMap = HashMap<WebCore::RenderingResourceIdentifier, WeakPtr<WebCore::ImageBuffer>>;
     using NativeImageHashMap = HashMap<WebCore::RenderingResourceIdentifier, WeakPtr<WebCore::NativeImage>>;
     
     void releaseNativeImage(WebCore::RenderingResourceIdentifier) override;
+    void finalizeRenderingUpdateForFonts();
+    void prepareForNextRenderingUpdate();
+    void clearFontMap();
 
     ImageBufferHashMap m_imageBuffers;
     NativeImageHashMap m_nativeImages;

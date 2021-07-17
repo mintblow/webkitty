@@ -30,6 +30,7 @@
 #include "MediaPlayer.h"
 #include "MediaPlayerIdentifier.h"
 #include "PlatformTimeRanges.h"
+#include <wtf/CompletionHandler.h>
 
 namespace WebCore {
 
@@ -157,6 +158,10 @@ public:
 
     virtual unsigned long long totalBytes() const { return 0; }
     virtual bool didLoadingProgress() const = 0;
+    // The default implementation of didLoadingProgressAsync is implemented in terms of
+    // synchronous didLoadingProgress() calls. Implementations may also
+    // override didLoadingProgressAsync to create a more proper async implementation.
+    virtual void didLoadingProgressAsync(MediaPlayer::DidLoadingProgressCompletionHandler&& callback) const { callback(didLoadingProgress()); }
 
     virtual void setSize(const IntSize&) { }
 
@@ -198,7 +203,7 @@ public:
 
     virtual bool hasSingleSecurityOrigin() const { return false; }
     virtual bool didPassCORSAccessCheck() const { return false; }
-    virtual Optional<bool> wouldTaintOrigin(const SecurityOrigin&) const { return WTF::nullopt; }
+    virtual std::optional<bool> wouldTaintOrigin(const SecurityOrigin&) const { return std::nullopt; }
 
     virtual MediaPlayer::MovieLoadType movieLoadType() const { return MediaPlayer::MovieLoadType::Unknown; }
 
@@ -276,7 +281,7 @@ public:
 
     virtual bool ended() const { return false; }
 
-    virtual Optional<VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() { return WTF::nullopt; }
+    virtual std::optional<VideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() { return std::nullopt; }
 
 #if ENABLE(AVF_CAPTIONS)
     virtual void notifyTrackModeChanged() { }
@@ -302,6 +307,11 @@ public:
     virtual void audioOutputDeviceChanged() { }
 
     virtual MediaPlayerIdentifier identifier() const { return { }; }
+
+    virtual bool supportsPlayAtHostTime() const { return false; }
+    virtual bool supportsPauseAtHostTime() const { return false; }
+    virtual bool playAtHostTime(const MonotonicTime&) { return false; }
+    virtual bool pauseAtHostTime(const MonotonicTime&) { return false; }
 };
 
 }

@@ -81,7 +81,7 @@ private:
     bool canSwitchToType(const WebCore::ContentType&) final;
     void setMediaSourceEnded(bool) final;
     void setMode(WebCore::SourceBufferAppendMode) final;
-    void reenqueueMediaIfNeeded(const MediaTime& currentMediaTime, uint64_t pendingAppendDataCapacity, uint64_t maximumBufferSize) final;
+    void reenqueueMediaIfNeeded(const MediaTime& currentMediaTime) final;
     void addTrackBuffer(const AtomString& trackId, RefPtr<WebCore::MediaDescription>&&) final;
     void resetTrackBuffers() final;
     void clearTrackBuffers() final;
@@ -91,7 +91,7 @@ private:
     void setShouldGenerateTimestamps(bool) final;
     void updateBufferedFromTrackBuffers(bool sourceIsEnded) final;
     void removeCodedFrames(const MediaTime& start, const MediaTime& end, const MediaTime& currentMediaTime, bool isEnded, CompletionHandler<void()>&&) final;
-    void evictCodedFrames(uint64_t newDataSize, uint64_t pendingAppendDataCapacity, uint64_t maximumBufferSize, const MediaTime& currentTime, const MediaTime& duration, bool isEnded) final;
+    void evictCodedFrames(uint64_t newDataSize, uint64_t maximumBufferSize, const MediaTime& currentTime, const MediaTime& duration, bool isEnded) final;
     void resetTimestampOffsetInTrackBuffers() final;
     void startChangingType() final;
     void setTimestampOffset(const MediaTime&) final;
@@ -99,6 +99,7 @@ private:
     void setAppendWindowEnd(const MediaTime&) final;
     void seekToTime(const MediaTime&) final;
     void updateTrackIds(Vector<std::pair<AtomString, AtomString>>&&) final;
+    uint64_t totalTrackBufferSizeInBytes() const final;
 
     bool isActive() const final { return m_isActive; }
 
@@ -110,7 +111,7 @@ private:
     void sourceBufferPrivateDidReceiveInitializationSegment(InitializationSegmentInfo&&, CompletionHandler<void()>&&);
     void sourceBufferPrivateStreamEndedWithDecodeError();
     void sourceBufferPrivateAppendError(bool decodeError);
-    void sourceBufferPrivateAppendComplete(WebCore::SourceBufferPrivateClient::AppendResult, const WebCore::PlatformTimeRanges& buffered);
+    void sourceBufferPrivateAppendComplete(WebCore::SourceBufferPrivateClient::AppendResult, const WebCore::PlatformTimeRanges& buffered, uint64_t totalTrackBufferSizeInBytes, const MediaTime& timestampOffset);
     void sourceBufferPrivateHighestPresentationTimestampChanged(const MediaTime&);
     void sourceBufferPrivateDurationChanged(const MediaTime&);
     void sourceBufferPrivateDidParseSample(double sampleDuration);
@@ -127,6 +128,7 @@ private:
     HashMap<AtomString, TrackPrivateRemoteIdentifier> m_trackIdentifierMap;
 
     bool m_isActive { false };
+    uint64_t m_totalTrackBufferSizeInBytes = { 0 };
 
 #if !RELEASE_LOG_DISABLED
     const Logger& logger() const final { return m_logger.get(); }

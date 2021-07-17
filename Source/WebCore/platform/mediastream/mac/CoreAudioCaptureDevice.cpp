@@ -19,7 +19,7 @@
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * (INCLUDING NEGLIGEPAL::NCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -36,7 +36,6 @@
 #import <pal/cf/CoreMediaSoftLink.h>
 
 namespace WebCore {
-using namespace PAL;
 
 static bool getDeviceInfo(uint32_t deviceID, CaptureDevice::DeviceType type, String& persistentID, String& label)
 {
@@ -44,9 +43,13 @@ static bool getDeviceInfo(uint32_t deviceID, CaptureDevice::DeviceType type, Str
     AudioObjectPropertyAddress address {
         kAudioDevicePropertyDeviceUID,
         kAudioDevicePropertyScopeInput,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+        kAudioObjectPropertyElementMain
+#else
         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         kAudioObjectPropertyElementMaster
         ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
     };
     UInt32 dataSize = sizeof(uniqueID);
     auto err = AudioObjectGetPropertyData(static_cast<UInt32>(deviceID), &address, 0, nullptr, &dataSize, &uniqueID);
@@ -62,9 +65,13 @@ static bool getDeviceInfo(uint32_t deviceID, CaptureDevice::DeviceType type, Str
     address = {
         kAudioDevicePropertyDataSource,
         scope,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+        kAudioObjectPropertyElementMain
+#else
         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         kAudioObjectPropertyElementMaster
         ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
     };
     uint32_t sourceID;
     dataSize = sizeof(sourceID);
@@ -74,9 +81,13 @@ static bool getDeviceInfo(uint32_t deviceID, CaptureDevice::DeviceType type, Str
         address = {
             kAudioDevicePropertyDataSourceNameForIDCFString,
             scope,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+            kAudioObjectPropertyElementMain
+#else
             ALLOW_DEPRECATED_DECLARATIONS_BEGIN
             kAudioObjectPropertyElementMaster
             ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
         };
         dataSize = sizeof(translation);
         err = AudioObjectGetPropertyData(static_cast<UInt32>(deviceID), &address, 0, nullptr, &dataSize, &translation);
@@ -86,9 +97,13 @@ static bool getDeviceInfo(uint32_t deviceID, CaptureDevice::DeviceType type, Str
         address = {
             kAudioObjectPropertyName,
             kAudioObjectPropertyScopeGlobal,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+            kAudioObjectPropertyElementMain
+#else
             ALLOW_DEPRECATED_DECLARATIONS_BEGIN
             kAudioObjectPropertyElementMaster
             ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
         };
         dataSize = sizeof(localizedName);
         err = AudioObjectGetPropertyData(static_cast<UInt32>(deviceID), &address, 0, nullptr, &dataSize, &localizedName);
@@ -105,13 +120,13 @@ static bool getDeviceInfo(uint32_t deviceID, CaptureDevice::DeviceType type, Str
     return true;
 }
 
-Optional<CoreAudioCaptureDevice> CoreAudioCaptureDevice::create(uint32_t deviceID, DeviceType type, const String& groupID)
+std::optional<CoreAudioCaptureDevice> CoreAudioCaptureDevice::create(uint32_t deviceID, DeviceType type, const String& groupID)
 {
     ASSERT(type == CaptureDevice::DeviceType::Microphone || type == CaptureDevice::DeviceType::Speaker);
     String persistentID;
     String label;
     if (!getDeviceInfo(deviceID, type, persistentID, label))
-        return WTF::nullopt;
+        return std::nullopt;
 
     return CoreAudioCaptureDevice(deviceID, persistentID, type, label, groupID.isNull() ? persistentID : groupID);
 }
@@ -123,9 +138,13 @@ CoreAudioCaptureDevice::CoreAudioCaptureDevice(uint32_t deviceID, const String& 
     AudioObjectPropertyAddress address {
         kAudioDevicePropertyDeviceIsAlive,
         kAudioObjectPropertyScopeGlobal,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+        kAudioObjectPropertyElementMain
+#else
         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         kAudioObjectPropertyElementMaster
         ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
     };
     UInt32 state = 0;
     UInt32 dataSize = sizeof(state);
@@ -138,9 +157,13 @@ CoreAudioCaptureDevice::CoreAudioCaptureDevice(uint32_t deviceID, const String& 
     address = {
         property,
         kAudioObjectPropertyScopeGlobal,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+        kAudioObjectPropertyElementMain
+#else
         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         kAudioObjectPropertyElementMaster
         ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
     };
     AudioDeviceID defaultID = kAudioDeviceUnknown;
     dataSize = sizeof(defaultID);
@@ -156,9 +179,13 @@ Vector<AudioDeviceID> CoreAudioCaptureDevice::relatedAudioDeviceIDs(AudioDeviceI
     AudioObjectPropertyAddress property = {
         kAudioDevicePropertyRelatedDevices,
         kAudioDevicePropertyScopeOutput,
+#if HAVE(AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN)
+        kAudioObjectPropertyElementMain
+#else
         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         kAudioObjectPropertyElementMaster
         ALLOW_DEPRECATED_DECLARATIONS_END
+#endif
     };
     OSStatus error = AudioObjectGetPropertyDataSize(deviceID, &property, 0, 0, &size);
     if (error || !size)
@@ -177,7 +204,7 @@ RetainPtr<CMClockRef> CoreAudioCaptureDevice::deviceClock()
         return m_deviceClock;
 
     CMClockRef clock;
-    auto err = CMAudioDeviceClockCreate(kCFAllocatorDefault, persistentId().createCFString().get(), &clock);
+    auto err = PAL::CMAudioDeviceClockCreate(kCFAllocatorDefault, persistentId().createCFString().get(), &clock);
     if (err) {
         RELEASE_LOG_ERROR(WebRTC, "CoreAudioCaptureDevice::CMAudioDeviceClockCreate(%p) CMAudioDeviceClockCreate failed with error %d (%.4s)", this, (int)err, (char*)&err);
         return nullptr;

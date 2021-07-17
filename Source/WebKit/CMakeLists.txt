@@ -46,6 +46,7 @@ set(WebKit_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/Shared/Plugins/Netscape/x11"
     "${WEBKIT_DIR}/Shared/RemoteLayerTree"
     "${WEBKIT_DIR}/Shared/WebsiteData"
+    "${WEBKIT_DIR}/Shared/XR"
     "${WEBKIT_DIR}/UIProcess"
     "${WEBKIT_DIR}/UIProcess/API"
     "${WEBKIT_DIR}/UIProcess/API/C"
@@ -58,6 +59,7 @@ set(WebKit_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/UIProcess/Inspector"
     "${WEBKIT_DIR}/UIProcess/Inspector/Agents"
     "${WEBKIT_DIR}/UIProcess/Launcher"
+    "${WEBKIT_DIR}/UIProcess/Media"
     "${WEBKIT_DIR}/UIProcess/Network"
     "${WEBKIT_DIR}/UIProcess/Network/CustomProtocols"
     "${WEBKIT_DIR}/UIProcess/Notifications"
@@ -67,6 +69,7 @@ set(WebKit_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/UIProcess/WebAuthentication"
     "${WEBKIT_DIR}/UIProcess/WebAuthentication/Mock"
     "${WEBKIT_DIR}/UIProcess/WebsiteData"
+    "${WEBKIT_DIR}/UIProcess/XR"
     "${WEBKIT_DIR}/WebAuthnProcess"
     "${WEBKIT_DIR}/WebProcess"
     "${WEBKIT_DIR}/WebProcess/ApplePay"
@@ -107,6 +110,7 @@ set(WebKit_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/WebProcess/WebPage"
     "${WEBKIT_DIR}/WebProcess/WebPage/RemoteLayerTree"
     "${WEBKIT_DIR}/WebProcess/WebStorage"
+    "${WEBKIT_DIR}/WebProcess/XR"
     "${CMAKE_SOURCE_DIR}/Source"
     "${CMAKE_SOURCE_DIR}/WebKitLibraries"
 )
@@ -142,8 +146,7 @@ set(WebKit_MESSAGES_IN_FILES
     GPUProcess/media/RemoteSourceBufferProxy
 
     GPUProcess/webrtc/LibWebRTCCodecsProxy
-    GPUProcess/webrtc/RemoteAudioMediaStreamTrackRenderer
-    GPUProcess/webrtc/RemoteAudioMediaStreamTrackRendererManager
+    GPUProcess/webrtc/RemoteAudioMediaStreamTrackRendererInternalUnitManager
     GPUProcess/webrtc/RemoteMediaRecorder
     GPUProcess/webrtc/RemoteMediaRecorderManager
     GPUProcess/webrtc/RemoteSampleBufferDisplayLayer
@@ -153,6 +156,7 @@ set(WebKit_MESSAGES_IN_FILES
 
     NetworkProcess/IndexedDB/WebIDBServer
 
+    NetworkProcess/NetworkBroadcastChannelRegistry
     NetworkProcess/NetworkConnectionToWebProcess
     NetworkProcess/NetworkContentRuleListManager
     NetworkProcess/NetworkProcess
@@ -214,6 +218,8 @@ set(WebKit_MESSAGES_IN_FILES
 
     UIProcess/UserContent/WebUserContentControllerProxy
 
+    UIProcess/XR/PlatformXRSystem
+
     WebProcess/WebProcess
 
     WebProcess/Automation/WebAutomationSessionProxy
@@ -238,6 +244,7 @@ set(WebKit_MESSAGES_IN_FILES
     WebProcess/GPU/media/RemoteRemoteCommandListener
     WebProcess/GPU/media/SourceBufferPrivateRemote
 
+    WebProcess/GPU/webrtc/AudioMediaStreamTrackRendererInternalUnitManager
     WebProcess/GPU/webrtc/LibWebRTCCodecs
     WebProcess/GPU/webrtc/SampleBufferDisplayLayer
 
@@ -274,6 +281,7 @@ set(WebKit_MESSAGES_IN_FILES
 
     WebProcess/UserContent/WebUserContentController
 
+    WebProcess/WebCoreSupport/WebBroadcastChannelRegistry
     WebProcess/WebCoreSupport/WebSpeechRecognitionConnection
 
     WebProcess/WebPage/DrawingArea
@@ -282,6 +290,8 @@ set(WebKit_MESSAGES_IN_FILES
     WebProcess/WebPage/WebPage
 
     WebProcess/WebStorage/StorageAreaMap
+
+    WebProcess/XR/PlatformXRSystemProxy
 )
 
 set(WebKit_FRAMEWORKS
@@ -316,6 +326,12 @@ if (USE_LIBEPOXY)
         ${LIBEPOXY_LIBRARIES}
     )
     add_definitions(${LIBEPOXY_DEFINITIONS})
+elseif (USE_ANGLE_EGL)
+    # Prepend to make sure the ANGLE headers are found before system headers
+    list(PREPEND WebKit_PRIVATE_LIBRARIES
+        ANGLE::GLES
+        ANGLE::EGL
+    )
 else ()
     if (USE_OPENGL)
         list(APPEND WebKit_SYSTEM_INCLUDE_DIRECTORIES

@@ -54,9 +54,12 @@ NetworkProcess/webrtc/NetworkRTCMonitor.cpp
 NetworkProcess/webrtc/NetworkRTCProvider.cpp
 NetworkProcess/webrtc/NetworkRTCResolver.cpp
 NetworkProcess/webrtc/NetworkRTCResolverCocoa.cpp
-NetworkProcess/webrtc/NetworkRTCSocketCocoa.mm
+NetworkProcess/webrtc/NetworkRTCTCPSocketCocoa.mm
+NetworkProcess/webrtc/NetworkRTCUDPSocketCocoa.mm
 
 GPUProcess/EntryPoint/Cocoa/XPCService/GPUServiceEntryPoint.mm
+GPUProcess/cocoa/GPUConnectionToWebProcessCocoa.mm
+GPUProcess/cocoa/GPUProcessCocoa.mm
 GPUProcess/graphics/RemoteGraphicsContextGLCocoa.cpp
 GPUProcess/graphics/ScopedRenderingResourcesRequestCocoa.mm @no-unify
 GPUProcess/graphics/ScopedWebGLRenderingResourcesRequestCocoa.cpp
@@ -68,17 +71,18 @@ GPUProcess/media/RemoteImageDecoderAVFProxy.cpp
 GPUProcess/media/cocoa/RemoteMediaPlayerProxyCocoa.mm
 GPUProcess/media/ios/RemoteMediaSessionHelperProxy.cpp
 GPUProcess/webrtc/LibWebRTCCodecsProxy.mm @no-unify
+GPUProcess/webrtc/RemoteAudioMediaStreamTrackRendererInternalUnitManager.cpp
 
 Platform/cf/ModuleCF.cpp
 
 Platform/classifier/cocoa/ResourceLoadStatisticsClassifierCocoa.cpp
 Platform/classifier/ResourceLoadStatisticsClassifier.cpp
 
-Platform/cocoa/ImageExtractionUtilities.mm
 Platform/cocoa/LayerHostingContext.mm
 Platform/cocoa/PaymentAuthorizationPresenter.mm
 Platform/cocoa/PaymentAuthorizationViewController.mm
 Platform/cocoa/SharedMemoryCocoa.cpp
+Platform/cocoa/TextRecognitionUtilities.mm
 Platform/cocoa/WKCrashReporter.mm
 Platform/cocoa/WKPaymentAuthorizationDelegate.mm
 Platform/cocoa/WebKitAdditions.mm @no-unify
@@ -160,6 +164,7 @@ Shared/Cocoa/AuxiliaryProcessCocoa.mm
 Shared/Cocoa/CompletionHandlerCallChecker.mm
 Shared/Cocoa/CoreTextHelpers.mm
 Shared/Cocoa/DataDetectionResult.mm
+Shared/Cocoa/DefaultWebBrowserChecks.mm
 Shared/Cocoa/InsertTextOptions.cpp
 Shared/Cocoa/LoadParametersCocoa.mm
 Shared/Cocoa/PDFKitSoftLink.mm
@@ -167,6 +172,7 @@ Shared/Cocoa/SandboxExtensionCocoa.mm
 Shared/Cocoa/SandboxInitialiationParametersCocoa.mm
 Shared/Cocoa/SandboxUtilities.mm
 Shared/Cocoa/SharedRingBufferStorage.cpp
+Shared/Cocoa/TCCSoftLink.mm
 Shared/Cocoa/WebCoreArgumentCodersCocoa.mm
 Shared/Cocoa/WebErrorsCocoa.mm
 Shared/Cocoa/WebKit2InitializeCocoa.mm
@@ -181,8 +187,6 @@ Shared/Cocoa/WKNSURLExtras.mm
 Shared/Cocoa/WKNSURLRequest.mm
 Shared/Cocoa/WKObject.mm
 Shared/Cocoa/WebPreferencesDefaultValuesCocoa.mm
-Shared/Cocoa/XRDeviceInfo.mm
-Shared/Cocoa/XRDeviceProxy.mm
 
 Shared/EntryPointUtilities/Cocoa/XPCService/XPCServiceEntryPoint.mm
 Shared/EntryPointUtilities/Cocoa/XPCService/XPCServiceMain.mm
@@ -202,7 +206,6 @@ Shared/ios/WebTouchEventIOS.cpp
 
 Shared/mac/AuxiliaryProcessMac.mm
 Shared/mac/CodeSigning.mm
-Shared/mac/ColorSpaceData.mm
 Shared/mac/HangDetectionDisablerMac.mm
 Shared/mac/NativeWebGestureEventMac.mm
 Shared/mac/NativeWebKeyboardEventMac.mm
@@ -303,10 +306,8 @@ UIProcess/API/Cocoa/_WKWebAuthenticationPanel.mm
 UIProcess/API/Cocoa/_WKWebsiteDataSize.mm
 UIProcess/API/Cocoa/_WKWebsiteDataStore.mm
 UIProcess/API/Cocoa/_WKWebsiteDataStoreConfiguration.mm
-UIProcess/API/Cocoa/_WKWebsitePolicies.mm
 UIProcess/API/Cocoa/APIAttachmentCocoa.mm
 UIProcess/API/Cocoa/APIContentRuleListStoreCocoa.mm
-UIProcess/API/Cocoa/APIHTTPCookieStoreCocoa.mm
 UIProcess/API/Cocoa/APISerializedScriptValueCocoa.mm
 UIProcess/API/Cocoa/LegacyBundleForClass.mm
 UIProcess/API/Cocoa/NSAttributedString.mm
@@ -374,6 +375,10 @@ UIProcess/Automation/ios/WebAutomationSessionIOS.mm
 
 UIProcess/Automation/mac/WebAutomationSessionMac.mm
 
+UIProcess/Cocoa/GroupActivities/GroupActivitiesCoordinator.mm
+UIProcess/Cocoa/GroupActivities/GroupActivitiesSession.mm
+UIProcess/Cocoa/GroupActivities/GroupActivitiesSessionNotifier.mm
+
 UIProcess/Cocoa/SOAuthorization/NavigationSOAuthorizationSession.mm
 UIProcess/Cocoa/SOAuthorization/PopUpSOAuthorizationSession.mm
 UIProcess/Cocoa/SOAuthorization/RedirectSOAuthorizationSession.mm
@@ -390,14 +395,16 @@ UIProcess/Cocoa/LegacyDownloadClient.mm
 UIProcess/Cocoa/DownloadProxyMapCocoa.mm
 UIProcess/Cocoa/FindClient.mm
 UIProcess/Cocoa/FullscreenClient.mm
+UIProcess/Cocoa/GPUProcessProxyCocoa.mm
 UIProcess/Cocoa/GlobalFindInPageState.mm
 UIProcess/Cocoa/IconLoadingDelegate.mm
 UIProcess/Cocoa/LegacyCustomProtocolManagerClient.mm
 UIProcess/Cocoa/MediaUtilities.mm
 UIProcess/Cocoa/MediaPermissionUtilities.mm
+UIProcess/Cocoa/ModelElementControllerCocoa.mm
 UIProcess/Cocoa/NavigationState.mm
 UIProcess/Cocoa/PageClientImplCocoa.mm
-UIProcess/Cocoa/PlatformXRSystem.mm
+UIProcess/Cocoa/PlatformXRCoordinator.mm
 UIProcess/Cocoa/PlaybackSessionManagerProxy.mm
 UIProcess/Cocoa/ResourceLoadDelegate.mm
 UIProcess/Cocoa/SafeBrowsingWarningCocoa.mm
@@ -453,7 +460,6 @@ UIProcess/ios/forms/WKFormSelectPicker.mm
 UIProcess/ios/forms/WKFormSelectPopover.mm
 UIProcess/ios/forms/WKNumberPadView.mm
 UIProcess/ios/forms/WKNumberPadViewController.mm
-UIProcess/ios/forms/WKQuickboardListViewController.mm
 UIProcess/ios/forms/WKSelectMenuListViewController.mm
 UIProcess/ios/forms/WKTextInputListViewController.mm
 UIProcess/ios/forms/WKTimePickerViewController.mm
@@ -484,8 +490,12 @@ UIProcess/ios/WKDeferringGestureRecognizer.mm
 UIProcess/ios/WKGeolocationProviderIOS.mm
 UIProcess/ios/WKGeolocationProviderIOSObjCSecurityOrigin.mm
 UIProcess/ios/WKHighlightLongPressGestureRecognizer.mm
-UIProcess/ios/WKImageExtractionGestureRecognizer.mm
+UIProcess/ios/WKHoverPlatter.mm
+UIProcess/ios/WKHoverPlatterParameters.mm
+UIProcess/ios/WKImageAnalysisGestureRecognizer.mm
 UIProcess/ios/WKKeyboardScrollingAnimator.mm
+UIProcess/ios/WKModelInteractionGestureRecognizer.mm
+UIProcess/ios/WKModelView.mm
 UIProcess/ios/WKMouseDeviceObserver.mm
 UIProcess/ios/WKMouseGestureRecognizer.mm
 UIProcess/ios/WKPasswordView.mm
@@ -515,7 +525,6 @@ UIProcess/mac/ViewGestureControllerMac.mm
 UIProcess/mac/ViewSnapshotStoreMac.mm
 UIProcess/mac/WebColorPickerMac.mm
 UIProcess/mac/WebContextMenuProxyMac.mm
-UIProcess/mac/WebCookieManagerProxyMac.mm
 UIProcess/mac/WebDataListSuggestionsDropdownMac.mm
 UIProcess/mac/WebDateTimePickerMac.mm
 UIProcess/mac/WebPageProxyMac.mm
@@ -523,9 +532,10 @@ UIProcess/mac/WebPopupMenuProxyMac.mm
 UIProcess/mac/WebProcessProxyMac.mm
 UIProcess/mac/WindowServerConnection.mm
 UIProcess/mac/WKFullScreenWindowController.mm
-UIProcess/mac/WKImageExtractionPreviewController.mm
 UIProcess/mac/WKImmediateActionController.mm
 UIProcess/mac/WKPrintingView.mm
+UIProcess/mac/WKQuickLookPreviewController.mm
+UIProcess/mac/WKRevealItemPresenter.mm
 UIProcess/mac/WKSharingServicePickerDelegate.mm
 UIProcess/mac/WKTextFinderClient.mm
 UIProcess/mac/WKTextInputWindowController.mm
@@ -592,7 +602,6 @@ WebProcess/ApplePay/WebPaymentCoordinator.cpp
 
 WebProcess/ApplePay/cocoa/WebPaymentCoordinatorCocoa.mm
 
-WebProcess/cocoa/PlatformXRSystemProxy.mm
 WebProcess/cocoa/PlaybackSessionManager.mm
 WebProcess/cocoa/RemoteCaptureSampleManager.cpp
 WebProcess/cocoa/RemoteRealtimeAudioSource.cpp
@@ -613,6 +622,7 @@ WebProcess/GPU/media/RemoteImageDecoderAVFManager.cpp
 WebProcess/GPU/media/cocoa/MediaPlayerPrivateRemoteCocoa.mm
 WebProcess/GPU/media/cocoa/VideoLayerRemoteCocoa.mm
 WebProcess/GPU/media/ios/RemoteMediaSessionHelper.cpp
+WebProcess/GPU/webrtc/AudioMediaStreamTrackRendererInternalUnitManager.cpp
 WebProcess/GPU/webrtc/LibWebRTCCodecs.mm
 WebProcess/GPU/webrtc/MediaRecorderPrivate.mm
 
@@ -654,6 +664,7 @@ WebProcess/Plugins/PDF/PDFPluginChoiceAnnotation.mm
 WebProcess/Plugins/PDF/PDFPluginPasswordField.mm
 WebProcess/Plugins/PDF/PDFPluginTextAnnotation.mm
 
+WebProcess/WebCoreSupport/WebCaptionPreferencesDelegate.cpp
 WebProcess/WebCoreSupport/WebPasteboardOverrides.cpp
 WebProcess/WebCoreSupport/WebValidationMessageClient.cpp
 
@@ -708,14 +719,10 @@ GPUProcessMessageReceiver.cpp
 LibWebRTCCodecsProxyMessageReceiver.cpp
 LibWebRTCCodecsMessageReceiver.cpp
 MessageNames.cpp
-PlatformXRSystemMessageReceiver.cpp
-PlatformXRSystemProxyMessageReceiver.cpp
 RemoteAudioDestinationManagerMessageReceiver.cpp
 RemoteAudioHardwareListenerMessageReceiver.cpp
 RemoteAudioSessionMessageReceiver.cpp
 RemoteAudioSessionProxyMessageReceiver.cpp
-RemoteAudioMediaStreamTrackRendererManagerMessageReceiver.cpp
-RemoteAudioMediaStreamTrackRendererMessageReceiver.cpp
 RemoteAudioSourceProviderManagerMessageReceiver.cpp
 RemoteImageDecoderAVFProxyMessageReceiver.cpp
 RemoteImageDecoderAVFManagerMessageReceiver.cpp

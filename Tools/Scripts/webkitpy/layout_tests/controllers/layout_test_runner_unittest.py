@@ -79,7 +79,7 @@ class LayoutTestRunnerTests(unittest.TestCase):
 
         host = MockHost()
         port = port or host.port_factory.get(options.platform, options=options)
-        return LayoutTestRunner(options, port, FakePrinter(), port.results_directory(), lambda test_name: False)
+        return LayoutTestRunner(options, port, FakePrinter(), port.results_directory())
 
     def _run_tests(self, runner, tests):
         test_inputs = [TestInput(Test(test), 6000) for test in tests]
@@ -130,23 +130,23 @@ class LayoutTestRunnerTests(unittest.TestCase):
         expectations.parse_all_expectations()
         runner._expectations = expectations
 
-        run_results = TestRunResults(expectations, 1)
-        result = TestResult(test_name=test, failures=[test_failures.FailureReftestMismatchDidNotOccur()], reftest_type=['!='])
-        runner._update_summary_with_result(run_results, result)
-        self.assertEqual(1, run_results.expected)
-        self.assertEqual(0, run_results.unexpected)
+        runner._current_run_results = TestRunResults(expectations, 1)
+        result = TestResult(test, failures=[test_failures.FailureReftestMismatchDidNotOccur()], reftest_type=['!='])
+        runner.update_summary_with_result(result)
+        self.assertEqual(1, runner._current_run_results.expected)
+        self.assertEqual(0, runner._current_run_results.unexpected)
 
-        run_results = TestRunResults(expectations, 1)
-        result = TestResult(test_name=test, failures=[], reftest_type=['=='])
-        runner._update_summary_with_result(run_results, result)
-        self.assertEqual(0, run_results.expected)
-        self.assertEqual(1, run_results.unexpected)
+        runner._current_run_results = TestRunResults(expectations, 1)
+        result = TestResult(test, failures=[], reftest_type=['=='])
+        runner.update_summary_with_result(result)
+        self.assertEqual(0, runner._current_run_results.expected)
+        self.assertEqual(1, runner._current_run_results.unexpected)
 
-        run_results = TestRunResults(expectations, 1)
-        result = TestResult(test_name=leak_test, failures=[])
-        runner._update_summary_with_result(run_results, result)
-        self.assertEqual(1, run_results.expected)
-        self.assertEqual(0, run_results.unexpected)
+        runner._current_run_results = TestRunResults(expectations, 1)
+        result = TestResult(leak_test, failures=[])
+        runner.update_summary_with_result(result)
+        self.assertEqual(1, runner._current_run_results.expected)
+        self.assertEqual(0, runner._current_run_results.unexpected)
 
     def test_servers_started(self):
 

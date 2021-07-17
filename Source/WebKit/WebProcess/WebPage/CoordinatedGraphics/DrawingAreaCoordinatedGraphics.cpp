@@ -43,7 +43,7 @@
 #include <WebCore/Settings.h>
 
 #if USE(DIRECT2D)
-#include <WebCore/GraphicsContextImplDirect2D.h>
+#include <WebCore/GraphicsContextDirect2D.h>
 #include <WebCore/PlatformContextDirect2D.h>
 #include <d2d1.h>
 #include <d3d11_1.h>
@@ -483,6 +483,44 @@ void DrawingAreaCoordinatedGraphics::didUpdate()
     displayTimerFired();
 }
 
+#if PLATFORM(GTK)
+void DrawingAreaCoordinatedGraphics::adjustTransientZoom(double scale, FloatPoint origin)
+{
+    if (!m_transientZoom) {
+        FrameView& frameView = *m_webPage.mainFrameView();
+        FloatRect unobscuredContentRect = frameView.unobscuredContentRectIncludingScrollbars();
+
+        m_transientZoom = true;
+        m_transientZoomInitialOrigin = unobscuredContentRect.location();
+    }
+
+    if (m_layerTreeHost) {
+        m_layerTreeHost->adjustTransientZoom(scale, origin);
+        return;
+    }
+
+    // We can't do transient zoom for non-AC mode, so just zoom in place instead.
+
+    FloatPoint unscrolledOrigin(origin);
+    unscrolledOrigin.moveBy(-m_transientZoomInitialOrigin);
+
+    m_webPage.scalePage(scale / m_webPage.viewScaleFactor(), roundedIntPoint(-unscrolledOrigin));
+}
+
+void DrawingAreaCoordinatedGraphics::commitTransientZoom(double scale, FloatPoint origin)
+{
+    if (m_layerTreeHost)
+        m_layerTreeHost->commitTransientZoom(scale, origin);
+
+    FloatPoint unscrolledOrigin(origin);
+    unscrolledOrigin.moveBy(-m_transientZoomInitialOrigin);
+
+    m_webPage.scalePage(scale / m_webPage.viewScaleFactor(), roundedIntPoint(-unscrolledOrigin));
+
+    m_transientZoom = false;
+}
+#endif
+
 void DrawingAreaCoordinatedGraphics::sendDidUpdateBackingStoreState()
 {
     ASSERT(!m_isWaitingForDidUpdate);
@@ -592,7 +630,7 @@ void DrawingAreaCoordinatedGraphics::enterAcceleratedCompositingMode(GraphicsLay
     auto changeWindowScreen = [&] {
         // In order to ensure that we get a unique DisplayRefreshMonitor per-DrawingArea (necessary because ThreadedDisplayRefreshMonitor
         // is driven by the ThreadedCompositor of the drawing area), give each page a unique DisplayID derived from WebPage's unique ID.
-        m_webPage.windowScreenDidChange(m_layerTreeHost->displayID(), WTF::nullopt);
+        m_webPage.windowScreenDidChange(m_layerTreeHost->displayID(), std::nullopt);
     };
 
     ASSERT(!m_layerTreeHost);
@@ -648,7 +686,7 @@ void DrawingAreaCoordinatedGraphics::exitAcceleratedCompositingMode()
     m_discardPreviousLayerTreeHostTimer.startOneShot(5_s);
 
     // Always use the primary display ID (0) when not in accelerated compositing mode.
-    m_webPage.windowScreenDidChange(0, WTF::nullopt);
+    m_webPage.windowScreenDidChange(0, std::nullopt);
 
     m_dirtyRegion = m_webPage.bounds();
 

@@ -36,6 +36,12 @@
 #include <wtf/text/StringHash.h>
 #include <wtf/text/WTFString.h>
 
+#if PLATFORM(COCOA)
+#include <wtf/RetainPtr.h>
+#endif
+
+OBJC_CLASS NSDictionary;
+
 namespace WebKit {
 
 class SandboxInitializationParameters;
@@ -70,6 +76,7 @@ public:
         removeMessageReceiver(messageReceiverName, destinationID.toUInt64());
     }
 
+    void mainThreadPing(CompletionHandler<void()>&&);
     void setProcessSuppressionEnabled(bool);
 
 #if PLATFORM(COCOA)
@@ -106,6 +113,11 @@ protected:
 
     virtual void stopRunLoop();
 
+#if USE(OS_STATE)
+    void registerWithStateDumper(ASCIILiteral title);
+    virtual RetainPtr<NSDictionary> additionalStateForDiagnosticReport() const { return { }; }
+#endif // USE(OS_STATE)
+
 #if USE(APPKIT)
     static void stopNSAppRunLoop();
 #endif
@@ -120,7 +132,7 @@ protected:
     void didReceiveMemoryPressureEvent(bool isCritical);
 #endif
 
-    static Optional<std::pair<IPC::Connection::Identifier, IPC::Attachment>> createIPCConnectionPair();
+    static std::optional<std::pair<IPC::Connection::Identifier, IPC::Attachment>> createIPCConnectionPair();
 
 private:
     virtual bool shouldOverrideQuarantine() { return true; }
@@ -165,7 +177,7 @@ struct AuxiliaryProcessInitializationParameters {
     String clientIdentifier;
     String clientBundleIdentifier;
     uint32_t clientSDKVersion;
-    Optional<WebCore::ProcessIdentifier> processIdentifier;
+    std::optional<WebCore::ProcessIdentifier> processIdentifier;
     IPC::Connection::Identifier connectionIdentifier;
     HashMap<String, String> extraInitializationData;
     WebCore::AuxiliaryProcessType processType;

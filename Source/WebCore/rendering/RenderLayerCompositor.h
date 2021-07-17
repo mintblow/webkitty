@@ -320,7 +320,7 @@ public:
     WEBCORE_EXPORT String trackedRepaintRectsAsText() const;
 
     WEBCORE_EXPORT String layerTreeAsText(LayerTreeFlags = 0);
-    WEBCORE_EXPORT Optional<String> platformLayerTreeAsText(Element&, OptionSet<PlatformLayerTreeAsTextFlags>);
+    WEBCORE_EXPORT std::optional<String> platformLayerTreeAsText(Element&, OptionSet<PlatformLayerTreeAsTextFlags>);
 
     float deviceScaleFactor() const override;
     float contentsScaleMultiplierForNewTiles(const GraphicsLayer*) const override;
@@ -383,9 +383,7 @@ public:
 
     void updateRootContentLayerClipping();
 
-#if ENABLE(CSS_SCROLL_SNAP)
     void updateScrollSnapPropertiesWithFrameView(const FrameView&) const;
-#endif
 
     // For testing.
     void startTrackingLayerFlushes() { m_layerFlushCount = 0; }
@@ -569,7 +567,7 @@ private:
     bool shouldCompositeOverflowControls() const;
 
 #if !LOG_DISABLED
-    const char* logReasonsForCompositing(const RenderLayer&);
+    const char* logOneReasonForCompositing(const RenderLayer&);
     void logLayerInfo(const RenderLayer&, const char*, int depth);
 #endif
 
@@ -654,6 +652,7 @@ void paintScrollbar(Scrollbar*, GraphicsContext&, const IntRect& clip);
 
 WTF::TextStream& operator<<(WTF::TextStream&, CompositingUpdateType);
 WTF::TextStream& operator<<(WTF::TextStream&, CompositingPolicy);
+WTF::TextStream& operator<<(WTF::TextStream&, CompositingReason);
 
 } // namespace WebCore
 

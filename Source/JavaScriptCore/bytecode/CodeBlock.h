@@ -64,12 +64,14 @@
 #include "ProfilerJettisonReason.h"
 #include "ProgramExecutable.h"
 #include "PutPropertySlot.h"
+#include "RegisterAtOffsetList.h"
 #include "ValueProfile.h"
 #include "VirtualRegister.h"
 #include "Watchpoint.h"
 #include <wtf/Bag.h>
 #include <wtf/FastMalloc.h>
 #include <wtf/FixedVector.h>
+#include <wtf/HashSet.h>
 #include <wtf/RefPtr.h>
 #include <wtf/SegmentedVector.h>
 #include <wtf/Vector.h>
@@ -254,7 +256,7 @@ public:
     void expressionRangeForBytecodeIndex(BytecodeIndex, int& divot,
         int& startOffset, int& endOffset, unsigned& line, unsigned& column) const;
 
-    Optional<BytecodeIndex> bytecodeIndexFromCallSiteIndex(CallSiteIndex);
+    std::optional<BytecodeIndex> bytecodeIndexFromCallSiteIndex(CallSiteIndex);
 
     // Because we might throw out baseline JIT code and all its baseline JIT data (m_jitData),
     // you need to be careful about the lifetime of when you use the return value of this function.
@@ -268,8 +270,6 @@ public:
     struct JITData {
         WTF_MAKE_STRUCT_FAST_ALLOCATED;
 
-        size_t size(const ConcurrentJSLocker&) const;
-
         Bag<StructureStubInfo> m_stubInfos;
         Bag<JITAddIC> m_addICs;
         Bag<JITMulIC> m_mulICs;
@@ -279,11 +279,11 @@ public:
         Bag<CallLinkInfo> m_callLinkInfos;
         SentinelLinkedList<CallLinkInfo, PackedRawSentinelNode<CallLinkInfo>> m_incomingCalls;
         SentinelLinkedList<PolymorphicCallNode, PackedRawSentinelNode<PolymorphicCallNode>> m_incomingPolymorphicCalls;
-        FixedVector<RareCaseProfile> m_rareCaseProfiles;
         FixedVector<SimpleJumpTable> m_switchJumpTables;
         FixedVector<StringJumpTable> m_stringSwitchJumpTables;
         std::unique_ptr<PCToCodeOriginMap> m_pcToCodeOriginMap;
-        std::unique_ptr<RegisterAtOffsetList> m_calleeSaveRegisters;
+        bool m_hasCalleeSaveRegisters { false };
+        RegisterAtOffsetList m_calleeSaveRegisters;
         JITCodeMap m_jitCodeMap;
     };
 
@@ -340,32 +340,10 @@ public:
     }
 
     void setPCToCodeOriginMap(std::unique_ptr<PCToCodeOriginMap>&&);
-    Optional<CodeOrigin> findPC(void* pc);
+    std::optional<CodeOrigin> findPC(void* pc);
 
     void setCalleeSaveRegisters(RegisterSet);
-    void setCalleeSaveRegisters(std::unique_ptr<RegisterAtOffsetList>);
-
-    void setRareCaseProfiles(FixedVector<RareCaseProfile>&&);
-    RareCaseProfile* rareCaseProfileForBytecodeIndex(const ConcurrentJSLocker&, BytecodeIndex);
-    unsigned rareCaseProfileCountForBytecodeIndex(const ConcurrentJSLocker&, BytecodeIndex);
-
-    bool likelyToTakeSlowCase(BytecodeIndex bytecodeIndex)
-    {
-        if (!hasBaselineJITProfiling())
-            return false;
-        ConcurrentJSLocker locker(m_lock);
-        unsigned value = rareCaseProfileCountForBytecodeIndex(locker, bytecodeIndex);
-        return value >= Options::likelyToTakeSlowCaseMinimumCount();
-    }
-
-    bool couldTakeSlowCase(BytecodeIndex bytecodeIndex)
-    {
-        if (!hasBaselineJITProfiling())
-            return false;
-        ConcurrentJSLocker locker(m_lock);
-        unsigned value = rareCaseProfileCountForBytecodeIndex(locker, bytecodeIndex);
-        return value >= Options::couldTakeSlowCaseMinimumCount();
-    }
+    void setCalleeSaveRegisters(RegisterAtOffsetList&&);
 
     // We call this when we want to reattempt compiling something with the baseline JIT. Ideally
     // the baseline JIT would not add data to CodeBlock, but instead it would put its data into
@@ -441,6 +419,11 @@ public:
     bool hasBaselineJITProfiling() const
     {
         return jitType() == JITType::BaselineJIT;
+    }
+
+    bool useDataIC() const
+    {
+        return JITCode::useDataIC(jitType());
     }
     
 #if ENABLE(JIT)
@@ -570,6 +553,9 @@ public:
     size_t numberOfIdentifiers() const { return m_unlinkedCode->numberOfIdentifiers(); }
     const Identifier& identifier(int index) const { return m_unlinkedCode->identifier(index); }
 #endif
+#if ASSERT_ENABLED
+    bool hasIdentifier(UniquedStringImpl*);
+#endif
 
     Vector<WriteBarrier<Unknown>>& constants() { return m_constantRegisters; }
     unsigned addConstant(const ConcurrentJSLocker&, JSValue v)
@@ -601,6 +587,8 @@ public:
 
     Heap* heap() const { return &m_vm->heap; }
     JSGlobalObject* globalObject() { return m_globalObject.get(); }
+
+    static ptrdiff_t offsetOfGlobalObject() { return OBJECT_OFFSETOF(CodeBlock, m_globalObject); }
 
     JSGlobalObject* globalObjectFor(CodeOrigin);
 
@@ -811,7 +799,7 @@ public:
     unsigned frameRegisterCount();
     int stackPointerOffset();
 
-    bool hasOpDebugForLineAndColumn(unsigned line, Optional<unsigned> column);
+    bool hasOpDebugForLineAndColumn(unsigned line, std::optional<unsigned> column);
 
     bool hasDebuggerRequests() const { return m_debuggerRequests; }
     void* debuggerRequestsAddress() { return &m_debuggerRequests; }
@@ -907,6 +895,12 @@ public:
         return bitwise_cast<Metadata*>(m_metadata->get(opcodeID))[metadataID];
     }
 
+    template<typename Metadata>
+    ptrdiff_t offsetInMetadataTable(Metadata* metadata)
+    {
+        return bitwise_cast<uint8_t*>(metadata) - bitwise_cast<uint8_t*>(metadataTable());
+    }
+
     size_t metadataSizeInBytes()
     {
         return m_unlinkedCode->metadataSizeInBytes();
@@ -914,6 +908,9 @@ public:
 
     MetadataTable* metadataTable() { return m_metadata.get(); }
     const void* instructionsRawPointer() { return m_instructionsRawPointer; }
+
+    static ptrdiff_t offsetOfMetadataTable() { return OBJECT_OFFSETOF(CodeBlock, m_metadata); }
+    static ptrdiff_t offsetOfInstructionsRawPointer() { return OBJECT_OFFSETOF(CodeBlock, m_instructionsRawPointer); }
 
     bool loopHintsAreEligibleForFuzzingEarlyReturn()
     {
@@ -1050,6 +1047,11 @@ private:
     double m_previousCounter { 0 };
 
     std::unique_ptr<RareData> m_rareData;
+
+#if ASSERT_ENABLED
+    Lock m_cachedIdentifierUidsLock;
+    HashSet<UniquedStringImpl*> m_cachedIdentifierUids;
+#endif
 };
 
 template <typename ExecutableType>

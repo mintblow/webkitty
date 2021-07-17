@@ -3043,7 +3043,7 @@ class CppStyleTest(CppStyleTestBase):
 
         self.perform_function_definition_check(
             'Source/WTF/wtf/foo.h',
-            '    static Optional<std::tuple<>> decode(Decoder&)\n'
+            '    static std::optional<std::tuple<>> decode(Decoder&)\n'
             '    {',
             warning_none)
 
@@ -3123,7 +3123,7 @@ class CleansedLinesTest(unittest.TestCase):
         self.assertEqual('', collapse('\\012'))            # '\012' (char)
         self.assertEqual('', collapse('\\xfF0'))           # '\xfF0' (char)
         self.assertEqual('', collapse('\\n'))              # '\n' (char)
-        self.assertEqual('\#', collapse('\\#'))            # '\#' (bad)
+        self.assertEqual(r'\#', collapse('\\#'))            # '\#' (bad)
 
         self.assertEqual('StringReplace(body, "", "");',
                           collapse('StringReplace(body, "\\\\", "\\\\\\\\");'))
@@ -5655,44 +5655,21 @@ class WebKitStyleTest(CppStyleTestBase):
             "  [runtime/wtf_never_destroyed] [4]",
             'foo.mm')
 
-    def test_wtf_optional(self):
-        self.assert_lint(
-             'Optional<int> a;',
-             '',
-             'foo.cpp')
-
-        self.assert_lint(
-             'WTF::Optional<int> a;',
-             '',
-             'foo.cpp')
-
-        self.assert_lint(
-            'std::optional<int> a;',
-            "Use 'WTF::Optional<>' instead of 'std::optional<>'."
-            "  [runtime/wtf_optional] [4]",
-            'foo.cpp')
-
-        self.assert_lint(
-            'optional<int> a;',
-            "Use 'WTF::Optional<>' instead of 'std::optional<>'."
-            "  [runtime/wtf_optional] [4]",
-            'foo.cpp')
-
     def test_lock_guard(self):
         self.assert_lint(
-            'auto locker = holdLock(mutex);',
+            'Locker locker(lock);',
             '',
             'foo.cpp')
 
         self.assert_lint(
             'std::lock_guard<Lock> locker(mutex);',
-            "Use 'auto locker = holdLock(mutex)' instead of 'std::lock_guard<>'."
+            "Use 'Locker locker { lock }' instead of 'std::lock_guard<>'."
             "  [runtime/lock_guard] [4]",
             'foo.cpp')
 
         self.assert_lint(
             'std::lock_guard<Lock> locker(mutex);',
-            "Use 'auto locker = holdLock(mutex)' instead of 'std::lock_guard<>'."
+            "Use 'Locker locker { lock }' instead of 'std::lock_guard<>'."
             "  [runtime/lock_guard] [4]",
             'foo.mm')
 

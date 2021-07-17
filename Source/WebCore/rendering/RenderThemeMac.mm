@@ -404,6 +404,12 @@ Color RenderThemeMac::platformAppHighlightColor(OptionSet<StyleColor::Options>) 
 }
 #endif
 
+Color RenderThemeMac::platformDefaultButtonTextColor(OptionSet<StyleColor::Options> options) const
+{
+    LocalDefaultSystemAppearance localAppearance(options.contains(StyleColor::Options::UseDarkAppearance));
+    return colorFromNSColor([NSColor alternateSelectedControlTextColor]);
+}
+
 static Color activeButtonTextColor()
 {
     // FIXME: <rdar://problem/77572622> There is no single corresponding NSColor for ActiveButtonText.
@@ -1309,7 +1315,7 @@ bool RenderThemeMac::paintProgressBar(const RenderObject& renderObject, const Pa
     const auto& renderProgress = downcast<RenderProgress>(renderObject);
     float deviceScaleFactor = renderObject.document().deviceScaleFactor();
     bool isIndeterminate = renderProgress.position() < 0;
-    auto imageBuffer = ImageBuffer::createCompatibleBuffer(inflatedRect.size(), deviceScaleFactor, DestinationColorSpace::SRGB, paintInfo.context());
+    auto imageBuffer = ImageBuffer::createCompatibleBuffer(inflatedRect.size(), deviceScaleFactor, DestinationColorSpace::SRGB(), paintInfo.context());
     if (!imageBuffer)
         return true;
 
@@ -2041,6 +2047,8 @@ bool RenderThemeMac::paintSearchFieldResultsButton(const RenderBox& box, const P
         return adjustedLocalBounds;
     };
 
+    if (!box.element())
+        return false;
     Element* input = box.element()->shadowHost();
     if (!input)
         input = box.element();

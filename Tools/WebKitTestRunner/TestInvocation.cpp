@@ -792,12 +792,6 @@ void TestInvocation::didReceiveMessageFromInjectedBundle(WKStringRef messageName
         return;
     }
 
-    if (WKStringIsEqualToUTF8CString(messageName, "AppBoundRequestContextDataForDomain")) {
-        WKStringRef domain = stringValue(messageBody);
-        TestController::singleton().appBoundRequestContextDataForDomain(domain);
-        return;
-    }
-
     ASSERT_NOT_REACHED();
 }
 
@@ -1070,7 +1064,13 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         bool statisticInDatabaseOnce = TestController::singleton().isStatisticsOnlyInDatabaseOnce(subHost, topHost);
         return adoptWK(WKBooleanCreate(statisticInDatabaseOnce));
     }
-    
+
+    if (WKStringIsEqualToUTF8CString(messageName, "DidLoadAppInitiatedRequest"))
+        return adoptWK(WKBooleanCreate(TestController::singleton().didLoadAppInitiatedRequest()));
+
+    if (WKStringIsEqualToUTF8CString(messageName, "DidLoadNonAppInitiatedRequest"))
+        return adoptWK(WKBooleanCreate(TestController::singleton().didLoadNonAppInitiatedRequest()));
+
     if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsGrandfathered")) {
         auto messageBodyDictionary = dictionaryValue(messageBody);
         auto hostName = stringValue(messageBodyDictionary, "HostName");
@@ -1439,9 +1439,10 @@ void TestInvocation::outputText(const WTF::String& text)
     m_textOutput.append(text);
 }
 
-void TestInvocation::didNotHandleTapAsMeaningfulClick()
+void TestInvocation::didHandleTap(bool wasMeaningful)
 {
-    postPageMessage("CallDidNotHandleTapAsMeaningfulClickCallback");
+    auto messageBody = adoptWK(WKBooleanCreate(wasMeaningful));
+    postPageMessage("CallDidHandleTapCallback", messageBody);
 }
 
 void TestInvocation::didBeginSwipe()
@@ -1573,12 +1574,6 @@ void TestInvocation::didReceiveLoadedSubresourceDomains(Vector<String>&& domains
     for (auto& domain : domains)
         WKArrayAppendItem(messageBody.get(), toWK(domain).get());
     postPageMessage("CallDidReceiveLoadedSubresourceDomains", messageBody);
-}
-
-void TestInvocation::didReceiveAppBoundRequestContextDataForDomain(String&& domain)
-{
-    auto messageBody = WKStringCreateWithUTF8CString(domain.utf8().data());
-    postPageMessage("CallDidReceiveAppBoundRequestContextDataForDomain", messageBody);
 }
 
 void TestInvocation::didRemoveAllSessionCredentials()

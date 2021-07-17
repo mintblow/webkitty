@@ -28,7 +28,7 @@ from webkit import parser
 from webkit.model import BUILTIN_ATTRIBUTE, ASYNC_ATTRIBUTE, SYNCHRONOUS_ATTRIBUTE, MAINTHREADCALLBACK_ATTRIBUTE, STREAM_ATTRIBUTE, WANTS_CONNECTION_ATTRIBUTE, MessageReceiver, Message
 
 _license_header = """/*
- * Copyright (C) 2010-2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -143,8 +143,8 @@ def function_parameter_type(type, kind):
 def reply_type(type):
     if type == 'IPC::SharedBufferDataReference':
         return 'IPC::DataReference'
-    if type == 'Optional<IPC::SharedBufferDataReference>':
-        return 'Optional<IPC::DataReference>'
+    if type == 'std::optional<IPC::SharedBufferDataReference>':
+        return 'std::optional<IPC::DataReference>'
     return type
 
 
@@ -264,12 +264,14 @@ def forward_declarations_for_namespace(namespace, kind_and_types):
 
 def types_that_cannot_be_forward_declared():
     return frozenset([
+        'CVPixelBufferRef',
         'IPC::DataReference',
         'IPC::FontReference',
         'IPC::Semaphore',
         'MachSendRight',
         'MediaTime',
         'String',
+        'WebCore::BroadcastChannelIdentifier',
         'WebCore::DestinationColorSpace',
         'WebCore::DiagnosticLoggingDomain',
         'WebCore::DictationContext',
@@ -306,7 +308,7 @@ def types_that_cannot_be_forward_declared():
         'WebCore::SWServerConnectionIdentifier',
         'WebCore::WebSocketIdentifier',
         'WebKit::ActivityStateChangeID',
-        'WebKit::AudioMediaStreamTrackRendererIdentifier',
+        'WebKit::AudioMediaStreamTrackRendererInternalUnitIdentifier',
         'WebKit::ContentWorldIdentifier',
         'WebKit::DisplayLinkObserverID',
         'WebKit::DownloadID',
@@ -600,12 +602,13 @@ def class_template_headers(template_string):
         'Expected': {'headers': ['<wtf/Expected.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'HashMap': {'headers': ['<wtf/HashMap.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'HashSet': {'headers': ['<wtf/HashSet.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
-        'Optional': {'headers': ['<wtf/Optional.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'OptionSet': {'headers': ['<wtf/OptionSet.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'Vector': {'headers': ['<wtf/Vector.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
+        'std::optional': {'headers': ['<optional>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'std::pair': {'headers': ['<utility>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'IPC::ArrayReference': {'headers': ['"ArrayReference.h"'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
         'RefPtr': {'headers': ['<wtf/RefCounted.h>'], 'argument_coder_headers': ['"ArgumentCoders.h"']},
+        'RetainPtr': {'headers': ['<wtf/RetainPtr.h>'], 'argument_coder_headers': ['"ArgumentCodersCF.h"']},
     }
 
     match = re.match('(?P<template_name>.+?)<(?P<parameter_string>.+)>', template_string)
@@ -701,6 +704,7 @@ def headers_for_type(type):
         'WebCore::InspectorOverlay::Highlight': ['<WebCore/InspectorOverlay.h>'],
         'WebCore::KeyframeValueList': ['<WebCore/GraphicsLayer.h>'],
         'WebCore::KeypressCommand': ['<WebCore/KeyboardEvent.h>'],
+        'WebCore::LastNavigationWasAppInitiated': ['<WebCore/ServiceWorkerClientData.h>'],
         'WebCore::LegacyCDMSessionClient::MediaKeyErrorCode': ['<WebCore/LegacyCDMSession.h>'],
         'WebCore::LockBackForwardList': ['<WebCore/FrameLoaderTypes.h>'],
         'WebCore::MessagePortChannelProvider::HasActivity': ['<WebCore/MessagePortChannelProvider.h>'],
@@ -713,6 +717,7 @@ def headers_for_type(type):
         'WebCore::PaymentAuthorizationResult': ['<WebCore/ApplePaySessionPaymentRequest.h>'],
         'WebCore::PixelFormat': ['<WebCore/ImageBufferBackend.h>'],
         'WebCore::PlatformTextTrackData': ['<WebCore/PlatformTextTrack.h>'],
+        'WebCore::PlaybackSessionModel::PlaybackState': ['<WebCore/PlaybackSessionModel.h>'],
         'WebCore::PluginInfo': ['<WebCore/PluginData.h>'],
         'WebCore::PluginLoadClientPolicy': ['<WebCore/PluginData.h>'],
         'WebCore::PolicyAction': ['<WebCore/FrameLoaderTypes.h>'],
@@ -754,8 +759,8 @@ def headers_for_type(type):
         'WebCore::WillContinueLoading': ['<WebCore/FrameLoaderTypes.h>'],
         'WebCore::SelectionGeometry': ['"EditorState.h"'],
         'WebKit::ActivityStateChangeID': ['"DrawingAreaInfo.h"'],
-        'WebKit::AppBoundNavigationTestingData': ['"NavigatingToAppBoundDomain.h"'],
         'WebKit::AllowOverwrite': ['"DownloadID.h"'],
+        'WebKit::AppPrivacyReportTestingData': ['"AppPrivacyReport.h"'],
         'WebKit::BackForwardListItemState': ['"SessionState.h"'],
         'WebKit::CallDownloadDidStart': ['"DownloadManager.h"'],
         'WebKit::ContentWorldIdentifier': ['"ContentWorldShared.h"'],
@@ -763,7 +768,7 @@ def headers_for_type(type):
         'WebKit::FindOptions': ['"WebFindOptions.h"'],
         'WebKit::GestureRecognizerState': ['"GestureTypes.h"'],
         'WebKit::GestureType': ['"GestureTypes.h"'],
-        'WebKit::LastNavigationWasAppBound': ['"NavigatingToAppBoundDomain.h"'],
+        'WebKit::LastNavigationWasAppInitiated': ['"AppPrivacyReport.h"'],
         'WebKit::LayerHostingContextID': ['"LayerHostingContext.h"'],
         'WebKit::LayerHostingMode': ['"LayerTreeContext.h"'],
         'WebKit::PageState': ['"SessionState.h"'],
@@ -782,6 +787,7 @@ def headers_for_type(type):
         'struct WebKit::WebScriptMessageHandlerData': ['"WebUserContentControllerDataTypes.h"'],
         'webrtc::WebKitEncodedFrameInfo': ['<webrtc/sdk/WebKit/WebKitEncoder.h>', '<WebCore/LibWebRTCEnumTraits.h>'],
         'PlatformXR::Device::FrameData': ['<WebCore/PlatformXR.h>'],
+        'WebCore::DynamicRangeMode': ['<WebCore/PlatformScreen.h>'],
     }
 
     headers = []
@@ -904,7 +910,7 @@ def generate_message_handler(receiver):
                 move_parameters = message.name, ', '.join([move_type(reply_type(x.type)) for x in message.reply_parameters])
                 result.append('void %s::callReply(IPC::Decoder& decoder, CompletionHandler<void(%s)>&& completionHandler)\n{\n' % move_parameters)
                 for x in message.reply_parameters:
-                    result.append('    Optional<%s> %s;\n' % (reply_type(x.type), x.name))
+                    result.append('    std::optional<%s> %s;\n' % (reply_type(x.type), x.name))
                     result.append('    decoder >> %s;\n' % x.name)
                     result.append('    if (!%s) {\n        ASSERT_NOT_REACHED();\n        cancelReply(WTFMove(completionHandler));\n        return;\n    }\n' % x.name)
                 result.append('    completionHandler(')
@@ -954,6 +960,10 @@ def generate_message_handler(receiver):
         else:
             result.append('    UNUSED_PARAM(decoder);\n')
             result.append('    UNUSED_PARAM(connection);\n')
+            result.append('#if ENABLE(IPC_TESTING_API)\n')
+            result.append('    if (connection.connection().ignoreInvalidMessageForTesting())\n')
+            result.append('        return;\n')
+            result.append('#endif // ENABLE(IPC_TESTING_API)\n')
             result.append('    ASSERT_NOT_REACHED_WITH_MESSAGE("Unhandled stream message %s to %" PRIu64, description(decoder.messageName()), decoder.destinationID());\n')
         result.append('}\n')
     elif async_messages or receiver.has_attribute(WANTS_DISPATCH_MESSAGE_ATTRIBUTE) or receiver.has_attribute(WANTS_ASYNC_DISPATCH_MESSAGE_ATTRIBUTE):
@@ -973,6 +983,10 @@ def generate_message_handler(receiver):
         else:
             result.append('    UNUSED_PARAM(connection);\n')
             result.append('    UNUSED_PARAM(decoder);\n')
+            result.append('#if ENABLE(IPC_TESTING_API)\n')
+            result.append('    if (connection.ignoreInvalidMessageForTesting())\n')
+            result.append('        return;\n')
+            result.append('#endif // ENABLE(IPC_TESTING_API)\n')
             result.append('    ASSERT_NOT_REACHED_WITH_MESSAGE("Unhandled message %s to %" PRIu64, description(decoder.messageName()), decoder.destinationID());\n')
         result.append('}\n')
 
@@ -989,6 +1003,10 @@ def generate_message_handler(receiver):
         result.append('    UNUSED_PARAM(connection);\n')
         result.append('    UNUSED_PARAM(decoder);\n')
         result.append('    UNUSED_PARAM(replyEncoder);\n')
+        result.append('#if ENABLE(IPC_TESTING_API)\n')
+        result.append('    if (connection.ignoreInvalidMessageForTesting())\n')
+        result.append('        return false;\n')
+        result.append('#endif // ENABLE(IPC_TESTING_API)\n')
         result.append('    ASSERT_NOT_REACHED_WITH_MESSAGE("Unhandled synchronous message %s to %" PRIu64, description(decoder.messageName()), decoder.destinationID());\n')
         result.append('    return false;\n')
         result.append('}\n')
@@ -1113,7 +1131,7 @@ def generate_message_names_implementation(receivers):
 
 
 def generate_js_value_conversion_function(result, receivers, function_name, argument_type, predicate=lambda message: True):
-    result.append('Optional<JSC::JSValue> %s(JSC::JSGlobalObject* globalObject, MessageName name, Decoder& decoder)\n' % function_name)
+    result.append('std::optional<JSC::JSValue> %s(JSC::JSGlobalObject* globalObject, MessageName name, Decoder& decoder)\n' % function_name)
     result.append('{\n')
     result.append('    switch (name) {\n')
     for receiver in receivers:
@@ -1140,13 +1158,13 @@ def generate_js_value_conversion_function(result, receivers, function_name, argu
     result.append('    default:\n')
     result.append('        break;\n')
     result.append('    }\n')
-    result.append('    return WTF::nullopt;\n')
+    result.append('    return std::nullopt;\n')
     result.append('}\n')
 
 
 def generate_js_argument_descriptions(receivers, function_name, arguments_from_message):
     result = []
-    result.append('Optional<Vector<ArgumentDescription>> %s(MessageName name)\n' % function_name)
+    result.append('std::optional<Vector<ArgumentDescription>> %s(MessageName name)\n' % function_name)
     result.append('{\n')
     result.append('    switch (name) {\n')
     for receiver in receivers:
@@ -1181,7 +1199,7 @@ def generate_js_argument_descriptions(receivers, function_name, arguments_from_m
                 if argument.kind.startswith('enum:'):
                     enum_type = '"%s"' % argument_type
                     argument_type = argument.kind[5:]
-                if argument_type.startswith('Optional<') and argument_type.endswith('>'):
+                if argument_type.startswith('std::optional<') and argument_type.endswith('>'):
                     argument_type = argument_type[9:-1]
                     is_optional = True
                 result.append('            {"%s", "%s", %s, %s},\n' % (argument.name, argument_type, enum_type or 'nullptr', 'true' if is_optional else 'false'))
@@ -1193,7 +1211,7 @@ def generate_js_argument_descriptions(receivers, function_name, arguments_from_m
     result.append('    default:\n')
     result.append('        break;\n')
     result.append('    }\n')
-    result.append('    return WTF::nullopt;\n')
+    result.append('    return std::nullopt;\n')
     result.append('}\n')
     return result
 

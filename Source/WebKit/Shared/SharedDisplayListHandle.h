@@ -28,6 +28,7 @@
 #include "SharedMemory.h"
 #include <WebCore/DisplayList.h>
 #include <wtf/Atomics.h>
+#include <wtf/EnumTraits.h>
 #include <wtf/RefCounted.h>
 #include <wtf/Threading.h>
 
@@ -47,7 +48,7 @@ public:
     const SharedMemory& sharedMemory() const { return m_sharedMemory.get(); }
 
     WebCore::DisplayList::ItemBufferIdentifier identifier() const { return m_identifier; }
-    uint8_t* data() const { return reinterpret_cast<uint8_t*>(sharedMemory().data()); }
+    uint8_t* data() const { return static_cast<uint8_t*>(sharedMemory().data()); }
 
     uint64_t unreadBytes()
     {
@@ -59,6 +60,7 @@ public:
         Waiting,
         Resuming
     };
+    using WaitingStatusStorageType = std::underlying_type_t<WaitingStatus>;
 
     struct ResumeReadingInformation {
         uint64_t offset;
@@ -78,7 +80,7 @@ protected:
 
         Atomic<uint64_t> unreadBytes;
         ResumeReadingInformation resumeReadingInfo;
-        Atomic<WaitingStatus> waitingStatus;
+        Atomic<WaitingStatusStorageType> waitingStatus;
     };
 
     const DisplayListSharedMemoryHeader& header() const { return *reinterpret_cast<const DisplayListSharedMemoryHeader*>(data()); }
@@ -90,3 +92,16 @@ private:
 };
 
 } // namespace WebKit
+
+namespace WTF {
+
+template<> struct EnumTraits<WebKit::SharedDisplayListHandle::WaitingStatus> {
+    using values = EnumValues<
+        WebKit::SharedDisplayListHandle::WaitingStatus,
+        WebKit::SharedDisplayListHandle::WaitingStatus::NotWaiting,
+        WebKit::SharedDisplayListHandle::WaitingStatus::Waiting,
+        WebKit::SharedDisplayListHandle::WaitingStatus::Resuming
+    >;
+};
+
+} // namespace WTF

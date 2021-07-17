@@ -288,7 +288,9 @@ WI.SettingsTabContentView = class SettingsTabContentView extends WI.TabContentVi
         elementsSettingsView.addSetting(WI.UIString("Details Sidebars:", "Details Sidebars: @ Settings Elements Pane", "Category label for detail sidebar settings."), WI.settings.enableElementsTabIndependentStylesDetailsSidebarPanel, WI.UIString("Show independent Styles sidebar", "Show independent Styles sidebar @ Settings Elements Pane", "Settings tab checkbox label for whether the independent styles sidebar should be shown"));
         elementsSettingsView.addSeparator();
 
-        elementsSettingsView.addSetting(WI.UIString("CSS Changes:"), WI.settings.cssChangesPerNode, WI.UIString("Show only for selected node"));
+        let cssGroup = elementsSettingsView.addGroup(WI.UIString("CSS:"));
+        cssGroup.addSetting(WI.settings.cssChangesPerNode, WI.UIString("Show changes only for selected node"));
+        cssGroup.addSetting(WI.settings.showCSSPropertySyntaxInDocumentationPopover, WI.UIString("Show property syntax in documentation popover"));
 
         this._createReferenceLink(elementsSettingsView);
 
@@ -380,20 +382,17 @@ WI.SettingsTabContentView = class SettingsTabContentView extends WI.TabContentVi
 
     _createExperimentalSettingsView()
     {
-        let canShowPreviewFeatures = WI.canShowPreviewFeatures();
-        let hasCSSDomain = InspectorBackend.hasDomain("CSS");
-        if (!canShowPreviewFeatures && !hasCSSDomain)
-            return;
-
         let experimentalSettingsView = new WI.SettingsView("experimental", WI.UIString("Experimental"));
 
         let initialValues = new Map;
 
+        let canShowPreviewFeatures = WI.canShowPreviewFeatures();
         if (canShowPreviewFeatures) {
             experimentalSettingsView.addSetting(WI.UIString("Staging:"), WI.settings.experimentalEnablePreviewFeatures, WI.UIString("Enable Preview Features"));
             experimentalSettingsView.addSeparator();
         }
 
+        let hasCSSDomain = InspectorBackend.hasDomain("CSS");
         if (hasCSSDomain) {
             let stylesGroup = experimentalSettingsView.addGroup(WI.UIString("Styles:"));
             stylesGroup.addSetting(WI.settings.experimentalEnableStylesJumpToEffective, WI.UIString("Show jump to effective property button"));
@@ -428,7 +427,8 @@ WI.SettingsTabContentView = class SettingsTabContentView extends WI.TabContentVi
             }, reloadInspectorContainerElement);
         }
 
-        listenForChange(WI.settings.experimentalEnablePreviewFeatures);
+        if (canShowPreviewFeatures)
+            listenForChange(WI.settings.experimentalEnablePreviewFeatures);
 
         if (hasCSSDomain) {
             listenForChange(WI.settings.experimentalEnableStylesJumpToEffective);

@@ -107,7 +107,7 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     case FilterCallLinkStatus:
     case FilterGetByStatus:
     case FilterPutByIdStatus:
-    case FilterInByIdStatus:
+    case FilterInByStatus:
     case FilterDeleteByStatus:
     case FilterCheckPrivateBrandStatus:
     case FilterSetPrivateBrandStatus:
@@ -135,6 +135,7 @@ ExitMode mayExitImpl(Graph& graph, Node* node, StateType& state)
     case NewRegexp:
     case ToNumber:
     case ToNumeric:
+    case ToObject:
     case RegExpExecNonGlobalOrSticky:
     case RegExpMatchFastGlobal:
         result = ExitsForExceptions;

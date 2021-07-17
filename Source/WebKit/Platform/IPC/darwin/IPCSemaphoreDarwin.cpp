@@ -72,10 +72,11 @@ void Semaphore::signal()
     ASSERT_UNUSED(ret, ret == KERN_SUCCESS || ret == KERN_TERMINATED);
 }
 
-void Semaphore::wait()
+bool Semaphore::wait()
 {
     auto ret = semaphore_wait(m_semaphore);
-    ASSERT_UNUSED(ret, ret == KERN_SUCCESS || ret == KERN_TERMINATED);
+    ASSERT(ret == KERN_SUCCESS || ret == KERN_TERMINATED);
+    return ret == KERN_SUCCESS;
 }
 
 bool Semaphore::waitFor(Timeout timeout)
@@ -97,12 +98,12 @@ void Semaphore::encode(Encoder& encoder) const
     encoder << createSendRight();
 }
 
-Optional<Semaphore> Semaphore::decode(Decoder& decoder)
+std::optional<Semaphore> Semaphore::decode(Decoder& decoder)
 {
     MachSendRight sendRight;
     if (!decoder.decode(sendRight))
-        return WTF::nullopt;
-    return Optional<Semaphore> { std::in_place, WTFMove(sendRight) };
+        return std::nullopt;
+    return std::optional<Semaphore> { std::in_place, WTFMove(sendRight) };
 }
 
 

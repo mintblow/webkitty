@@ -290,7 +290,7 @@ public:
 
     // Geolocation.
     void setGeolocationPermission(bool);
-    void setMockGeolocationPosition(double latitude, double longitude, double accuracy, Optional<double> altitude, Optional<double> altitudeAccuracy, Optional<double> heading, Optional<double> speed, Optional<double> floorLevel);
+    void setMockGeolocationPosition(double latitude, double longitude, double accuracy, std::optional<double> altitude, std::optional<double> altitudeAccuracy, std::optional<double> heading, std::optional<double> speed, std::optional<double> floorLevel);
     void setMockGeolocationPositionUnavailableError(JSStringRef message);
     bool isGeolocationProviderActive();
 
@@ -345,8 +345,8 @@ public:
     void installCustomMenuAction(JSStringRef name, bool dismissesAutomatically, JSValueRef callback);
     void performCustomMenuAction();
 
-    void installDidNotHandleTapAsMeaningfulClickCallback(JSValueRef);
-    void callDidNotHandleTapAsMeaningfulClickCallback();
+    void installDidHandleTapCallback(JSValueRef);
+    void callDidHandleTapCallback(bool wasMeaningful);
 
     void installDidBeginSwipeCallback(JSValueRef);
     void installWillEndSwipeCallback(JSValueRef);
@@ -497,8 +497,9 @@ public:
     void clearAppBoundSession();
     void setAppBoundDomains(JSValueRef originArray, JSValueRef callback);
     void didSetAppBoundDomainsCallback();
-    void appBoundRequestContextDataForDomain(JSStringRef, JSValueRef);
-    void callDidReceiveAppBoundRequestContextDataForDomainCallback(String&&);
+
+    bool didLoadAppInitiatedRequest();
+    bool didLoadNonAppInitiatedRequest();
 
     size_t userScriptInjectedCount() const;
     void injectUserScript(JSStringRef);

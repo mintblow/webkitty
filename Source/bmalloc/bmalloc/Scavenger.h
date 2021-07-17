@@ -59,7 +59,6 @@ public:
     bool willRunSoon() { return m_state > State::Sleep; }
     void runSoon();
     
-    BEXPORT void didStartGrowing();
     BEXPORT void scheduleIfUnderMemoryPressure(size_t bytes);
     BEXPORT void schedule(size_t bytes);
 
@@ -96,7 +95,6 @@ private:
     std::atomic<State> m_state { State::Sleep };
     size_t m_scavengerBytes { 0 };
     std::chrono::milliseconds m_waitTime;
-    bool m_isProbablyGrowing { false };
     bool m_isInMiniMode { false };
     
     Mutex m_scavengingMutex;
@@ -109,7 +107,7 @@ private:
     dispatch_source_t m_pressureHandlerDispatchSource;
     qos_class_t m_requestedScavengerThreadQOSClass { QOS_CLASS_USER_INITIATED };
 #endif
-    
+
 #if BPLATFORM(MAC)
     const unsigned s_newWaitMultiplier = 300;
     const unsigned s_minWaitTimeMilliseconds = 750;

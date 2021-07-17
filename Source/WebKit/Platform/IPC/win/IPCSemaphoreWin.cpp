@@ -68,9 +68,9 @@ void Semaphore::signal()
     ReleaseSemaphore(m_semaphoreHandle, 1, nullptr);
 }
 
-void Semaphore::wait()
+bool Semaphore::wait()
 {
-    WaitForSingleObject(m_semaphoreHandle, INFINITE);
+    return WAIT_OBJECT_0 == WaitForSingleObject(m_semaphoreHandle, INFINITE);
 }
 
 bool Semaphore::waitFor(Timeout timeout)
@@ -91,11 +91,11 @@ void Semaphore::encode(Encoder& encoder) const
     WebKit::SharedMemory::Handle::encodeHandle(encoder, duplicatedHandle);
 }
 
-Optional<Semaphore> Semaphore::decode(Decoder& decoder)
+std::optional<Semaphore> Semaphore::decode(Decoder& decoder)
 {
     auto handle = WebKit::SharedMemory::Handle::decodeHandle(decoder);
     if (!handle)
-        return WTF::nullopt;
+        return std::nullopt;
     return Semaphore(*handle);
 }
 

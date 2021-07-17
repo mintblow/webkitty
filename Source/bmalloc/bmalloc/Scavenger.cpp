@@ -116,12 +116,6 @@ void Scavenger::runSoon(const LockHolder&)
     m_condition.notify_all();
 }
 
-void Scavenger::didStartGrowing()
-{
-    // We don't really need to lock here, since this is just a heuristic.
-    m_isProbablyGrowing = true;
-}
-
 void Scavenger::scheduleIfUnderMemoryPressure(size_t bytes)
 {
     LockHolder lock(mutex());
@@ -142,7 +136,6 @@ void Scavenger::scheduleIfUnderMemoryPressure(const LockHolder& lock, size_t byt
     if (!isUnderMemoryPressure())
         return;
 
-    m_isProbablyGrowing = false;
     run(lock);
 }
 
@@ -154,7 +147,6 @@ void Scavenger::schedule(size_t bytes)
     if (willRunSoon())
         return;
     
-    m_isProbablyGrowing = false;
     runSoon(lock);
 }
 

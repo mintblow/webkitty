@@ -714,21 +714,22 @@ public:
     
     void compileCheckTraps(Node*);
 
+    void compileLoopHint(Node*);
     void compileMovHint(Node*);
     void compileMovHintAndCheck(Node*);
 
     void compileCheckDetached(Node*);
 
-    void cachedGetById(CodeOrigin, JSValueRegs base, JSValueRegs result, CacheableIdentifier, JITCompiler::Jump slowPathTarget, SpillRegistersMode, AccessType);
-    void cachedPutById(CodeOrigin, GPRReg baseGPR, JSValueRegs valueRegs, GPRReg scratchGPR, CacheableIdentifier, PutKind, ECMAMode, JITCompiler::Jump slowPathTarget = JITCompiler::Jump(), SpillRegistersMode = NeedToSpill);
+    void cachedGetById(CodeOrigin, JSValueRegs base, JSValueRegs result, GPRReg stubInfoGPR, CacheableIdentifier, JITCompiler::Jump slowPathTarget, SpillRegistersMode, AccessType);
+    void cachedPutById(CodeOrigin, GPRReg baseGPR, JSValueRegs valueRegs, GPRReg stubInfoGPR, GPRReg scratchGPR, CacheableIdentifier, PutKind, ECMAMode, JITCompiler::Jump slowPathTarget = JITCompiler::Jump(), SpillRegistersMode = NeedToSpill);
     void cachedGetByVal(CodeOrigin, JSValueRegs base, JSValueRegs property, JSValueRegs result, JITCompiler::Jump slowPathTarget);
 
 #if USE(JSVALUE64)
-    void cachedGetById(CodeOrigin, GPRReg baseGPR, GPRReg resultGPR, CacheableIdentifier, JITCompiler::Jump slowPathTarget, SpillRegistersMode, AccessType);
-    void cachedGetByIdWithThis(CodeOrigin, GPRReg baseGPR, GPRReg thisGPR, GPRReg resultGPR, CacheableIdentifier, const JITCompiler::JumpList& slowPathTarget = JITCompiler::JumpList());
+    void cachedGetById(CodeOrigin, GPRReg baseGPR, GPRReg resultGPR, GPRReg stubInfoGPR, CacheableIdentifier, JITCompiler::Jump slowPathTarget, SpillRegistersMode, AccessType);
+    void cachedGetByIdWithThis(CodeOrigin, GPRReg baseGPR, GPRReg thisGPR, GPRReg resultGPR, GPRReg stubInfoGPR, CacheableIdentifier, const JITCompiler::JumpList& slowPathTarget = JITCompiler::JumpList());
 #elif USE(JSVALUE32_64)
-    void cachedGetById(CodeOrigin, GPRReg baseTagGPROrNone, GPRReg basePayloadGPR, GPRReg resultTagGPR, GPRReg resultPayloadGPR, CacheableIdentifier, JITCompiler::Jump slowPathTarget, SpillRegistersMode, AccessType);
-    void cachedGetByIdWithThis(CodeOrigin, GPRReg baseTagGPROrNone, GPRReg basePayloadGPR, GPRReg thisTagGPROrNone, GPRReg thisPayloadGPR, GPRReg resultTagGPR, GPRReg resultPayloadGPR, CacheableIdentifier, const JITCompiler::JumpList& slowPathTarget = JITCompiler::JumpList());
+    void cachedGetById(CodeOrigin, GPRReg baseTagGPROrNone, GPRReg basePayloadGPR, GPRReg resultTagGPR, GPRReg resultPayloadGPR, GPRReg stubInfoGPR, CacheableIdentifier, JITCompiler::Jump slowPathTarget, SpillRegistersMode, AccessType);
+    void cachedGetByIdWithThis(CodeOrigin, GPRReg baseTagGPROrNone, GPRReg basePayloadGPR, GPRReg thisTagGPROrNone, GPRReg thisPayloadGPR, GPRReg resultTagGPR, GPRReg resultPayloadGPR, GPRReg stubInfoGPR, CacheableIdentifier, const JITCompiler::JumpList& slowPathTarget = JITCompiler::JumpList());
 #endif
 
     void compileDeleteById(Node*);
@@ -738,7 +739,10 @@ public:
     void compileGetByIdFlush(Node*, AccessType);
     void compileInById(Node*);
     void compileInByVal(Node*);
-    
+    void compileHasPrivate(Node*, AccessType);
+    void compileHasPrivateName(Node*);
+    void compileHasPrivateBrand(Node*);
+
     void nonSpeculativeNonPeepholeCompareNullOrUndefined(Edge operand);
     void nonSpeculativePeepholeBranchNullOrUndefined(Edge operand, Node* branchNode);
     
@@ -749,7 +753,7 @@ public:
     void genericJSValueNonPeepholeStrictEq(Node*, bool invert = false);
     bool genericJSValueStrictEq(Node*, bool invert = false);
     
-    void compileInstanceOfForCells(Node*, JSValueRegs valueGPR, JSValueRegs prototypeGPR, GPRReg resultGPT, GPRReg scratchGPR, GPRReg scratch2GPR, JITCompiler::Jump slowCase = JITCompiler::Jump());
+    void compileInstanceOfForCells(Node*, JSValueRegs valueGPR, JSValueRegs prototypeGPR, GPRReg resultGPT, GPRReg stubInfoGPR, GPRReg scratchGPR, GPRReg scratch2GPR, JITCompiler::Jump slowCase = JITCompiler::Jump());
     void compileInstanceOf(Node*);
     void compileInstanceOfCustom(Node*);
     void compileOverridesHasInstance(Node*);
@@ -947,6 +951,26 @@ public:
         return appendCall(operation);
     }
 
+    template<typename OperationType, typename ResultRegType, typename... Args>
+    std::enable_if_t<
+        FunctionTraits<OperationType>::hasResult,
+    void>
+    callOperation(CCallHelpers::Address address, ResultRegType result, Args... args)
+    {
+        m_jit.setupArgumentsForIndirectCall<OperationType>(address, args...);
+        appendCallSetResult(CCallHelpers::Address(GPRInfo::nonArgGPR0, address.offset), result);
+    }
+
+    template<typename OperationType, typename... Args>
+    std::enable_if_t<
+        !FunctionTraits<OperationType>::hasResult,
+    void>
+    callOperation(CCallHelpers::Address address, Args... args)
+    {
+        m_jit.setupArgumentsForIndirectCall<OperationType>(address, args...);
+        appendCall(CCallHelpers::Address(GPRInfo::nonArgGPR0, address.offset));
+    }
+
     JITCompiler::Call callOperationWithCallFrameRollbackOnException(V_JITOperation_Cb operation, CodeBlock* codeBlock)
     {
         // Do not register CodeBlock* as a weak-pointer.
@@ -986,6 +1010,13 @@ public:
         return m_jit.appendCall(function);
     }
 
+    void appendCall(CCallHelpers::Address address)
+    {
+        prepareForExternalCall();
+        m_jit.emitStoreCodeOrigin(m_currentNode->origin.semantic);
+        m_jit.appendCall(address);
+    }
+
     JITCompiler::Call appendOperationCall(const FunctionPtr<OperationPtrTag> function)
     {
         prepareForExternalCall();
@@ -1006,6 +1037,28 @@ public:
         if ((result != InvalidGPRReg) && (result != GPRInfo::returnValueGPR))
             m_jit.move(GPRInfo::returnValueGPR, result);
         return call;
+    }
+
+    void appendCallSetResult(CCallHelpers::Address address, GPRReg result)
+    {
+        appendCall(address);
+        if (result != InvalidGPRReg)
+            m_jit.move(GPRInfo::returnValueGPR, result);
+    }
+
+    void appendCallSetResult(CCallHelpers::Address address, GPRReg result1, GPRReg result2)
+    {
+        appendCall(address);
+        m_jit.setupResults(result1, result2);
+    }
+
+    void appendCallSetResult(CCallHelpers::Address address, JSValueRegs resultRegs)
+    {
+#if USE(JSVALUE64)
+        appendCallSetResult(address, resultRegs.gpr());
+#else
+        appendCallSetResult(address, resultRegs.payloadGPR(), resultRegs.tagGPR());
+#endif
     }
 
     JITCompiler::Call appendCallSetResult(const FunctionPtr<CFunctionPtrTag> function, GPRReg result)
@@ -1058,6 +1111,11 @@ public:
     void branchDoubleNonZero(FPRReg value, FPRReg scratch, BasicBlock* destination)
     {
         return addBranch(m_jit.branchDoubleNonZero(value, scratch), destination);
+    }
+
+    void branchDoubleZeroOrNaN(FPRReg value, FPRReg scratch, BasicBlock* destination)
+    {
+        return addBranch(m_jit.branchDoubleZeroOrNaN(value, scratch), destination);
     }
     
     template<typename T, typename U>
@@ -1187,11 +1245,14 @@ public:
     void compileSymbolEquality(Node*);
     void compileHeapBigIntEquality(Node*);
     void compilePeepHoleSymbolEquality(Node*, Node* branchNode);
+    void compileNotDoubleNeitherDoubleNorHeapBigIntNorStringStrictEquality(Node*, Edge notDoubleEdge, Edge neitherDoubleNorHeapBigIntNorStringEdge);
+    void compilePeepHoleNotDoubleNeitherDoubleNorHeapBigIntNorStringStrictEquality(Node*, Node* branchNode, Edge notDoubleEdge, Edge neitherDoubleNorHeapBigIntNorStringEdge);
     void compileSymbolUntypedEquality(Node*, Edge symbolEdge, Edge untypedEdge);
 
     void emitObjectOrOtherBranch(Edge value, BasicBlock* taken, BasicBlock* notTaken);
     void emitStringBranch(Edge value, BasicBlock* taken, BasicBlock* notTaken);
     void emitStringOrOtherBranch(Edge value, BasicBlock* taken, BasicBlock* notTaken);
+    void emitUntypedBranch(Edge value, BasicBlock* taken, BasicBlock* notTaken);
     void emitBranch(Node*);
     
     struct StringSwitchCase {
@@ -1225,6 +1286,7 @@ public:
     void emitSwitch(Node*);
     
     void compileToStringOrCallStringConstructorOrStringValueOf(Node*);
+    void compileFunctionToString(Node*);
     void compileNumberToStringWithRadix(Node*);
     void compileNumberToStringWithValidRadixConstant(Node*);
     void compileNumberToStringWithValidRadixConstant(Node*, int32_t radix);
@@ -1490,6 +1552,7 @@ public:
     void compileNewTypedArray(Node*);
     void compileToThis(Node*);
     void compileObjectKeysOrObjectGetOwnPropertyNames(Node*);
+    void compileObjectAssign(Node*);
     void compileObjectCreate(Node*);
     void compileCreateThis(Node*);
     void compileCreatePromise(Node*);
@@ -1568,7 +1631,7 @@ public:
     void emitGetLength(CodeOrigin, GPRReg lengthGPR, bool includeThis = false);
     void emitGetCallee(CodeOrigin, GPRReg calleeGPR);
     void emitGetArgumentStart(CodeOrigin, GPRReg startGPR);
-    void emitPopulateSliceIndex(Edge&, Optional<GPRReg> indexGPR, GPRReg lengthGPR, GPRReg resultGPR);
+    void emitPopulateSliceIndex(Edge&, std::optional<GPRReg> indexGPR, GPRReg lengthGPR, GPRReg resultGPR);
     
     // Generate an OSR exit fuzz check. Returns Jump() if OSR exit fuzz is not enabled, or if
     // it's in training mode.
@@ -1668,6 +1731,10 @@ public:
     void speculateNotCell(Edge, JSValueRegs);
     void speculateNotCell(Edge);
     void speculateNotCellNorBigInt(Edge);
+    void speculateNotDouble(Edge, JSValueRegs, GPRReg temp);
+    void speculateNotDouble(Edge);
+    void speculateNeitherDoubleNorHeapBigIntNorString(Edge, JSValueRegs, GPRReg temp);
+    void speculateNeitherDoubleNorHeapBigIntNorString(Edge);
     void speculateOther(Edge, JSValueRegs, GPRReg temp);
     void speculateOther(Edge, JSValueRegs);
     void speculateOther(Edge);
@@ -1764,7 +1831,7 @@ public:
     };
     Vector<SlowPathLambda> m_slowPathLambdas;
     Vector<SilentRegisterSavePlan> m_plans;
-    Optional<unsigned> m_outOfLineStreamIndex;
+    std::optional<unsigned> m_outOfLineStreamIndex;
 };
 
 
@@ -2023,7 +2090,7 @@ public:
     }
     GPRTemporary(SpeculativeJIT*, ReuseTag, JSValueOperand&, WhichValueWord);
 
-    GPRTemporary(GPRTemporary& other) = delete;
+    GPRTemporary(const GPRTemporary&) = delete;
 
     GPRTemporary(GPRTemporary&& other)
     {

@@ -129,8 +129,9 @@
         return nil;
 
     std::initializer_list<NSString*> domains = {
-#if PLATFORM(IOS_FAMILY)
         @"com.apple.Accessibility",
+        @"com.apple.mediaaccessibility",
+#if PLATFORM(IOS_FAMILY)
         @"com.apple.AdLib",
         @"com.apple.SpeakSelection",
         @"com.apple.UIKit",
@@ -149,7 +150,6 @@
         @"com.apple.avfoundation.videoperformancehud",
         @"com.apple.driver.AppleBluetoothMultitouch.mouse",
         @"com.apple.driver.AppleBluetoothMultitouch.trackpad",
-        @"com.apple.mediaaccessibility",
         @"com.apple.speech.voice.prefs",
         @"com.apple.universalaccess",
 #endif
@@ -176,11 +176,11 @@
 {
 #if ENABLE(CFPREFS_DIRECT_MODE)
     RunLoop::main().dispatch([domain = retainPtr(domain), key = retainPtr(key), encodedValue = retainPtr(encodedValue)] {
-        Optional<String> encodedString;
+        std::optional<String> encodedString;
         if (encodedValue)
             encodedString = String(encodedValue.get());
 
-        for (auto* processPool : WebKit::WebProcessPool::allProcessPools())
+        for (auto& processPool : WebKit::WebProcessPool::allProcessPools())
             processPool->notifyPreferencesChanged(domain.get(), key.get(), encodedString);
     });
 #endif

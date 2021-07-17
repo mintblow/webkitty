@@ -31,12 +31,13 @@
 #include "TextEncoding.h"
 #include <wtf/HashFunctions.h>
 #include <wtf/Hasher.h>
-#include <wtf/Optional.h>
 #include <wtf/URL.h>
 
 namespace WebCore {
 
 class Document;
+
+struct ResolvedURL;
 
 struct CSSParserContext {
     WTF_MAKE_STRUCT_FAST_ALLOCATED;
@@ -44,7 +45,7 @@ struct CSSParserContext {
     URL baseURL;
     String charset;
     CSSParserMode mode { HTMLStandardMode };
-    Optional<StyleRuleType> enclosingRuleType;
+    std::optional<StyleRuleType> enclosingRuleType;
     bool isHTMLDocument { false };
 
     // This is only needed to support getMatchedCSSRules.
@@ -89,7 +90,7 @@ struct CSSParserContext {
     CSSParserContext(CSSParserMode, const URL& baseURL = URL());
     WEBCORE_EXPORT CSSParserContext(const Document&, const URL& baseURL = URL(), const String& charset = emptyString());
     bool isPropertyRuntimeDisabled(CSSPropertyID) const;
-    URL completeURL(const String& relativeURL) const;
+    ResolvedURL completeURL(const String&) const;
 };
 
 bool operator==(const CSSParserContext&, const CSSParserContext&);

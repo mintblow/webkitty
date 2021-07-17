@@ -1,3 +1,4 @@
 
-PASS XRRigidTransform position and orientation meet [SameObject] requirements
+PASS XRRigidTransform position and orientation meet [SameObject] requirements - webgl
+PASS XRRigidTransform position and orientation meet [SameObject] requirements - webgl2
 

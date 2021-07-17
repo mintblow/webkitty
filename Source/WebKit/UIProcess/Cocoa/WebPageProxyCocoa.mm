@@ -27,6 +27,7 @@
 #import "WebPageProxy.h"
 
 #import "APIAttachment.h"
+#import "APIPageConfiguration.h"
 #import "APIUIClient.h"
 #import "CocoaImage.h"
 #import "Connection.h"
@@ -39,6 +40,7 @@
 #import "SafeBrowsingWarning.h"
 #import "SharedBufferCopy.h"
 #import "SharedBufferDataReference.h"
+#import "SynapseSPI.h"
 #import "WebContextMenuProxy.h"
 #import "WebPage.h"
 #import "WebPageMessages.h"
@@ -47,8 +49,10 @@
 #import "WebProcessProxy.h"
 #import "WebsiteDataStore.h"
 #import "WKErrorInternal.h"
+#import <Foundation/NSURLRequest.h>
 #import <WebCore/DragItem.h>
 #import <WebCore/GeometryUtilities.h>
+#import <WebCore/HighlightVisibility.h>
 #import <WebCore/LocalCurrentGraphicsContext.h>
 #import <WebCore/NetworkExtensionContentFilter.h>
 #import <WebCore/NotImplemented.h>
@@ -65,6 +69,11 @@
 #import "MediaUsageManagerCocoa.h"
 #endif
 
+#if ENABLE(APP_HIGHLIGHTS)
+SOFT_LINK_PRIVATE_FRAMEWORK_OPTIONAL(Synapse)
+SOFT_LINK_CLASS_OPTIONAL(Synapse, SYNotesActivationObserver)
+#endif
+
 #if USE(APPKIT)
 #import <AppKit/NSImage.h>
 #else
@@ -78,16 +87,6 @@ SOFT_LINK_PRIVATE_FRAMEWORK(WebContentAnalysis);
 SOFT_LINK_CLASS(WebContentAnalysis, WebFilterEvaluator);
 #endif
 
-#if USE(APPLE_INTERNAL_SDK)
-#import <WebKitAdditions/WebPageProxyCocoaAdditionsBefore.mm>
-#endif
-
-#if USE(APPLE_INTERNAL_SDK)
-#import <WebKitAdditions/WebPageProxyAdditions.h>
-#else
-#define WEB_PAGE_PROXY_ADDITIONS
-#endif
-
 #define MESSAGE_CHECK(assertion) MESSAGE_CHECK_BASE(assertion, process().connection())
 #define MESSAGE_CHECK_COMPLETION(assertion, completion) MESSAGE_CHECK_COMPLETION_BASE(assertion, process().connection(), completion)
 
@@ -95,10 +94,17 @@ namespace WebKit {
 using namespace WebCore;
 
 #if ENABLE(DATA_DETECTION)
+
 void WebPageProxy::setDataDetectionResult(const DataDetectionResult& dataDetectionResult)
 {
     m_dataDetectionResults = dataDetectionResult.results;
 }
+
+void WebPageProxy::handleClickForDataDetectionResult(const DataDetectorElementInfo& info, const IntPoint& clickLocation)
+{
+    pageClient().handleClickForDataDetectionResult(info, clickLocation);
+}
+
 #endif
 
 void WebPageProxy::saveRecentSearches(const String& name, const Vector<WebCore::RecentSearch>& searchItems)
@@ -172,11 +178,11 @@ void WebPageProxy::addPlatformLoadParameters(WebProcessProxy& process, LoadParam
 #if PLATFORM(IOS)
     if (!process.hasManagedSessionSandboxAccess() && [getWebFilterEvaluatorClass() isManagedSession]) {
         SandboxExtension::Handle handle;
-        SandboxExtension::createHandleForMachLookup("com.apple.uikit.viewservice.com.apple.WebContentFilter.remoteUI"_s, WTF::nullopt, handle);
+        SandboxExtension::createHandleForMachLookup("com.apple.uikit.viewservice.com.apple.WebContentFilter.remoteUI"_s, std::nullopt, handle);
         loadParameters.contentFilterExtensionHandle = WTFMove(handle);
 
         SandboxExtension::Handle frontboardServiceExtensionHandle;
-        if (SandboxExtension::createHandleForMachLookup("com.apple.frontboard.systemappservices"_s, WTF::nullopt, frontboardServiceExtensionHandle))
+        if (SandboxExtension::createHandleForMachLookup("com.apple.frontboard.systemappservices"_s, std::nullopt, frontboardServiceExtensionHandle))
             loadParameters.frontboardServiceExtensionHandle = WTFMove(frontboardServiceExtensionHandle);
 
         process.markHasManagedSessionSandboxAccess();
@@ -556,10 +562,12 @@ void WebPageProxy::createAppHighlightInSelectedRange(WebCore::CreateNewGroupForH
     if (!hasRunningProcess())
         return;
 
+    setUpHighlightsObserver();
+
     send(Messages::WebPage::CreateAppHighlightInSelectedRange(createNewGroup, requestOriginatedInApp));
 }
 
-void WebPageProxy::restoreAppHighlightsAndScrollToIndex(const Vector<Ref<SharedMemory>>& highlights, const Optional<unsigned> index)
+void WebPageProxy::restoreAppHighlightsAndScrollToIndex(const Vector<Ref<SharedMemory>>& highlights, const std::optional<unsigned> index)
 {
     if (!hasRunningProcess())
         return;
@@ -580,10 +588,36 @@ void WebPageProxy::restoreAppHighlightsAndScrollToIndex(const Vector<Ref<SharedM
 
 void WebPageProxy::setAppHighlightsVisibility(WebCore::HighlightVisibility appHighlightsVisibility)
 {
+    RELEASE_ASSERT(isMainRunLoop());
+    
     if (!hasRunningProcess())
         return;
 
     send(Messages::WebPage::SetAppHighlightsVisibility(appHighlightsVisibility));
+}
+
+bool WebPageProxy::appHighlightsVisibility()
+{
+    if (!m_appHighlightsObserver)
+        setUpHighlightsObserver();
+    return [m_appHighlightsObserver isVisible];
+}
+
+void WebPageProxy::setUpHighlightsObserver()
+{
+    if (m_appHighlightsObserver)
+        return;
+
+    auto weakThis = makeWeakPtr(*this);
+    auto updateAppHighlightsVisibility = ^(BOOL isVisible) {
+        ensureOnMainRunLoop([weakThis, isVisible] {
+            if (!weakThis)
+                return;
+            weakThis->setAppHighlightsVisibility(isVisible ? WebCore::HighlightVisibility::Visible : WebCore::HighlightVisibility::Hidden);
+        });
+    };
+    
+    m_appHighlightsObserver = adoptNS([allocSYNotesActivationObserverInstance() initWithHandler:updateAppHighlightsVisibility]);
 }
 
 #endif
@@ -599,26 +633,13 @@ SandboxExtension::HandleArray WebPageProxy::createNetworkExtensionsSandboxExtens
 #else
         constexpr ASCIILiteral neSessionManagerService { "com.apple.nesessionmanager.content-filter"_s };
 #endif
-        return SandboxExtension::createHandlesForMachLookup({ neHelperService, neSessionManagerService }, WTF::nullopt);
+        return SandboxExtension::createHandlesForMachLookup({ neHelperService, neSessionManagerService }, std::nullopt);
     }
 #endif
     return SandboxExtension::HandleArray();
 }
 
 #if ENABLE(CONTEXT_MENUS)
-#if ENABLE(IMAGE_EXTRACTION)
-
-void WebPageProxy::handleContextMenuRevealImage()
-{
-    auto& result = m_activeContextMenuContextData.webHitTestResultData();
-    if (!result.imageBitmap)
-        return;
-
-    revealExtractedImageInPreviewPanel(*result.imageBitmap, result.toolTipText);
-}
-
-#endif // ENABLE(IMAGE_EXTRACTION)
-
 #if HAVE(TRANSLATION_UI_SERVICES)
 
 bool WebPageProxy::canHandleContextMenuTranslation() const
@@ -639,21 +660,27 @@ void WebPageProxy::requestActiveNowPlayingSessionInfo(CompletionHandler<void(boo
     sendWithAsyncReply(Messages::WebPage::RequestActiveNowPlayingSessionInfo(), WTFMove(callback));
 }
 
-void WebPageProxy::setLastNavigationWasAppBound(ResourceRequest& request)
+void WebPageProxy::setLastNavigationWasAppInitiated(ResourceRequest& request)
 {
-    WEB_PAGE_PROXY_ADDITIONS
-    m_lastNavigationWasAppBound = request.isAppBound();
+#if ENABLE(APP_PRIVACY_REPORT)
+    auto isAppInitiated = request.nsURLRequest(WebCore::HTTPBodyUpdatePolicy::DoNotUpdateHTTPBody).attribution == NSURLRequestAttributionDeveloper;
+    if (m_configuration->appInitiatedOverrideValueForTesting() != AttributionOverrideTesting::NoOverride)
+        isAppInitiated = m_configuration->appInitiatedOverrideValueForTesting() == AttributionOverrideTesting::AppInitiated;
+
+    request.setIsAppInitiated(isAppInitiated);
+    m_lastNavigationWasAppInitiated = isAppInitiated;
+#endif
 }
 
-void WebPageProxy::lastNavigationWasAppBound(CompletionHandler<void(bool)>&& completionHandler)
+void WebPageProxy::lastNavigationWasAppInitiated(CompletionHandler<void(bool)>&& completionHandler)
 {
-    sendWithAsyncReply(Messages::WebPage::LastNavigationWasAppBound(), WTFMove(completionHandler));
+    sendWithAsyncReply(Messages::WebPage::LastNavigationWasAppInitiated(), WTFMove(completionHandler));
 }
 
 void WebPageProxy::grantAccessToAssetServices()
 {
     SandboxExtension::Handle mobileAssetHandleV2;
-    SandboxExtension::createHandleForMachLookup("com.apple.mobileassetd.v2"_s, WTF::nullopt, mobileAssetHandleV2);
+    SandboxExtension::createHandleForMachLookup("com.apple.mobileassetd.v2"_s, std::nullopt, mobileAssetHandleV2);
     process().send(Messages::WebProcess::GrantAccessToAssetServices(mobileAssetHandleV2), 0);
 }
 
@@ -670,7 +697,7 @@ void WebPageProxy::switchFromStaticFontRegistryToUserFontRegistry()
 SandboxExtension::Handle WebPageProxy::fontdMachExtensionHandle()
 {
     SandboxExtension::Handle fontMachExtensionHandle;
-    SandboxExtension::createHandleForMachLookup("com.apple.fonts"_s, WTF::nullopt, fontMachExtensionHandle);
+    SandboxExtension::createHandleForMachLookup("com.apple.fonts"_s, std::nullopt, fontMachExtensionHandle);
     return fontMachExtensionHandle;
 }
 
@@ -685,10 +712,6 @@ NSDictionary *WebPageProxy::contentsOfUserInterfaceItem(NSString *userInterfaceI
 }
 
 } // namespace WebKit
-
-#if USE(APPLE_INTERNAL_SDK)
-#import <WebKitAdditions/WebPageProxyCocoaAdditionsAfter.mm>
-#endif
 
 #undef MESSAGE_CHECK_COMPLETION
 #undef MESSAGE_CHECK

@@ -119,6 +119,8 @@ class QueryModifier {
 
 // Based on <https://stackoverflow.com/questions/6234773/can-i-escape-html-special-chars-in-javascript>
 function escapeHTML(text) {
+    if (!text)
+        return text;
     return text.replace(/[&<>"'\n]/g, function(character) {
         switch (character) {
             case '&':
@@ -135,6 +137,10 @@ function escapeHTML(text) {
                 return '&#039;';
         }
   });
+}
+
+function linkify(text) {
+    return text.replace(/\b(https?|rdar):\/{2}[^\s<>&]+[^\.\s<>&,]/gmi, `<a href="$&" target="_blank">$&</a>`);
 }
 
 function deepCompare(a, b) {
@@ -191,4 +197,4 @@ function elapsedTime(startTimestamp, endTimestamp)
     return result;
 }
 
-export {deepCompare, ErrorDisplay, queryToParams, paramsToQuery, QueryModifier, escapeHTML, percentage, elapsedTime};
+export {deepCompare, ErrorDisplay, queryToParams, paramsToQuery, QueryModifier, escapeHTML, linkify, percentage, elapsedTime};

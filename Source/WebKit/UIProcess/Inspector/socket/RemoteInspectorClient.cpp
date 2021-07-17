@@ -122,9 +122,9 @@ RemoteInspectorClient::~RemoteInspectorClient()
 void RemoteInspectorClient::sendWebInspectorEvent(const String& event)
 {
     ASSERT(isMainRunLoop());
-    ASSERT(m_connectionID.hasValue());
+    ASSERT(m_connectionID);
     auto message = event.utf8();
-    send(m_connectionID.value(), reinterpret_cast<const uint8_t*>(message.data()), message.length());
+    send(m_connectionID.value(), message.dataAsUInt8Ptr(), message.length());
 }
 
 HashMap<String, Inspector::RemoteInspectorConnectionClient::CallHandler>& RemoteInspectorClient::dispatchMap()
@@ -206,7 +206,7 @@ void RemoteInspectorClient::setBackendCommands(const Event& event)
     if (!event.message || event.message->isEmpty())
         return;
 
-    m_backendCommandsURL = makeString("data:text/javascript;base64,", base64Encode(event.message->utf8()));
+    m_backendCommandsURL = makeString("data:text/javascript;base64,", base64Encoded(event.message->utf8()));
 }
 
 void RemoteInspectorClient::setTargetList(const Event& event)

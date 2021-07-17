@@ -56,7 +56,7 @@ public:
 
     ~UniqueIDBDatabaseTransaction();
 
-    UniqueIDBDatabaseConnection& databaseConnection() { return *m_databaseConnection; }
+    UniqueIDBDatabaseConnection& databaseConnection();
     const IDBTransactionInfo& info() const { return m_transactionInfo; }
     bool isVersionChange() const;
     bool isReadOnly() const;
@@ -87,19 +87,19 @@ public:
     const Vector<uint64_t>& objectStoreIdentifiers();
 
     void setMainThreadAbortResult(const IDBError& error) { m_mainThreadAbortResult = { error }; }
-    const Optional<IDBError>& mainThreadAbortResult() const { return m_mainThreadAbortResult; }
+    const std::optional<IDBError>& mainThreadAbortResult() const { return m_mainThreadAbortResult; }
 
 private:
     UniqueIDBDatabaseTransaction(UniqueIDBDatabaseConnection&, const IDBTransactionInfo&);
 
-    UniqueIDBDatabaseConnection* m_databaseConnection;
+    WeakPtr<UniqueIDBDatabaseConnection> m_databaseConnection;
     IDBTransactionInfo m_transactionInfo;
 
     std::unique_ptr<IDBDatabaseInfo> m_originalDatabaseInfo;
 
     Vector<uint64_t> m_objectStoreIdentifiers;
 
-    Optional<IDBError> m_mainThreadAbortResult;
+    std::optional<IDBError> m_mainThreadAbortResult;
 };
 
 } // namespace IDBServer

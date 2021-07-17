@@ -29,7 +29,7 @@
 #include "GStreamerCommon.h"
 #include "MediaSourceTrackGStreamer.h"
 #include "VideoTrackPrivateGStreamer.h"
-
+#include <cassert>
 #include <gst/gst.h>
 #include <wtf/Condition.h>
 #include <wtf/DataMutex.h>
@@ -344,7 +344,7 @@ static gboolean webKitMediaSrcActivateMode(GstPad* pad, GstObject* source, GstPa
         // Unblock the streaming thread.
         RefPtr<Stream>& stream = WEBKIT_MEDIA_SRC_PAD(pad)->priv->stream;
         {
-            DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+            DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
             streamingMembers->isFlushing = true;
             streamingMembers->padLinkedOrFlushedCondition.notifyOne();
             streamingMembers->queueChangedOrFlushedCondition.notifyOne();
@@ -354,7 +354,7 @@ static gboolean webKitMediaSrcActivateMode(GstPad* pad, GstObject* source, GstPa
         // Otherwise a deadlock would occur as the next function tries to join the thread.
         gst_pad_stop_task(pad);
         {
-            DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+            DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
             streamingMembers->isFlushing = false;
         }
     }
@@ -364,8 +364,26 @@ static gboolean webKitMediaSrcActivateMode(GstPad* pad, GstObject* source, GstPa
 static void webKitMediaSrcPadLinked(GstPad* pad, GstPad*, void*)
 {
     RefPtr<Stream>& stream = WEBKIT_MEDIA_SRC_PAD(pad)->priv->stream;
-    DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+    DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
     streamingMembers->padLinkedOrFlushedCondition.notifyOne();
+}
+
+static void webKitMediaSrcWaitForPadLinkedOrFlush(GstPad* pad, DataMutexLocker<Stream::StreamingMembers>& streamingMembers)
+{
+    {
+        auto locker = GstObjectLocker(pad);
+        if (LIKELY(GST_PAD_IS_LINKED(pad)))
+            return;
+
+        GST_DEBUG_OBJECT(pad, "Waiting for the pad to be linked...");
+        g_signal_connect(pad, "linked", G_CALLBACK(webKitMediaSrcPadLinked), nullptr);
+    }
+
+    assertIsHeld(streamingMembers.mutex());
+    streamingMembers->padLinkedOrFlushedCondition.wait(streamingMembers.mutex());
+
+    g_signal_handlers_disconnect_by_func(pad, reinterpret_cast<void*>(webKitMediaSrcPadLinked), nullptr);
+    GST_DEBUG_OBJECT(pad, "Finished waiting for the pad to be linked.");
 }
 
 // Called with STREAM_LOCK.
@@ -374,7 +392,7 @@ static void webKitMediaSrcLoop(void* userData)
     GstPad* pad = GST_PAD(userData);
     RefPtr<Stream>& stream = WEBKIT_MEDIA_SRC_PAD(pad)->priv->stream;
 
-    DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+    DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
     if (streamingMembers->isFlushing) {
         gst_pad_pause_task(pad);
         return;
@@ -382,22 +400,11 @@ static void webKitMediaSrcLoop(void* userData)
 
     // Since the pad can and will be added when the element is in PLAYING state, this task can start running
     // before the pad is linked. Wait for the pad to be linked to avoid buffers being lost to not-linked errors.
-    GST_OBJECT_LOCK(pad);
-    if (!GST_PAD_IS_LINKED(pad)) {
-        GST_DEBUG_OBJECT(pad, "Waiting for the pad to be linked...");
-        g_signal_connect(pad, "linked", G_CALLBACK(webKitMediaSrcPadLinked), nullptr);
-        GST_OBJECT_UNLOCK(pad);
-
-        streamingMembers->padLinkedOrFlushedCondition.wait(streamingMembers.mutex());
-
-        g_signal_handlers_disconnect_by_func(pad, reinterpret_cast<void*>(webKitMediaSrcPadLinked), nullptr);
-        GST_DEBUG_OBJECT(pad, "Finished waiting for the pad to be linked.");
-        if (streamingMembers->isFlushing) {
-            gst_pad_pause_task(pad);
-            return;
-        }
-    } else
-        GST_OBJECT_UNLOCK(pad);
+    webKitMediaSrcWaitForPadLinkedOrFlush(pad, streamingMembers);
+    if (streamingMembers->isFlushing) {
+        gst_pad_pause_task(pad);
+        return;
+    }
     ASSERT(gst_pad_is_linked(pad));
 
     // By keeping the lock we are guaranteed that a flush will not happen while we send essential events.
@@ -440,7 +447,7 @@ static void webKitMediaSrcLoop(void* userData)
 
     GRefPtr<GstMiniObject> object;
     {
-        DataMutex<TrackQueue>::LockedWrapper queue(stream->track->queueDataMutex());
+        DataMutexLocker queue { stream->track->queueDataMutex() };
         if (!queue->isEmpty()) {
             object = queue->pop();
             streamingMembers->hasPoppedFirstObject = true;
@@ -448,7 +455,7 @@ static void webKitMediaSrcLoop(void* userData)
         } else {
             queue->notifyWhenNotEmpty([&object, stream](GRefPtr<GstMiniObject>&& receivedObject) {
                 ASSERT(isMainThread());
-                DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+                DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
                 ASSERT(!streamingMembers->isFlushing);
 
                 object = WTFMove(receivedObject);
@@ -465,7 +472,7 @@ static void webKitMediaSrcLoop(void* userData)
     });
     {
         // Ensure that notifyWhenNotEmpty()'s callback (if any) is cleared after this point.
-        DataMutex<TrackQueue>::LockedWrapper queue(stream->track->queueDataMutex());
+        DataMutexLocker queue { stream->track->queueDataMutex() };
         queue->resetNotEmptyHandler();
     }
     if (streamingMembers->isFlushing) {
@@ -509,7 +516,7 @@ static void webKitMediaSrcLoop(void* userData)
         }
 
         // Push the buffer without the streamingMembers lock so that flushes can happen while it travels downstream.
-        streamingMembers.lockHolder().unlockEarly();
+        streamingMembers.unlockEarly();
 
         ASSERT(GST_BUFFER_PTS_IS_VALID(buffer.get()));
         GST_TRACE_OBJECT(pad, "Pushing buffer downstream: %" GST_PTR_FORMAT, buffer.get());
@@ -525,7 +532,7 @@ static void webKitMediaSrcLoop(void* userData)
         // EOS events and other enqueued events are also sent unlocked so they can react to flushes if necessary.
         GRefPtr<GstEvent> event = GRefPtr<GstEvent>(GST_EVENT(object.leakRef()));
 
-        streamingMembers.lockHolder().unlockEarly();
+        streamingMembers.unlockEarly();
         GST_DEBUG_OBJECT(pad, "Pushing event downstream: %" GST_PTR_FORMAT, event.get());
         bool eventHandled = gst_pad_push_event(pad, GRefPtr<GstEvent>(event).leakRef());
         if (!eventHandled)
@@ -540,11 +547,11 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
     bool skipFlush = false;
 
     {
-        DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+        DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
 
         if (!streamingMembers->hasPoppedFirstObject) {
             GST_DEBUG_OBJECT(stream->source, "Flush request for stream '%s' occurred before hasPoppedFirstObject, just clearing the queue and readjusting the segment.", stream->track->trackId().string().utf8().data());
-            DataMutex<TrackQueue>::LockedWrapper queue(stream->track->queueDataMutex());
+            DataMutexLocker queue { stream->track->queueDataMutex() };
             // We use clear() instead of flush() because the WebKitMediaSrc streaming thread could be waiting
             // for the queue. flush() would cancel the notEmptyCallback therefore leaving the streaming thread
             // stuck waiting forever.
@@ -558,8 +565,8 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
         // which will keeping the streaming thread idle.
         GST_DEBUG_OBJECT(stream->pad.get(), "Taking the StreamingMembers mutex and setting isFlushing = true.");
         {
-            DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
-            DataMutex<TrackQueue>::LockedWrapper queue(stream->track->queueDataMutex());
+            DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
+            DataMutexLocker queue { stream->track->queueDataMutex() };
 
             streamingMembers->isFlushing = true;
             queue->flush(); // Clear the queue and cancel any waiting callback.
@@ -581,7 +588,7 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
         // In the case of seeking flush we are resetting the timeline (see the flush stop later).
         // The resulting segment is brand new, but with a different start time.
         WebKitMediaSrcPrivate* priv = stream->source->priv;
-        DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+        DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
         streamingMembers->segment.base = 0;
         streamingMembers->segment.rate = priv->rate;
         streamingMembers->segment.start = streamingMembers->segment.time = priv->startTime;
@@ -595,7 +602,7 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
         // GST_CLOCK_TIME_NONE is returned when the pipeline is not yet pre-rolled (e.g. just after a seek). In this case
         // we don't need to adjust the segment though, as running time has not advanced.
         if (GST_CLOCK_TIME_IS_VALID(pipelineStreamTime)) {
-            DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+            DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
             // We need to increase the base by the running time accumulated during the previous segment.
 
             GstClockTime pipelineRunningTime = gst_segment_to_running_time(&streamingMembers->segment, GST_FORMAT_TIME, pipelineStreamTime);
@@ -611,10 +618,10 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
     if (!skipFlush) {
         // By taking the stream lock we are waiting for the streaming thread task to stop if it hadn't yet.
         GST_DEBUG_OBJECT(stream->pad.get(), "Taking the STREAM_LOCK.");
-        GST_PAD_STREAM_LOCK(stream->pad.get());
+        auto streamLock = GstPadStreamLocker(stream->pad.get());
         {
             GST_DEBUG_OBJECT(stream->pad.get(), "Taking the StreamingMembers mutex again.");
-            DataMutex<Stream::StreamingMembers>::LockedWrapper streamingMembers(stream->streamingMembersDataMutex);
+            DataMutexLocker streamingMembers { stream->streamingMembersDataMutex };
             GST_DEBUG_OBJECT(stream->pad.get(), "StreamingMembers mutex taken, using it to set isFlushing = false.");
             streamingMembers->isFlushing = false;
             streamingMembers->doesNeedSegmentEvent = true;
@@ -627,7 +634,6 @@ static void webKitMediaSrcStreamFlush(Stream* stream, bool isSeekingFlush)
 
         GST_DEBUG_OBJECT(stream->pad.get(), "Starting webKitMediaSrcLoop task and releasing the STREAM_LOCK.");
         gst_pad_start_task(stream->pad.get(), webKitMediaSrcLoop, stream->pad.get(), nullptr);
-        GST_PAD_STREAM_UNLOCK(stream->pad.get());
     }
 }
 
@@ -737,12 +743,9 @@ static const gchar* const* webKitMediaSrcGetProtocols(GType)
 static gchar* webKitMediaSrcGetUri(GstURIHandler* handler)
 {
     WebKitMediaSrc* source = WEBKIT_MEDIA_SRC(handler);
-    gchar* result;
 
-    GST_OBJECT_LOCK(source);
-    result = g_strdup(source->priv->uri.get());
-    GST_OBJECT_UNLOCK(source);
-    return result;
+    auto locker = GstObjectLocker(source);
+    return g_strdup(source->priv->uri.get());
 }
 
 static gboolean webKitMediaSrcSetUri(GstURIHandler* handler, const gchar* uri, GError**)
@@ -754,9 +757,8 @@ static gboolean webKitMediaSrcSetUri(GstURIHandler* handler, const gchar* uri, G
         return false;
     }
 
-    GST_OBJECT_LOCK(source);
+    auto locker = GstObjectLocker(source);
     source->priv->uri = GUniquePtr<char>(g_strdup(uri));
-    GST_OBJECT_UNLOCK(source);
     return TRUE;
 }
 

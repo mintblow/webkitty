@@ -265,11 +265,15 @@ void WebsiteDataStore::resolveDirectoriesIfNecessary()
         m_resolvedConfiguration->setCacheStorageDirectory(resolvePathForSandboxExtension(m_configuration->cacheStorageDirectory()));
     if (!m_configuration->hstsStorageDirectory().isEmpty() && m_resolvedConfiguration->hstsStorageDirectory().isEmpty())
         m_resolvedConfiguration->setHSTSStorageDirectory(resolvePathForSandboxExtension(m_configuration->hstsStorageDirectory()));
+#if HAVE(ARKIT_INLINE_PREVIEW)
+    if (!m_configuration->modelElementCacheDirectory().isEmpty())
+        m_resolvedConfiguration->setModelElementCacheDirectory(resolveAndCreateReadWriteDirectoryForSandboxExtension(m_configuration->modelElementCacheDirectory()));
+#endif
 
     // Resolve directories for file paths.
     if (!m_configuration->cookieStorageFile().isEmpty()) {
-        m_resolvedConfiguration->setCookieStorageFile(resolveAndCreateReadWriteDirectoryForSandboxExtension(FileSystem::directoryName(m_configuration->cookieStorageFile())));
-        m_resolvedConfiguration->setCookieStorageFile(FileSystem::pathByAppendingComponent(m_resolvedConfiguration->cookieStorageFile(), FileSystem::pathGetFileName(m_configuration->cookieStorageFile())));
+        m_resolvedConfiguration->setCookieStorageFile(resolveAndCreateReadWriteDirectoryForSandboxExtension(FileSystem::parentPath(m_configuration->cookieStorageFile())));
+        m_resolvedConfiguration->setCookieStorageFile(FileSystem::pathByAppendingComponent(m_resolvedConfiguration->cookieStorageFile(), FileSystem::pathFileName(m_configuration->cookieStorageFile())));
     }
 }
 
@@ -1284,7 +1288,7 @@ void WebsiteDataStore::getResourceLoadStatisticsDataSummary(CompletionHandler<vo
         });
     });
     
-    for (auto* processPool : WebProcessPool::allProcessPools())
+    for (auto& processPool : WebProcessPool::allProcessPools())
         processPool->sendResourceLoadStatisticsDataImmediately([wtfCallbackAggregator] { });
 }
 
@@ -1625,7 +1629,7 @@ HashSet<RefPtr<WebProcessPool>> WebsiteDataStore::processPools(size_t limit) con
     if (processPools.isEmpty()) {
         // Check if we're one of the legacy data stores.
         for (auto& processPool : WebProcessPool::allProcessPools()) {
-            processPools.add(processPool);
+            processPools.add(processPool.ptr());
             if (processPools.size() == limit)
                 break;
         }
@@ -1672,12 +1676,11 @@ Vector<WebCore::SecurityOriginData> WebsiteDataStore::mediaKeyOrigins(const Stri
 
     Vector<WebCore::SecurityOriginData> origins;
 
-    for (const auto& originPath : FileSystem::listDirectory(mediaKeysStorageDirectory, "*")) {
+    for (const auto& mediaKeyIdentifier : FileSystem::listDirectory(mediaKeysStorageDirectory)) {
+        auto originPath = FileSystem::pathByAppendingComponent(mediaKeysStorageDirectory, mediaKeyIdentifier);
         auto mediaKeyFile = computeMediaKeyFile(originPath);
         if (!FileSystem::fileExists(mediaKeyFile))
             continue;
-
-        auto mediaKeyIdentifier = FileSystem::pathGetFileName(originPath);
 
         if (auto securityOrigin = WebCore::SecurityOriginData::fromDatabaseIdentifier(mediaKeyIdentifier))
             origins.append(*securityOrigin);
@@ -1690,10 +1693,11 @@ void WebsiteDataStore::removeMediaKeys(const String& mediaKeysStorageDirectory, 
 {
     ASSERT(!mediaKeysStorageDirectory.isEmpty());
 
-    for (const auto& mediaKeyDirectory : FileSystem::listDirectory(mediaKeysStorageDirectory, "*")) {
+    for (const auto& directoryName : FileSystem::listDirectory(mediaKeysStorageDirectory)) {
+        auto mediaKeyDirectory = FileSystem::pathByAppendingComponent(mediaKeysStorageDirectory, directoryName);
         auto mediaKeyFile = computeMediaKeyFile(mediaKeyDirectory);
 
-        auto modificationTime = FileSystem::getFileModificationTime(mediaKeyFile);
+        auto modificationTime = FileSystem::fileModificationTime(mediaKeyFile);
         if (!modificationTime)
             continue;
 
@@ -1726,7 +1730,7 @@ void WebsiteDataStore::getNetworkProcessConnection(WebProcessProxy& webProcessPr
             RunLoop::main().dispatch([weakThis = WTFMove(weakThis), webProcessProxy = WTFMove(webProcessProxy), reply = WTFMove(reply)] () mutable {
                 if (RefPtr<WebsiteDataStore> strongThis = weakThis.get(); strongThis && webProcessProxy) {
                     strongThis->terminateNetworkProcess();
-                    RELEASE_LOG_IF(strongThis->isPersistent(), Process, "getNetworkProcessConnection: Failed first attempt, retrying");
+                    RELEASE_LOG_ERROR(Process, "getNetworkProcessConnection: Failed first attempt, retrying");
                     strongThis->networkProcess().getNetworkProcessConnection(*webProcessProxy, WTFMove(reply));
                 } else
                     reply({ });
@@ -1907,7 +1911,7 @@ uint64_t WebsiteDataStore::perThirdPartyOriginStorageQuota() const
 
 void WebsiteDataStore::setCacheModelSynchronouslyForTesting(CacheModel cacheModel)
 {
-    for (auto processPool : WebProcessPool::allProcessPools())
+    for (auto& processPool : WebProcessPool::allProcessPools())
         processPool->setCacheModelSynchronouslyForTesting(cacheModel);
 }
 
@@ -1948,7 +1952,7 @@ WebsiteDataStoreParameters WebsiteDataStore::parameters()
     HashSet<WebCore::RegistrableDomain> appBoundDomains;
 #if ENABLE(APP_BOUND_DOMAINS)
     if (isAppBoundITPRelaxationEnabled)
-        appBoundDomains = appBoundDomainsIfInitialized().valueOr(HashSet<WebCore::RegistrableDomain> { });
+        appBoundDomains = appBoundDomainsIfInitialized().value_or(HashSet<WebCore::RegistrableDomain> { });
 #endif
     WebCore::RegistrableDomain resourceLoadStatisticsManualPrevalentResource;
     ResourceLoadStatisticsParameters resourceLoadStatisticsParameters = {
@@ -1995,6 +1999,7 @@ WebsiteDataStoreParameters WebsiteDataStore::parameters()
     networkSessionParameters.resourceLoadStatisticsParameters = WTFMove(resourceLoadStatisticsParameters);
     networkSessionParameters.requiresSecureHTTPSProxyConnection = m_configuration->requiresSecureHTTPSProxyConnection();
     networkSessionParameters.preventsSystemHTTPProxyAuthentication = m_configuration->preventsSystemHTTPProxyAuthentication();
+    networkSessionParameters.allowsHSTSWithUntrustedRootCertificate = m_configuration->allowsHSTSWithUntrustedRootCertificate();
 
     parameters.networkSessionParameters = WTFMove(networkSessionParameters);
 
@@ -2177,6 +2182,11 @@ void WebsiteDataStore::clearBundleIdentifierInNetworkProcess(CompletionHandler<v
     auto callbackAggregator = CallbackAggregator::create(WTFMove(completionHandler));
 
     networkProcess().clearBundleIdentifier([callbackAggregator] { });
+}
+
+void WebsiteDataStore::countNonDefaultSessionSets(CompletionHandler<void(size_t)>&& completionHandler)
+{
+    networkProcess().sendWithAsyncReply(Messages::NetworkProcess::CountNonDefaultSessionSets(m_sessionID), WTFMove(completionHandler));
 }
 
 static bool nextNetworkProcessLaunchShouldFailForTesting { false };

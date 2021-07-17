@@ -29,6 +29,7 @@
 
 #include "Decoder.h"
 #include "GPUConnectionToWebProcess.h"
+#include "Logging.h"
 #include <WebCore/ConcreteImageBuffer.h>
 #include <WebCore/DisplayList.h>
 #include <WebCore/DisplayListItems.h>
@@ -41,10 +42,10 @@ class RemoteImageBuffer : public WebCore::ConcreteImageBuffer<BackendType>, publ
     using BaseConcreteImageBuffer = WebCore::ConcreteImageBuffer<BackendType>;
     using BaseConcreteImageBuffer::context;
     using BaseConcreteImageBuffer::m_backend;
-    using BaseConcreteImageBuffer::putImageData;
+    using BaseConcreteImageBuffer::putPixelBuffer;
 
 public:
-    static auto create(const WebCore::FloatSize& size, float resolutionScale, WebCore::DestinationColorSpace colorSpace, WebCore::PixelFormat pixelFormat, RemoteRenderingBackend& remoteRenderingBackend, WebCore::RenderingResourceIdentifier renderingResourceIdentifier)
+    static auto create(const WebCore::FloatSize& size, float resolutionScale, const WebCore::DestinationColorSpace& colorSpace, WebCore::PixelFormat pixelFormat, RemoteRenderingBackend& remoteRenderingBackend, WebCore::RenderingResourceIdentifier renderingResourceIdentifier)
     {
         return BaseConcreteImageBuffer::template create<RemoteImageBuffer>(size, resolutionScale, colorSpace, pixelFormat, nullptr, remoteRenderingBackend, renderingResourceIdentifier);
     }
@@ -76,33 +77,45 @@ public:
 private:
     bool apply(WebCore::DisplayList::ItemHandle item, WebCore::GraphicsContext& context) override
     {
-        if (item.is<WebCore::DisplayList::GetImageData>()) {
-            auto& getImageDataItem = item.get<WebCore::DisplayList::GetImageData>();
-            auto imageData = BaseConcreteImageBuffer::getImageData(getImageDataItem.outputFormat(), getImageDataItem.srcRect());
-            m_remoteRenderingBackend.populateGetImageDataSharedMemory(imageData.get());
+        if (item.is<WebCore::DisplayList::GetPixelBuffer>()) {
+            auto& getPixelBufferItem = item.get<WebCore::DisplayList::GetPixelBuffer>();
+            auto pixelBuffer = BaseConcreteImageBuffer::getPixelBuffer(getPixelBufferItem.outputFormat(), getPixelBufferItem.srcRect());
+            m_remoteRenderingBackend.populateGetPixelBufferSharedMemory(WTFMove(pixelBuffer));
             return true;
         }
 
-        if (item.is<WebCore::DisplayList::PutImageData>()) {
-            auto& putImageDataItem = item.get<WebCore::DisplayList::PutImageData>();
-            putImageData(putImageDataItem.inputFormat(), putImageDataItem.imageData(), putImageDataItem.srcRect(), putImageDataItem.destPoint(), putImageDataItem.destFormat());
+        if (item.is<WebCore::DisplayList::PutPixelBuffer>()) {
+            auto& putPixelBufferItem = item.get<WebCore::DisplayList::PutPixelBuffer>();
+            putPixelBuffer(putPixelBufferItem.pixelBuffer(), putPixelBufferItem.srcRect(), putPixelBufferItem.destPoint(), putPixelBufferItem.destFormat());
             return true;
         }
 
         if (item.is<WebCore::DisplayList::FlushContext>()) {
             BaseConcreteImageBuffer::flushContext();
             auto identifier = item.get<WebCore::DisplayList::FlushContext>().identifier();
+            LOG_WITH_STREAM(SharedDisplayLists, stream << "Acknowledging Flush{" << identifier << "} in Image(" << m_renderingResourceIdentifier << ")");
             m_remoteRenderingBackend.didFlush(identifier, m_renderingResourceIdentifier);
             return true;
         }
 
         if (item.is<WebCore::DisplayList::MetaCommandChangeItemBuffer>()) {
             auto nextBufferIdentifier = item.get<WebCore::DisplayList::MetaCommandChangeItemBuffer>().identifier();
+            LOG_WITH_STREAM(SharedDisplayLists, stream << "Switching to Items[" << nextBufferIdentifier << "]");
             m_remoteRenderingBackend.setNextItemBufferToRead(nextBufferIdentifier, m_renderingResourceIdentifier);
             return true;
         }
 
         return m_remoteRenderingBackend.applyMediaItem(item, context);
+    }
+
+    void didCreateMaskImageBuffer(WebCore::ImageBuffer& imageBuffer) final
+    {
+        m_remoteRenderingBackend.didCreateMaskImageBuffer(imageBuffer);
+    }
+
+    void didResetMaskImageBuffer() final
+    {
+        m_remoteRenderingBackend.didResetMaskImageBuffer();
     }
 
     RemoteRenderingBackend& m_remoteRenderingBackend;

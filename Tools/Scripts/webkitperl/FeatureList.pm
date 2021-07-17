@@ -129,6 +129,7 @@ my (
     $networkCacheStaleWhileRevalidateSupport,
     $notificationsSupport,
     $offscreenCanvasSupport,
+    $offscreenCanvasInWorkersSupport,
     $thunderSupport,
     $orientationEventsSupport,
     $overflowScrollingTouchSupport,
@@ -258,9 +259,6 @@ my @features = (
 
     { option => "css-painting-api", desc => "Toggle CSS Painting API support",
       define => "ENABLE_CSS_PAINTING_API", value => \$cssPaintingAPISupport },
-
-    { option => "css-scroll-snap", desc => "Toggle CSS snap scroll support",
-      define => "ENABLE_CSS_SCROLL_SNAP", value => \$cssScrollSnapSupport },
 
     { option => "css-selectors-level4", desc => "Toggle CSS Selectors Level 4 support",
       define => "ENABLE_CSS_SELECTORS_LEVEL4", value => \$cssSelectorsLevel4Support },
@@ -423,6 +421,9 @@ my @features = (
 
     { option => "offscreen-canvas", desc => "Toggle OffscreenCanvas support",
       define => "ENABLE_OFFSCREEN_CANVAS", value => \$offscreenCanvasSupport },
+
+    { option => "offscreen-canvas-in-workers", desc => "Toggle OffscreenCanvas in Workers support",
+      define => "ENABLE_OFFSCREEN_CANVAS_IN_WORKERS", value => \$offscreenCanvasInWorkersSupport },
 
     { option => "thunder", desc => "Toggle Thunder CDM support",
       define => "ENABLE_THUNDER", value => \$thunderSupport },

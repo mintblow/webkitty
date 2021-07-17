@@ -134,7 +134,7 @@ void InternalSettings::Backup::restoreTo(Settings& settings)
     FontCache::singleton().setShouldMockBoldSystemFontForAccessibility(m_shouldMockBoldSystemFontForAccessibility);
 
 #if ENABLE(WEB_AUDIO)
-    AudioContext::setDefaultSampleRateForTesting(WTF::nullopt);
+    AudioContext::setDefaultSampleRateForTesting(std::nullopt);
 #endif
 }
 
@@ -462,7 +462,7 @@ ExceptionOr<void> InternalSettings::setShouldDisplayTrackKind(TrackKind kind, bo
     if (!m_page)
         return Exception { InvalidAccessError };
 #if ENABLE(VIDEO)
-    auto& captionPreferences = m_page->group().captionPreferences();
+    auto& captionPreferences = m_page->group().ensureCaptionPreferences();
     switch (kind) {
     case TrackKind::Subtitles:
         captionPreferences.setUserPrefersSubtitles(enabled);
@@ -486,7 +486,7 @@ ExceptionOr<bool> InternalSettings::shouldDisplayTrackKind(TrackKind kind)
     if (!m_page)
         return Exception { InvalidAccessError };
 #if ENABLE(VIDEO)
-    auto& captionPreferences = m_page->group().captionPreferences();
+    auto& captionPreferences = m_page->group().ensureCaptionPreferences();
     switch (kind) {
     case TrackKind::Subtitles:
         return captionPreferences.userPrefersSubtitles();

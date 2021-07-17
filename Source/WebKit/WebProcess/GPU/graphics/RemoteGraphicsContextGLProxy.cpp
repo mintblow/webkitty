@@ -94,7 +94,7 @@ void RemoteGraphicsContextGLProxy::prepareForDisplay()
         markContextLost();
         return;
     }
-    auto displayBuffer = IOSurface::createFromSendRight(WTFMove(displayBufferSendRight), sRGBColorSpaceRef());
+    auto displayBuffer = IOSurface::createFromSendRight(WTFMove(displayBufferSendRight), WebCore::DestinationColorSpace::SRGB());
     if (displayBuffer) {
         auto& sc = platformSwapChain();
         sc.recycleBuffer();
@@ -136,7 +136,7 @@ void RemoteGraphicsContextGLProxy::paintRenderingResultsToCanvas(ImageBuffer& bu
 
     // FIXME: We cannot synchronize so that we would know no pending operations are using the `buffer`.
 
-    // FIXME: Currently RemoteImageBufferProxy::getImageData et al do not wait for the flushes of the images
+    // FIXME: Currently RemoteImageBufferProxy::getPixelBuffer et al do not wait for the flushes of the images
     // inside the display lists. Rather, it assumes that processing its sequence (e.g. the display list) will equal to read flush being
     // fulfilled. For below, we cannot create a new flush id since we go through different sequence (RemoteGraphicsContextGL sequence)
 

@@ -312,6 +312,7 @@ class TestBuildFactory(TestCase):
             _BuildStepFactory(steps.KillOldProcesses),
             _BuildStepFactory(steps.InstallGtkDependencies),
             _BuildStepFactory(steps.CompileWebKit, skipUpload=False),
+            _BuildStepFactory(steps.InstallBuiltProduct),
         ])
 
     def test_wpe_factory(self):
@@ -456,6 +457,8 @@ class TestLayoutTestsFactory(TestCase):
             _BuildStepFactory(steps.ExtractBuiltProduct),
             _BuildStepFactory(steps.WaitForCrashCollection),
             _BuildStepFactory(steps.KillOldProcesses),
+            _BuildStepFactory(steps.FindModifiedLayoutTests, skipBuildIfNoResult=False),
+            _BuildStepFactory(steps.RunWebKitTestsInStressMode, num_iterations=10),
             _BuildStepFactory(steps.RunWebKit1Tests),
             _BuildStepFactory(steps.TriggerCrashLogSubmission),
             _BuildStepFactory(steps.SetBuildSummary),
@@ -478,6 +481,8 @@ class TestLayoutTestsFactory(TestCase):
             _BuildStepFactory(steps.ExtractBuiltProduct),
             _BuildStepFactory(steps.WaitForCrashCollection),
             _BuildStepFactory(steps.KillOldProcesses),
+            _BuildStepFactory(steps.FindModifiedLayoutTests, skipBuildIfNoResult=False),
+            _BuildStepFactory(steps.RunWebKitTestsInStressMode, num_iterations=10),
             _BuildStepFactory(steps.RunWebKit1Tests),
             _BuildStepFactory(steps.TriggerCrashLogSubmission),
             _BuildStepFactory(steps.SetBuildSummary),
@@ -499,6 +504,8 @@ class TestLayoutTestsFactory(TestCase):
             _BuildStepFactory(steps.ExtractBuiltProduct),
             _BuildStepFactory(steps.WaitForCrashCollection),
             _BuildStepFactory(steps.KillOldProcesses),
+            _BuildStepFactory(steps.FindModifiedLayoutTests, skipBuildIfNoResult=False),
+            _BuildStepFactory(steps.RunWebKitTestsInStressMode, num_iterations=10),
             _BuildStepFactory(steps.RunWebKitTests),
             _BuildStepFactory(steps.TriggerCrashLogSubmission),
             _BuildStepFactory(steps.SetBuildSummary),
@@ -520,6 +527,8 @@ class TestLayoutTestsFactory(TestCase):
             _BuildStepFactory(steps.ExtractBuiltProduct),
             _BuildStepFactory(steps.WaitForCrashCollection),
             _BuildStepFactory(steps.KillOldProcesses),
+            _BuildStepFactory(steps.FindModifiedLayoutTests, skipBuildIfNoResult=False),
+            _BuildStepFactory(steps.RunWebKitTestsInStressMode, num_iterations=10),
             _BuildStepFactory(steps.RunWebKitTests),
             _BuildStepFactory(steps.TriggerCrashLogSubmission),
             _BuildStepFactory(steps.SetBuildSummary),
@@ -541,6 +550,8 @@ class TestLayoutTestsFactory(TestCase):
             _BuildStepFactory(steps.DownloadBuiltProduct),
             _BuildStepFactory(steps.ExtractBuiltProduct),
             _BuildStepFactory(steps.KillOldProcesses),
+            _BuildStepFactory(steps.FindModifiedLayoutTests, skipBuildIfNoResult=False),
+            _BuildStepFactory(steps.RunWebKitTestsInStressMode, num_iterations=10),
             _BuildStepFactory(steps.RunWebKitTests),
             _BuildStepFactory(steps.SetBuildSummary),
         ])
@@ -601,7 +612,6 @@ class TestStressTestFactory(TestCase):
             _BuildStepFactory(steps.WaitForCrashCollection),
             _BuildStepFactory(steps.KillOldProcesses),
             _BuildStepFactory(steps.RunWebKitTestsInStressMode),
-            _BuildStepFactory(steps.RunWebKitTestsInStressGuardmallocMode),
             _BuildStepFactory(steps.TriggerCrashLogSubmission),
             _BuildStepFactory(steps.SetBuildSummary),
         ])

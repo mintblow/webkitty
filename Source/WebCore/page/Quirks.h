@@ -44,6 +44,8 @@ class RegistrableDomain;
 enum class StorageAccessWasGranted : bool;
 #endif
 
+enum class IsSyntheticClick : bool;
+
 class Quirks {
     WTF_MAKE_NONCOPYABLE(Quirks); WTF_MAKE_FAST_ALLOCATED;
 public:
@@ -64,7 +66,7 @@ public:
 #if ENABLE(TOUCH_EVENTS)
     bool shouldDispatchSimulatedMouseEvents(EventTarget*) const;
     bool shouldDispatchedSimulatedMouseEventsAssumeDefaultPrevented(EventTarget*) const;
-    Optional<Event::IsCancelable> simulatedMouseEventTypeForTarget(EventTarget*) const;
+    std::optional<Event::IsCancelable> simulatedMouseEventTypeForTarget(EventTarget*) const;
     bool shouldMakeTouchEventNonCancelableForTarget(EventTarget*) const;
     bool shouldPreventPointerMediaQueryFromEvaluatingToCoarse() const;
     bool shouldPreventDispatchOfTouchEvent(const AtomString&, EventTarget*) const;
@@ -122,7 +124,7 @@ public:
 
     enum StorageAccessResult : bool { ShouldNotCancelEvent, ShouldCancelEvent };
     enum ShouldDispatchClick : bool { No, Yes };
-    StorageAccessResult triggerOptionalStorageAccessQuirk(Element&, const PlatformMouseEvent&, const AtomString& eventType, int, Element*, bool isParentProcessAFullWebBrowser) const;
+    StorageAccessResult triggerOptionalStorageAccessQuirk(Element&, const PlatformMouseEvent&, const AtomString& eventType, int, Element*, bool isParentProcessAFullWebBrowser, IsSyntheticClick) const;
 
     bool needsVP9FullRangeFlagQuirk() const;
     bool needsHDRPixelDepthQuirk() const;
@@ -143,7 +145,6 @@ public:
     static const String& BBCRadioPlayerURLString();
     WEBCORE_EXPORT static const String& staticRadioPlayerURLString();
     StorageAccessResult requestStorageAccessAndHandleClick(CompletionHandler<void(ShouldDispatchClick)>&&) const;
-    static RegistrableDomain mapToTopDomain(const URL&);
 #endif
 
 #if ENABLE(WEB_AUTHN)
@@ -152,7 +153,7 @@ public:
 
     static bool shouldOmitHTMLDocumentSupportedPropertyNames();
 
-#if ENABLE(IMAGE_EXTRACTION)
+#if ENABLE(IMAGE_ANALYSIS)
     bool needsToForceUserSelectWhenInstallingImageOverlay() const;
 #endif
 
@@ -166,16 +167,16 @@ private:
 
     WeakPtr<Document> m_document;
 
-    mutable Optional<bool> m_hasBrokenEncryptedMediaAPISupportQuirk;
-    mutable Optional<bool> m_needsFullWidthHeightFullscreenStyleQuirk;
+    mutable std::optional<bool> m_hasBrokenEncryptedMediaAPISupportQuirk;
+    mutable std::optional<bool> m_needsFullWidthHeightFullscreenStyleQuirk;
 #if PLATFORM(IOS_FAMILY)
-    mutable Optional<bool> m_needsGMailOverflowScrollQuirk;
-    mutable Optional<bool> m_needsYouTubeOverflowScrollQuirk;
-    mutable Optional<bool> m_needsPreloadAutoQuirk;
-    mutable Optional<bool> m_needsFullscreenDisplayNoneQuirk;
-    mutable Optional<bool> m_shouldAvoidPastingImagesAsWebContent;
+    mutable std::optional<bool> m_needsGMailOverflowScrollQuirk;
+    mutable std::optional<bool> m_needsYouTubeOverflowScrollQuirk;
+    mutable std::optional<bool> m_needsPreloadAutoQuirk;
+    mutable std::optional<bool> m_needsFullscreenDisplayNoneQuirk;
+    mutable std::optional<bool> m_shouldAvoidPastingImagesAsWebContent;
 #endif
-    mutable Optional<bool> m_shouldDisableElementFullscreenQuirk;
+    mutable std::optional<bool> m_shouldDisableElementFullscreenQuirk;
 #if ENABLE(TOUCH_EVENTS)
     enum class ShouldDispatchSimulatedMouseEvents : uint8_t {
         Unknown,
@@ -186,20 +187,20 @@ private:
     mutable ShouldDispatchSimulatedMouseEvents m_shouldDispatchSimulatedMouseEventsQuirk { ShouldDispatchSimulatedMouseEvents::Unknown };
 #endif
 #if ENABLE(IOS_TOUCH_EVENTS)
-    mutable Optional<bool> m_shouldSynthesizeTouchEventsQuirk;
+    mutable std::optional<bool> m_shouldSynthesizeTouchEventsQuirk;
 #endif
-    mutable Optional<bool> m_needsCanPlayAfterSeekedQuirk;
-    mutable Optional<bool> m_shouldBypassAsyncScriptDeferring;
-    mutable Optional<bool> m_needsVP9FullRangeFlagQuirk;
-    mutable Optional<bool> m_needsHDRPixelDepthQuirk;
-    mutable Optional<bool> m_needsBlackFullscreenBackgroundQuirk;
-    mutable Optional<bool> m_requiresUserGestureToPauseInPictureInPicture;
-    mutable Optional<bool> m_requiresUserGestureToLoadInPictureInPicture;
+    mutable std::optional<bool> m_needsCanPlayAfterSeekedQuirk;
+    mutable std::optional<bool> m_shouldBypassAsyncScriptDeferring;
+    mutable std::optional<bool> m_needsVP9FullRangeFlagQuirk;
+    mutable std::optional<bool> m_needsHDRPixelDepthQuirk;
+    mutable std::optional<bool> m_needsBlackFullscreenBackgroundQuirk;
+    mutable std::optional<bool> m_requiresUserGestureToPauseInPictureInPicture;
+    mutable std::optional<bool> m_requiresUserGestureToLoadInPictureInPicture;
 #if ENABLE(MEDIA_STREAM)
-    mutable Optional<bool> m_shouldEnableLegacyGetUserMediaQuirk;
+    mutable std::optional<bool> m_shouldEnableLegacyGetUserMediaQuirk;
 #endif
-    mutable Optional<bool> m_blocksReturnToFullscreenFromPictureInPictureQuirk;
-    mutable Optional<bool> m_shouldDisableEndFullscreenEventWhenEnteringPictureInPictureFromFullscreenQuirk;
+    mutable std::optional<bool> m_blocksReturnToFullscreenFromPictureInPictureQuirk;
+    mutable std::optional<bool> m_shouldDisableEndFullscreenEventWhenEnteringPictureInPictureFromFullscreenQuirk;
 };
 
 } // namespace WebCore

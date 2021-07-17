@@ -32,6 +32,8 @@
 #include "RTCDataChannelRemoteManager.h"
 #include "StorageAreaMap.h"
 #include "StorageAreaMapMessages.h"
+#include "WebBroadcastChannelRegistry.h"
+#include "WebBroadcastChannelRegistryMessages.h"
 #include "WebCacheStorageProvider.h"
 #include "WebCookieJar.h"
 #include "WebCoreArgumentCoders.h"
@@ -92,6 +94,10 @@ void NetworkProcessConnection::didReceiveMessage(IPC::Connection& connection, IP
     if (decoder.messageReceiverName() == Messages::WebResourceLoader::messageReceiverName()) {
         if (auto* webResourceLoader = WebProcess::singleton().webLoaderStrategy().webResourceLoaderForIdentifier(decoder.destinationID()))
             webResourceLoader->didReceiveWebResourceLoaderMessage(connection, decoder);
+        return;
+    }
+    if (decoder.messageReceiverName() == Messages::WebBroadcastChannelRegistry::messageReceiverName()) {
+        WebProcess::singleton().broadcastChannelRegistry().didReceiveMessage(connection, decoder);
         return;
     }
     if (decoder.messageReceiverName() == Messages::WebSocketStream::messageReceiverName()) {
@@ -316,7 +322,7 @@ void NetworkProcessConnection::broadcastConsoleMessage(MessageSource source, Mes
 }
 
 #if ENABLE(WEB_RTC)
-void NetworkProcessConnection::connectToRTCDataChannelRemoteSource(WebCore::RTCDataChannelIdentifier localIdentifier, WebCore::RTCDataChannelIdentifier remoteIdentifier, CompletionHandler<void(Optional<bool>)>&& callback)
+void NetworkProcessConnection::connectToRTCDataChannelRemoteSource(WebCore::RTCDataChannelIdentifier localIdentifier, WebCore::RTCDataChannelIdentifier remoteIdentifier, CompletionHandler<void(std::optional<bool>)>&& callback)
 {
     callback(RTCDataChannelRemoteManager::sharedManager().connectToRemoteSource(localIdentifier, remoteIdentifier));
 }

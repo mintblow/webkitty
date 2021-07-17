@@ -39,8 +39,12 @@ class RenderElement : public RenderObject {
 public:
     virtual ~RenderElement();
 
-    enum RendererCreationType { CreateAllRenderers, OnlyCreateBlockAndFlexboxRenderers };
-    static RenderPtr<RenderElement> createFor(Element&, RenderStyle&&, RendererCreationType = CreateAllRenderers);
+    enum class ConstructBlockLevelRendererFor {
+        Inline           = 1 << 0,
+        ListItem         = 1 << 1,
+        TableOrTablePart = 1 << 2
+    };
+    static RenderPtr<RenderElement> createFor(Element&, RenderStyle&&, OptionSet<ConstructBlockLevelRendererFor> = { });
 
     bool hasInitializedStyle() const { return m_hasInitializedStyle; }
 
@@ -73,6 +77,7 @@ public:
     RenderObject* firstInFlowChild() const;
     RenderObject* lastInFlowChild() const;
 
+    // Note that even if these 2 "canContain" functions return true for a particular renderer, it does not necessarily mean the renderer is the containing block (see containingBlockForAbsolute(Fixed)Position).
     bool canContainFixedPositionObjects() const;
     bool canContainAbsolutelyPositionedObjects() const;
 
@@ -145,7 +150,7 @@ public:
     bool isTransparent() const { return style().opacity() < 1.0f; }
     float opacity() const { return style().opacity(); }
 
-    bool visibleToHitTesting(Optional<HitTestRequest> hitTestRequest = WTF::nullopt) const
+    bool visibleToHitTesting(std::optional<HitTestRequest> hitTestRequest = std::nullopt) const
     {
         if (style().visibility() != Visibility::Visible)
             return false;
@@ -159,7 +164,7 @@ public:
     bool hasBackground() const { return style().hasBackground(); }
     bool hasMask() const { return style().hasMask(); }
     bool hasClip() const { return isOutOfFlowPositioned() && style().hasClip(); }
-    bool hasClipOrOverflowClip() const { return hasClip() || hasOverflowClip(); }
+    bool hasClipOrNonVisibleOverflow() const { return hasClip() || hasNonVisibleOverflow(); }
     bool hasClipPath() const { return style().clipPath(); }
     bool hasHiddenBackface() const { return style().backfaceVisibility() == BackfaceVisibility::Hidden; }
     bool hasOutlineAnnotation() const;
@@ -449,7 +454,7 @@ inline bool RenderElement::canContainAbsolutelyPositionedObjects() const
     return style().position() != PositionType::Static
         || (isRenderBlock() && hasTransformRelatedProperty())
         // FIXME: will-change should create containing blocks on inline boxes (bug 225035)
-        || (isRenderBlock() && style().willChange() && style().willChange()->createsContainingBlockForOutOfFlowPositioned())
+        || (isRenderBlock() && style().willChange() && style().willChange()->createsContainingBlockForAbsolutelyPositioned())
         || isSVGForeignObject()
         || shouldApplyLayoutContainment(*this)
         || isRenderView();

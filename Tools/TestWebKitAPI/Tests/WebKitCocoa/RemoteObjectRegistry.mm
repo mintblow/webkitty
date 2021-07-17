@@ -29,9 +29,11 @@
 #import "PlatformUtilities.h"
 #import "RemoteObjectRegistry.h"
 #import "Test.h"
+#import "TestAwakener.h"
 #import "TestNavigationDelegate.h"
 #import "WKWebViewConfigurationExtras.h"
 #import <WebKit/WKProcessPoolPrivate.h>
+#import <WebKit/WKWebViewConfigurationPrivate.h>
 #import <WebKit/WKWebViewPrivate.h>
 #import <WebKit/_WKRemoteObjectInterface.h>
 #import <WebKit/_WKRemoteObjectRegistry.h>
@@ -47,6 +49,7 @@ TEST(RemoteObjectRegistry, Basic)
     @autoreleasepool {
         NSString * const testPlugInClassName = @"RemoteObjectRegistryPlugIn";
         auto configuration = retainPtr([WKWebViewConfiguration _test_configurationWithTestPlugInClassName:testPlugInClassName]);
+        configuration.get()._groupIdentifier = @"testGroupIdentifier";
         auto webView = adoptNS([[WKWebView alloc] initWithFrame:CGRectZero configuration:configuration.get()]);
 
         isDone = false;
@@ -82,6 +85,14 @@ TEST(RemoteObjectRegistry, Basic)
         [object takeRange:NSMakeRange(345, 123) completionHandler:^(NSUInteger location, NSUInteger length) {
             EXPECT_EQ(345U, location);
             EXPECT_EQ(123U, length);
+            isDone = true;
+        }];
+        TestWebKitAPI::Util::run(&isDone);
+
+        isDone = false;
+        auto initialAwakener = adoptNS([[TestAwakener alloc] initWithValue:42]);
+        [object sendAwakener:initialAwakener.get() completionHandler:^(TestAwakener *awakener) {
+            EXPECT_EQ(awakener.value, 42);
             isDone = true;
         }];
         TestWebKitAPI::Util::run(&isDone);
@@ -140,6 +151,14 @@ TEST(RemoteObjectRegistry, Basic)
             EXPECT_WK_STREQ([(NSHTTPURLResponse *)deserializedResponse allHeaderFields][@"testFieldName"], "testFieldValue");
             EXPECT_WK_STREQ(deserializedChallenge.protectionSpace.realm, "testRealm");
             EXPECT_WK_STREQ(deserializedError.domain, "testDomain");
+            isDone = true;
+        }];
+        TestWebKitAPI::Util::run(&isDone);
+
+        isDone = false;
+        
+        [object getGroupIdentifier:^(NSString *identifier) {
+            EXPECT_WK_STREQ(identifier, "testGroupIdentifier");
             isDone = true;
         }];
         TestWebKitAPI::Util::run(&isDone);

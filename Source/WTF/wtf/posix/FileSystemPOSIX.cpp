@@ -40,7 +40,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <wtf/EnumTraits.h>
-#include <wtf/FileMetadata.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/WTFString.h>
@@ -119,7 +118,7 @@ bool truncateFile(PlatformFileHandle handle, long long offset)
     return !ftruncate(handle, offset);
 }
 
-int writeToFile(PlatformFileHandle handle, const char* data, int length)
+int writeToFile(PlatformFileHandle handle, const void* data, int length)
 {
     do {
         int bytesWritten = write(handle, data, static_cast<size_t>(length));
@@ -129,7 +128,7 @@ int writeToFile(PlatformFileHandle handle, const char* data, int length)
     return -1;
 }
 
-int readFromFile(PlatformFileHandle handle, char* data, int length)
+int readFromFile(PlatformFileHandle handle, void* data, int length)
 {
     do {
         int bytesRead = read(handle, data, static_cast<size_t>(length));
@@ -156,64 +155,42 @@ bool unlockFile(PlatformFileHandle handle)
 }
 #endif
 
-bool getFileSize(PlatformFileHandle handle, long long& result)
+std::optional<uint64_t> fileSize(PlatformFileHandle handle)
 {
     struct stat fileInfo;
     if (fstat(handle, &fileInfo))
-        return false;
+        return std::nullopt;
 
-    result = fileInfo.st_size;
-    return true;
+    return fileInfo.st_size;
 }
 
-Optional<WallTime> getFileCreationTime(const String& path)
+std::optional<WallTime> fileCreationTime(const String& path)
 {
 #if OS(DARWIN) || OS(OPENBSD) || OS(NETBSD) || OS(FREEBSD)
     CString fsRep = fileSystemRepresentation(path);
 
     if (!fsRep.data() || fsRep.data()[0] == '\0')
-        return WTF::nullopt;
+        return std::nullopt;
 
     struct stat fileInfo;
 
     if (stat(fsRep.data(), &fileInfo))
-        return WTF::nullopt;
+        return std::nullopt;
 
     return WallTime::fromRawSeconds(fileInfo.st_birthtime);
 #else
     UNUSED_PARAM(path);
-    return WTF::nullopt;
+    return std::nullopt;
 #endif
 }
 
-Vector<String> listDirectory(const String& path, const String& filter)
+std::optional<uint32_t> volumeFileBlockSize(const String& path)
 {
-    Vector<String> entries;
-    CString cpath = fileSystemRepresentation(path);
-    CString cfilter = fileSystemRepresentation(filter);
-    DIR* dir = opendir(cpath.data());
-    if (dir) {
-        struct dirent* dp;
-        while ((dp = readdir(dir))) {
-            const char* name = dp->d_name;
-            if (!strcmp(name, ".") || !strcmp(name, ".."))
-                continue;
-            if (fnmatch(cfilter.data(), name, 0))
-                continue;
-            char filePath[PATH_MAX];
-            if (static_cast<int>(sizeof(filePath) - 1) < snprintf(filePath, sizeof(filePath), "%s/%s", cpath.data(), name))
-                continue; // buffer overflow
+    struct statvfs fileStat;
+    if (!statvfs(fileSystemRepresentation(path).data(), &fileStat))
+        return fileStat.f_frsize;
 
-            auto string = stringFromFileSystemRepresentation(filePath);
-
-            // Some file system representations cannot be represented as a UTF-16 string,
-            // so this string might be null.
-            if (!string.isNull())
-                entries.append(WTFMove(string));
-        }
-        closedir(dir);
-    }
-    return entries;
+    return std::nullopt;
 }
 
 #if !USE(CF)
@@ -258,22 +235,86 @@ end:
 }
 #endif // !PLATFORM(COCOA)
 
-Optional<int32_t> getFileDeviceId(const CString& fsFile)
+std::optional<int32_t> getFileDeviceId(const CString& fsFile)
 {
     struct stat fileStat;
     if (stat(fsFile.data(), &fileStat) == -1)
-        return WTF::nullopt;
+        return std::nullopt;
 
     return fileStat.st_dev;
 }
 
-String realPath(const String& filePath)
+#if ENABLE(FILESYSTEM_POSIX_FAST_PATH)
+
+bool fileExists(const String& path)
 {
-    CString fsRep = fileSystemRepresentation(filePath);
-    char resolvedName[PATH_MAX];
-    const char* result = realpath(fsRep.data(), resolvedName);
-    return result ? String::fromUTF8(result) : filePath;
+    return access(fileSystemRepresentation(path).data(), F_OK) != -1;
 }
+
+bool deleteFile(const String& path)
+{
+    // unlink(...) returns 0 on successful deletion of the path and non-zero in any other case (including invalid permissions or non-existent file)
+    bool unlinked = !unlink(fileSystemRepresentation(path).data());
+    if (!unlinked && errno != ENOENT)
+        LOG_ERROR("File failed to delete. Error message: %s", strerror(errno));
+
+    return unlinked;
+}
+
+bool makeAllDirectories(const String& path)
+{
+    auto fullPath = fileSystemRepresentation(path);
+    if (!access(fullPath.data(), F_OK))
+        return true;
+
+    char* p = fullPath.mutableData() + 1;
+    int length = fullPath.length();
+    if (p[length - 1] == '/')
+        p[length - 1] = '\0';
+    for (; *p; ++p) {
+        if (*p == '/') {
+            *p = '\0';
+            if (access(fullPath.data(), F_OK)) {
+                if (mkdir(fullPath.data(), S_IRWXU))
+                    return false;
+            }
+            *p = '/';
+        }
+    }
+    if (access(fullPath.data(), F_OK)) {
+        if (mkdir(fullPath.data(), S_IRWXU))
+            return false;
+    }
+
+    return true;
+}
+
+String pathByAppendingComponent(const String& path, const String& component)
+{
+    if (path.endsWith('/'))
+        return path + component;
+    return path + "/" + component;
+}
+
+String pathByAppendingComponents(StringView path, const Vector<StringView>& components)
+{
+    StringBuilder builder;
+    builder.append(path);
+    bool isFirstComponent = true;
+    for (auto& component : components) {
+        if (isFirstComponent) {
+            isFirstComponent = false;
+            if (path.endsWith('/')) {
+                builder.append(component);
+                continue;
+            }
+        }
+        builder.append('/', component);
+    }
+    return builder.toString();
+}
+
+#endif
 
 } // namespace FileSystemImpl
 } // namespace WTF

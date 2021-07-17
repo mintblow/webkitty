@@ -474,8 +474,8 @@ void ScrollView::handleDeferredScrollUpdateAfterContentSizeChange()
     else if (m_deferredScrollOffsets)
         scrollOffsetChangedViaPlatformWidgetImpl(m_deferredScrollOffsets.value().first, m_deferredScrollOffsets.value().second);
     
-    m_deferredScrollDelta = WTF::nullopt;
-    m_deferredScrollOffsets = WTF::nullopt;
+    m_deferredScrollDelta = std::nullopt;
+    m_deferredScrollOffsets = std::nullopt;
 }
 
 void ScrollView::scrollTo(const ScrollPosition& newPosition)
@@ -1237,7 +1237,7 @@ void ScrollView::scrollbarStyleChanged(ScrollbarStyle newStyle, bool forceUpdate
 
 void ScrollView::paintScrollCorner(GraphicsContext& context, const IntRect& cornerRect)
 {
-    ScrollbarTheme::theme().paintScrollCorner(context, cornerRect);
+    ScrollbarTheme::theme().paintScrollCorner(*this, context, cornerRect);
 }
 
 void ScrollView::paintScrollbar(GraphicsContext& context, Scrollbar& bar, const IntRect& rect)

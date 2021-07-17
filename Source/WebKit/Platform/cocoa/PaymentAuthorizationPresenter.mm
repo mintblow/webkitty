@@ -30,11 +30,11 @@
 
 #import "WKPaymentAuthorizationDelegate.h"
 #import "WebPaymentCoordinatorProxyCocoa.h"
+#import <WebCore/ApplePayCouponCodeUpdate.h>
 #import <WebCore/ApplePayDetailsUpdateData.h>
 #import <WebCore/ApplePayError.h>
 #import <WebCore/ApplePayErrorCode.h>
 #import <WebCore/ApplePayErrorContactField.h>
-#import <WebCore/ApplePayPaymentMethodModeUpdate.h>
 #import <WebCore/ApplePayPaymentMethodUpdate.h>
 #import <WebCore/ApplePayShippingContactUpdate.h>
 #import <WebCore/ApplePayShippingMethodUpdate.h>
@@ -86,17 +86,33 @@ static PKPaymentErrorCode toPKPaymentErrorCode(WebCore::ApplePayErrorCode code)
 {
     switch (code) {
     case WebCore::ApplePayErrorCode::Unknown:
-        return PKPaymentUnknownError;
+        break;
+
     case WebCore::ApplePayErrorCode::ShippingContactInvalid:
         return PKPaymentShippingContactInvalidError;
+
     case WebCore::ApplePayErrorCode::BillingContactInvalid:
         return PKPaymentBillingContactInvalidError;
+
     case WebCore::ApplePayErrorCode::AddressUnserviceable:
         return PKPaymentShippingAddressUnserviceableError;
-#if defined(PaymentAuthorizationPresenterAdditions_toPKPaymentErrorCode)
-    PaymentAuthorizationPresenterAdditions_toPKPaymentErrorCode
+
+    case WebCore::ApplePayErrorCode::CouponCodeInvalid:
+#if HAVE(PASSKIT_COUPON_CODE)
+        return PKPaymentCouponCodeInvalidError;
+#else
+        break;
+#endif
+
+    case WebCore::ApplePayErrorCode::CouponCodeExpired:
+#if HAVE(PASSKIT_COUPON_CODE)
+        return PKPaymentCouponCodeExpiredError;
+#else
+        break;
 #endif
     }
+
+    return PKPaymentUnknownError;
 }
 
 static NSError *toNSError(const WebCore::ApplePayError& error)
@@ -198,7 +214,7 @@ void PaymentAuthorizationPresenter::completeMerchantValidation(const WebCore::Pa
     [platformDelegate() completeMerchantValidation:merchantSession.pkPaymentMerchantSession() error:nil];
 }
 
-void PaymentAuthorizationPresenter::completePaymentMethodSelection(Optional<WebCore::ApplePayPaymentMethodUpdate>&& update)
+void PaymentAuthorizationPresenter::completePaymentMethodSelection(std::optional<WebCore::ApplePayPaymentMethodUpdate>&& update)
 {
     ASSERT(platformDelegate());
     if (!update) {
@@ -216,7 +232,7 @@ void PaymentAuthorizationPresenter::completePaymentMethodSelection(Optional<WebC
     [platformDelegate() completePaymentMethodSelection:paymentMethodUpdate.get()];
 }
 
-void PaymentAuthorizationPresenter::completePaymentSession(const Optional<WebCore::PaymentAuthorizationResult>& result)
+void PaymentAuthorizationPresenter::completePaymentSession(const std::optional<WebCore::PaymentAuthorizationResult>& result)
 {
     ASSERT(platformDelegate());
     auto status = result ? toPKPaymentAuthorizationStatus(result->status) : PKPaymentAuthorizationStatusSuccess;
@@ -224,7 +240,7 @@ void PaymentAuthorizationPresenter::completePaymentSession(const Optional<WebCor
     [platformDelegate() completePaymentSession:status errors:errors.get()];
 }
 
-void PaymentAuthorizationPresenter::completeShippingContactSelection(Optional<WebCore::ApplePayShippingContactUpdate>&& update)
+void PaymentAuthorizationPresenter::completeShippingContactSelection(std::optional<WebCore::ApplePayShippingContactUpdate>&& update)
 {
     ASSERT(platformDelegate());
     if (!update) {
@@ -241,7 +257,7 @@ void PaymentAuthorizationPresenter::completeShippingContactSelection(Optional<We
     [platformDelegate() completeShippingContactSelection:shippingContactUpdate.get()];
 }
 
-void PaymentAuthorizationPresenter::completeShippingMethodSelection(Optional<WebCore::ApplePayShippingMethodUpdate>&& update)
+void PaymentAuthorizationPresenter::completeShippingMethodSelection(std::optional<WebCore::ApplePayShippingMethodUpdate>&& update)
 {
     ASSERT(platformDelegate());
     if (!update) {
@@ -256,23 +272,24 @@ void PaymentAuthorizationPresenter::completeShippingMethodSelection(Optional<Web
     [platformDelegate() completeShippingMethodSelection:shippingMethodUpdate.get()];
 }
 
-#if ENABLE(APPLE_PAY_PAYMENT_METHOD_MODE)
+#if HAVE(PASSKIT_COUPON_CODE)
 
-void PaymentAuthorizationPresenter::completePaymentMethodModeChange(Optional<WebCore::ApplePayPaymentMethodModeUpdate>&& update)
+void PaymentAuthorizationPresenter::completeCouponCodeChange(std::optional<WebCore::ApplePayCouponCodeUpdate>&& update)
 {
     ASSERT(platformDelegate());
     if (!update) {
-        [platformDelegate() completePaymentMethodModeChange:nil];
+        [platformDelegate() completeCouponCodeChange:nil];
         return;
     }
 
-#if defined(PaymentAuthorizationPresenterAdditions_completePaymentMethodModeChange)
-    PaymentAuthorizationPresenterAdditions_completePaymentMethodModeChange
+    auto couponCodeUpdate = adoptNS([PAL::allocPKPaymentRequestCouponCodeUpdateInstance() initWithErrors:toNSErrors(WTFMove(update->errors)).get() paymentSummaryItems:WebCore::platformSummaryItems(WTFMove(update->newTotal), WTFMove(update->newLineItems)) shippingMethods:toPKShippingMethods(WTFMove(update->newShippingMethods)).get()]);
+#if defined(PaymentAuthorizationPresenterAdditions_completeCouponCodeChange)
+    PaymentAuthorizationPresenterAdditions_completeCouponCodeChange
 #endif
-    [platformDelegate() completePaymentMethodModeChange:paymentMethodModeUpdate.get()];
+    [platformDelegate() completeCouponCodeChange:couponCodeUpdate.get()];
 }
 
-#endif // ENABLE(APPLE_PAY_PAYMENT_METHOD_MODE)
+#endif // HAVE(PASSKIT_COUPON_CODE)
 
 } // namespace WebKit
 

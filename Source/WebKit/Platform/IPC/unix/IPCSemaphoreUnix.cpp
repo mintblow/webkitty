@@ -46,8 +46,9 @@ void Semaphore::signal()
 {
 }
 
-void Semaphore::wait()
+bool Semaphore::wait()
 {
+    return false;
 }
 
 bool Semaphore::waitFor(Timeout)
@@ -59,7 +60,7 @@ void Semaphore::encode(Encoder&) const
 {
 }
 
-Optional<Semaphore> Semaphore::decode(Decoder&)
+std::optional<Semaphore> Semaphore::decode(Decoder&)
 {
     return Semaphore { };
 }

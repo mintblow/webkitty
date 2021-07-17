@@ -35,7 +35,6 @@
 #include "CSSBorderImageSliceValue.h"
 #include "CSSContentDistributionValue.h"
 #include "CSSCursorImageValue.h"
-#include "CSSCustomIdentValue.h"
 #include "CSSCustomPropertyValue.h"
 #include "CSSFontFaceSrcValue.h"
 #include "CSSFontFeatureValue.h"
@@ -404,8 +403,6 @@ static RefPtr<CSSValue> consumeDisplay(CSSParserTokenRange& range)
         // Prefixed values
         CSSValueWebkitInlineBox,
         CSSValueWebkitBox,
-        CSSValueWebkitInlineFlex,
-        CSSValueWebkitFlex,
         // No layout support for the full <display-listitem> syntax, so treat it as <display-legacy>
         CSSValueListItem
     >(range);
@@ -417,9 +414,17 @@ static RefPtr<CSSValue> consumeDisplay(CSSParserTokenRange& range)
     if (range.atEnd())
         return nullptr;
 
+    // Convert -webkit-flex/-webkit-inline-flex to flex/inline-flex
+    CSSValueID nextValueID = range.peek().id();
+    if (nextValueID == CSSValueWebkitInlineFlex || nextValueID == CSSValueWebkitFlex) {
+        consumeIdent(range);
+        return CSSValuePool::singleton().createValue(
+            nextValueID == CSSValueWebkitInlineFlex ? CSSValueInlineFlex : CSSValueFlex);
+    }
+
     // Parse [ <display-outside> || <display-inside> ]
-    Optional<CSSValueID> parsedDisplayOutside;
-    Optional<CSSValueID> parsedDisplayInside;
+    std::optional<CSSValueID> parsedDisplayOutside;
+    std::optional<CSSValueID> parsedDisplayInside;
     while (!range.atEnd()) {
         auto nextValueID = range.peek().id();
         switch (nextValueID) {
@@ -447,8 +452,8 @@ static RefPtr<CSSValue> consumeDisplay(CSSParserTokenRange& range)
     }
 
     // Set defaults when one of the two values are unspecified
-    CSSValueID displayOutside = parsedDisplayOutside.valueOr(CSSValueBlock);
-    CSSValueID displayInside = parsedDisplayInside.valueOr(CSSValueFlow);
+    CSSValueID displayOutside = parsedDisplayOutside.value_or(CSSValueBlock);
+    CSSValueID displayInside = parsedDisplayInside.value_or(CSSValueFlow);
 
     auto selectShortValue = [&]() -> CSSValueID {
         if (displayOutside == CSSValueBlock) {
@@ -494,7 +499,6 @@ static RefPtr<CSSValue> consumeWillChange(CSSParserTokenRange& range)
             // Need to return nullptr when currentValue is CSSPropertyAll.
             if (propertyID == CSSPropertyWillChange || propertyID == CSSPropertyAll)
                 return nullptr;
-            // FIXME-NEWPARSER: Use CSSCustomIdentValue someday.
             values->append(CSSValuePool::singleton().createIdentifierValue(propertyID));
             range.consumeIncludingWhitespace();
         } else {
@@ -532,7 +536,7 @@ static RefPtr<CSSValue> consumeFontVariationTag(CSSParserTokenRange& range)
     if (range.peek().type() != StringToken)
         return nullptr;
     
-    auto string = range.consumeIncludingWhitespace().value().toString();
+    auto string = range.consumeIncludingWhitespace().value();
     
     FontTag tag;
     if (string.length() != tag.size())
@@ -687,42 +691,60 @@ static RefPtr<CSSValue> consumeFontVariantEastAsian(CSSParserTokenRange& range)
         return consumeIdent(range);
     
     RefPtr<CSSValueList> values = CSSValueList::createSpaceSeparated();
-    FontVariantEastAsianVariant variant = FontVariantEastAsianVariant::Normal;
-    FontVariantEastAsianWidth width = FontVariantEastAsianWidth::Normal;
-    FontVariantEastAsianRuby ruby = FontVariantEastAsianRuby::Normal;
+    std::optional<FontVariantEastAsianVariant> variant;
+    std::optional<FontVariantEastAsianWidth> width;
+    std::optional<FontVariantEastAsianRuby> ruby;
     
     while (!range.atEnd()) {
         if (range.peek().type() != IdentToken)
             return nullptr;
-        
+
         auto id = range.peek().id();
         
         switch (id) {
         case CSSValueJis78:
+            if (variant)
+                return nullptr;
             variant = FontVariantEastAsianVariant::Jis78;
             break;
         case CSSValueJis83:
+            if (variant)
+                return nullptr;
             variant = FontVariantEastAsianVariant::Jis83;
             break;
         case CSSValueJis90:
+            if (variant)
+                return nullptr;
             variant = FontVariantEastAsianVariant::Jis90;
             break;
         case CSSValueJis04:
+            if (variant)
+                return nullptr;
             variant = FontVariantEastAsianVariant::Jis04;
             break;
         case CSSValueSimplified:
+            if (variant)
+                return nullptr;
             variant = FontVariantEastAsianVariant::Simplified;
             break;
         case CSSValueTraditional:
+            if (variant)
+                return nullptr;
             variant = FontVariantEastAsianVariant::Traditional;
             break;
         case CSSValueFullWidth:
+            if (width)
+                return nullptr;
             width = FontVariantEastAsianWidth::Full;
             break;
         case CSSValueProportionalWidth:
+            if (width)
+                return nullptr;
             width = FontVariantEastAsianWidth::Proportional;
             break;
         case CSSValueRuby:
+            if (ruby)
+                return nullptr;
             ruby = FontVariantEastAsianRuby::Yes;
             break;
         default:
@@ -731,8 +753,8 @@ static RefPtr<CSSValue> consumeFontVariantEastAsian(CSSParserTokenRange& range)
         
         range.consumeIncludingWhitespace();
     }
-        
-    switch (variant) {
+
+    switch (variant.value_or(FontVariantEastAsianVariant::Normal)) {
     case FontVariantEastAsianVariant::Normal:
         break;
     case FontVariantEastAsianVariant::Jis78:
@@ -754,8 +776,8 @@ static RefPtr<CSSValue> consumeFontVariantEastAsian(CSSParserTokenRange& range)
         values->append(CSSValuePool::singleton().createIdentifierValue(CSSValueTraditional));
         break;
     }
-        
-    switch (width) {
+
+    switch (width.value_or(FontVariantEastAsianWidth::Normal)) {
     case FontVariantEastAsianWidth::Normal:
         break;
     case FontVariantEastAsianWidth::Full:
@@ -766,7 +788,7 @@ static RefPtr<CSSValue> consumeFontVariantEastAsian(CSSParserTokenRange& range)
         break;
     }
         
-    switch (ruby) {
+    switch (ruby.value_or(FontVariantEastAsianRuby::Normal)) {
     case FontVariantEastAsianRuby::Normal:
         break;
     case FontVariantEastAsianRuby::Yes:
@@ -1252,7 +1274,7 @@ static RefPtr<CSSValue> consumeColumnWidth(CSSParserTokenRange& range)
     // Always parse lengths in strict mode here, since it would be ambiguous otherwise when used in
     // the 'columns' shorthand property.
     RefPtr<CSSPrimitiveValue> columnWidth = consumeLength(range, HTMLStandardMode, ValueRange::NonNegative);
-    if (!columnWidth || columnWidth->isZero().valueOr(false))
+    if (!columnWidth || columnWidth->isZero().value_or(false))
         return nullptr;
 
     return columnWidth;
@@ -1307,7 +1329,6 @@ static RefPtr<CSSValue> consumeAnimationName(CSSParserTokenRange& range)
         const CSSParserToken& token = range.consumeIncludingWhitespace();
         if (equalIgnoringASCIICase(token.value(), "none"))
             return CSSValuePool::singleton().createIdentifierValue(CSSValueNone);
-        // FIXME-NEWPARSER: Want to use a CSSCustomIdentValue here eventually.
         return CSSValuePool::singleton().createValue(token.value().toString(), CSSUnitType::CSS_STRING);
     }
 
@@ -1324,14 +1345,6 @@ static RefPtr<CSSValue> consumeTransitionProperty(CSSParserTokenRange& range)
 
     if (CSSPropertyID property = token.parseAsCSSPropertyID()) {
         range.consumeIncludingWhitespace();
-        
-        // FIXME-NEWPARSER: No reason why we can't use the "all" property now that it exists.
-        // The old parser used a value keyword for "all", though, since it predated support for
-        // the property.
-        if (property == CSSPropertyAll)
-            return CSSValuePool::singleton().createIdentifierValue(CSSValueAll);
-
-        // FIXME-NEWPARSER: Want to use a CSSCustomIdentValue here eventually.
         return CSSValuePool::singleton().createIdentifierValue(property);
     }
     return consumeCustomIdent(range);
@@ -1350,7 +1363,7 @@ static RefPtr<CSSValue> consumeSteps(CSSParserTokenRange& range)
     if (!stepsValue)
         return nullptr;
     
-    Optional<StepsTimingFunction::StepPosition> stepPosition;
+    std::optional<StepsTimingFunction::StepPosition> stepPosition;
     if (consumeCommaIncludingWhitespace(args)) {
         switch (args.consumeIncludingWhitespace().id()) {
         case CSSValueJumpStart:
@@ -2263,22 +2276,20 @@ static RefPtr<CSSPrimitiveValue> consumeRxOrRy(CSSParserTokenRange& range, CSSPa
 static RefPtr<CSSValue> consumeCursor(CSSParserTokenRange& range, const CSSParserContext& context, bool inQuirksMode)
 {
     RefPtr<CSSValueList> list;
-    while (RefPtr<CSSValue> image = consumeImage(range, context, { AllowedImageType::URLFunction, AllowedImageType::ImageSet })) {
-        IntPoint hotSpot(-1, -1);
-        bool hotSpotSpecified = false;
+    while (auto image = consumeImage(range, context, { AllowedImageType::URLFunction, AllowedImageType::ImageSet })) {
+        std::optional<IntPoint> hotSpot;
         if (auto x = consumeNumberRaw(range)) {
-            hotSpot.setX(static_cast<int>(*x));
             auto y = consumeNumberRaw(range);
             if (!y)
                 return nullptr;
-            hotSpot.setY(static_cast<int>(*y));
-            hotSpotSpecified = true;
+            // FIXME: Should we clamp or round instead of just casting from double to int?
+            hotSpot = IntPoint { static_cast<int>(*x), static_cast<int>(*y) };
         }
 
         if (!list)
             list = CSSValueList::createCommaSeparated();
 
-        list->append(CSSCursorImageValue::create(image.releaseNonNull(), hotSpotSpecified, hotSpot, context.isContentOpaque ? LoadedFromOpaqueSource::Yes : LoadedFromOpaqueSource::No));
+        list->append(CSSCursorImageValue::create(image.releaseNonNull(), hotSpot, context.isContentOpaque ? LoadedFromOpaqueSource::Yes : LoadedFromOpaqueSource::No));
         if (!consumeCommaIncludingWhitespace(range))
             return nullptr;
     }
@@ -2308,16 +2319,16 @@ static RefPtr<CSSValue> consumeAttr(CSSParserTokenRange args, CSSParserContext c
         return nullptr;
     
     CSSParserToken token = args.consumeIncludingWhitespace();
-    auto attrName = token.value().toAtomString();
+    AtomString attrName;
     if (context.isHTMLDocument)
-        attrName = attrName.convertToASCIILowercase();
+        attrName = token.value().convertToASCIILowercaseAtom();
+    else
+        attrName = token.value().toAtomString();
 
     if (!args.atEnd())
         return nullptr;
 
-    // FIXME-NEWPARSER: We want to use a CSSCustomIdentValue here eventually for the attrName.
-    // FIXME-NEWPARSER: We want to use a CSSFunctionValue rather than relying on a custom
-    // attr() primitive value.
+    // FIXME: Consider moving to a CSSFunctionValue with a custom-ident rather than a special CSS_ATTR primitive value.
     return CSSValuePool::singleton().createValue(attrName, CSSUnitType::CSS_ATTR);
 }
 
@@ -2387,7 +2398,7 @@ static RefPtr<CSSPrimitiveValue> consumePerspective(CSSParserTokenRange& range, 
         return consumeIdent(range);
 
     if (auto parsedValue = consumeLength(range, cssParserMode, ValueRange::All)) {
-        if (!parsedValue->isNegative().valueOr(false))
+        if (!parsedValue->isNegative().value_or(false))
             return parsedValue;
         return nullptr;
     }
@@ -2398,8 +2409,6 @@ static RefPtr<CSSPrimitiveValue> consumePerspective(CSSParserTokenRange& range, 
         return nullptr;
     return CSSPrimitiveValue::create(*perspective, CSSUnitType::CSS_PX);
 }
-
-#if ENABLE(CSS_SCROLL_SNAP)
 
 static RefPtr<CSSValueList> consumeScrollSnapAlign(CSSParserTokenRange& range)
 {
@@ -2438,8 +2447,6 @@ static RefPtr<CSSValueList> consumeScrollSnapType(CSSParserTokenRange& range)
 
     return typeValue;
 }
-
-#endif
 
 static RefPtr<CSSPrimitiveValue> consumeScrollBehavior(CSSParserTokenRange& range)
 {
@@ -3336,23 +3343,20 @@ static bool isGridTrackFixedSized(const CSSValue& value)
     return isGridTrackFixedSized(*minPrimitiveValue) || isGridTrackFixedSized(*maxPrimitiveValue);
 }
 
-static Vector<String> parseGridTemplateAreasColumnNames(const String& gridRowNames)
+static Vector<String> parseGridTemplateAreasColumnNames(StringView gridRowNames)
 {
     ASSERT(!gridRowNames.isEmpty());
     Vector<String> columnNames;
-    // Using StringImpl to avoid checks and indirection in every call to String::operator[].
-    StringImpl& text = *gridRowNames.impl();
-
     StringBuilder areaName;
-    for (unsigned i = 0; i < text.length(); ++i) {
-        if (isCSSSpace(text[i])) {
+    for (auto character : gridRowNames.codeUnits()) {
+        if (isCSSSpace(character)) {
             if (!areaName.isEmpty()) {
                 columnNames.append(areaName.toString());
                 areaName.clear();
             }
             continue;
         }
-        if (text[i] == '.') {
+        if (character == '.') {
             if (areaName == ".")
                 continue;
             if (!areaName.isEmpty()) {
@@ -3360,7 +3364,7 @@ static Vector<String> parseGridTemplateAreasColumnNames(const String& gridRowNam
                 areaName.clear();
             }
         } else {
-            if (!isNameCodePoint(text[i]))
+            if (!isNameCodePoint(character))
                 return Vector<String>();
             if (areaName == ".") {
                 columnNames.append(areaName.toString());
@@ -3368,7 +3372,7 @@ static Vector<String> parseGridTemplateAreasColumnNames(const String& gridRowNam
             }
         }
 
-        areaName.append(text[i]);
+        areaName.append(character);
     }
 
     if (!areaName.isEmpty())
@@ -3377,7 +3381,7 @@ static Vector<String> parseGridTemplateAreasColumnNames(const String& gridRowNam
     return columnNames;
 }
 
-static bool parseGridTemplateAreasRow(const String& gridRowNames, NamedGridAreaMap& gridAreaMap, const size_t rowCount, size_t& columnCount)
+static bool parseGridTemplateAreasRow(StringView gridRowNames, NamedGridAreaMap& gridAreaMap, const size_t rowCount, size_t& columnCount)
 {
     if (gridRowNames.isAllSpecialCharacters<isCSSSpace>())
         return false;
@@ -3440,7 +3444,7 @@ static RefPtr<CSSPrimitiveValue> consumeGridBreadth(CSSParserTokenRange& range, 
             return nullptr;
         return CSSPrimitiveValue::create(range.consumeIncludingWhitespace().numericValue(), CSSUnitType::CSS_FR);
     }
-    return consumeLengthOrPercent(range, cssParserMode, ValueRange::NonNegative, UnitlessQuirk::Allow);
+    return consumeLengthOrPercent(range, cssParserMode, ValueRange::NonNegative);
 }
 
 static RefPtr<CSSValue> consumeGridTrackSize(CSSParserTokenRange& range, CSSParserMode cssParserMode)
@@ -3602,7 +3606,7 @@ static RefPtr<CSSValue> consumeGridTemplateAreas(CSSParserTokenRange& range)
     size_t columnCount = 0;
 
     while (range.peek().type() == StringToken) {
-        if (!parseGridTemplateAreasRow(range.consumeIncludingWhitespace().value().toString(), gridAreaMap, rowCount, columnCount))
+        if (!parseGridTemplateAreasRow(range.consumeIncludingWhitespace().value(), gridAreaMap, rowCount, columnCount))
             return nullptr;
         ++rowCount;
     }
@@ -4107,14 +4111,12 @@ RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSS
     case CSSPropertyScrollPaddingBlockStart:
     case CSSPropertyScrollPaddingBlockEnd:
         return consumeScrollPadding(m_range, m_context.mode);
-#if ENABLE(CSS_SCROLL_SNAP)
     case CSSPropertyScrollSnapAlign:
         return consumeScrollSnapAlign(m_range);
     case CSSPropertyScrollSnapStop:
         return consumeIdent<CSSValueAlways, CSSValueNormal>(m_range);
     case CSSPropertyScrollSnapType:
         return consumeScrollSnapType(m_range);
-#endif
     case CSSPropertyScrollBehavior:
         if (!m_context.scrollBehaviorEnabled)
             return nullptr;
@@ -4676,33 +4678,28 @@ static RefPtr<CSSValue> consumeCounterStyleSymbols(CSSParserTokenRange& range, c
 static RefPtr<CSSValue> consumeCounterStyleAdditiveSymbols(CSSParserTokenRange& range, const CSSParserContext& context)
 {
     auto values = CSSValueList::createCommaSeparated();
-    RefPtr<CSSPrimitiveValue> lastInteger;
+    std::optional<int> lastWeight;
     do {
-        RefPtr<CSSPrimitiveValue> integer;
-        RefPtr<CSSValue> symbol;
-        while (!integer || !symbol) {
-            if (!integer) {
-                integer = consumeInteger(range, 0);
-                if (integer)
-                    continue;
-            }
-            if (!symbol) {
-                symbol = consumeCounterStyleSymbol(range, context);
-                if (symbol)
-                    continue;
-            }
-            return nullptr;
-        }
-
-        if (lastInteger) {
-            // The additive tuples must be specified in order of strictly descending
-            // weight; otherwise, the declaration is invalid and must be ignored.
-            if (integer->intValue() >= lastInteger->intValue())
+        auto integer = consumeInteger(range, 0);
+        auto symbol = consumeCounterStyleSymbol(range, context);
+        if (!integer) {
+            if (!symbol)
+                return nullptr;
+            integer = consumeInteger(range, 0);
+            if (!integer)
                 return nullptr;
         }
-        lastInteger = integer;
-        values->append(integer.releaseNonNull());
-        values->append(symbol.releaseNonNull());
+
+        // Additive tuples must be specified in order of strictly descending weight.
+        auto weight = integer->intValue();
+        if (lastWeight && !(weight < lastWeight))
+            return nullptr;
+        lastWeight = weight;
+
+        auto pair = CSSValueList::createSpaceSeparated();
+        pair->append(integer.releaseNonNull());
+        pair->append(symbol.releaseNonNull());
+        values->append(WTFMove(pair));
     } while (consumeCommaIncludingWhitespace(range));
     if (!range.atEnd() || !values->length())
         return nullptr;
@@ -4948,9 +4945,9 @@ bool CSSPropertyParser::consumeFontVariantShorthand(bool important)
 {
     if (identMatches<CSSValueNormal, CSSValueNone>(m_range.peek().id())) {
         addProperty(CSSPropertyFontVariantLigatures, CSSPropertyFontVariant, consumeIdent(m_range).releaseNonNull(), important);
-        addProperty(CSSPropertyFontVariantCaps, CSSPropertyFontVariant, CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important);
-        addProperty(CSSPropertyFontVariantEastAsian, CSSPropertyFontVariant, CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important);
-        addProperty(CSSPropertyFontVariantPosition, CSSPropertyFontVariant, CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important);
+        addProperty(CSSPropertyFontVariantCaps, CSSPropertyFontVariant, CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important, true);
+        addProperty(CSSPropertyFontVariantEastAsian, CSSPropertyFontVariant, CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important, true);
+        addProperty(CSSPropertyFontVariantPosition, CSSPropertyFontVariant, CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important, true);
         return m_range.atEnd();
     }
 
@@ -4961,6 +4958,8 @@ bool CSSPropertyParser::consumeFontVariantShorthand(bool important)
     RefPtr<CSSValue> eastAsianValue;
     FontVariantLigaturesParser ligaturesParser;
     FontVariantNumericParser numericParser;
+    bool implicitLigatures = true;
+    bool implicitNumeric = true;
     do {
         if (!capsValue) {
             capsValue = consumeFontVariantCaps(m_range);
@@ -4982,9 +4981,14 @@ bool CSSPropertyParser::consumeFontVariantShorthand(bool important)
 
         FontVariantLigaturesParser::ParseResult ligaturesParseResult = ligaturesParser.consumeLigature(m_range);
         FontVariantNumericParser::ParseResult numericParseResult = numericParser.consumeNumeric(m_range);
-        if (ligaturesParseResult == FontVariantLigaturesParser::ParseResult::ConsumedValue
-            || numericParseResult == FontVariantNumericParser::ParseResult::ConsumedValue)
+        if (ligaturesParseResult == FontVariantLigaturesParser::ParseResult::ConsumedValue) {
+            implicitLigatures = false;
             continue;
+        }
+        if (numericParseResult == FontVariantNumericParser::ParseResult::ConsumedValue) {
+            implicitNumeric = false;
+            continue;
+        }
 
         if (ligaturesParseResult == FontVariantLigaturesParser::ParseResult::DisallowedValue
             || numericParseResult == FontVariantNumericParser::ParseResult::DisallowedValue)
@@ -4993,7 +4997,7 @@ bool CSSPropertyParser::consumeFontVariantShorthand(bool important)
         if (!eastAsianValue) {
             eastAsianValue = consumeFontVariantEastAsian(m_range);
             if (eastAsianValue)
-            continue;
+                continue;
         }
 
         // Saw some value that didn't match anything else.
@@ -5001,15 +5005,19 @@ bool CSSPropertyParser::consumeFontVariantShorthand(bool important)
 
     } while (!m_range.atEnd());
 
-    addProperty(CSSPropertyFontVariantLigatures, CSSPropertyFontVariant, ligaturesParser.finalizeValue().releaseNonNull(), important);
-    addProperty(CSSPropertyFontVariantNumeric, CSSPropertyFontVariant, numericParser.finalizeValue().releaseNonNull(), important);
-    addProperty(CSSPropertyFontVariantCaps, CSSPropertyFontVariant, capsValue ? capsValue.releaseNonNull() : CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important);
-    addProperty(CSSPropertyFontVariantAlternates, CSSPropertyFontVariant, alternatesValue ? alternatesValue.releaseNonNull() : CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important);
-    addProperty(CSSPropertyFontVariantPosition, CSSPropertyFontVariant, positionValue ? positionValue.releaseNonNull() : CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important);
-    
+    addProperty(CSSPropertyFontVariantLigatures, CSSPropertyFontVariant, ligaturesParser.finalizeValue().releaseNonNull(), important, implicitLigatures);
+    addProperty(CSSPropertyFontVariantNumeric, CSSPropertyFontVariant, numericParser.finalizeValue().releaseNonNull(), important, implicitNumeric);
+    bool implicitCaps = !capsValue;
+    addProperty(CSSPropertyFontVariantCaps, CSSPropertyFontVariant, capsValue ? capsValue.releaseNonNull() : CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important, implicitCaps);
+    bool implicitAlternates = !alternatesValue;
+    addProperty(CSSPropertyFontVariantAlternates, CSSPropertyFontVariant, alternatesValue ? alternatesValue.releaseNonNull() : CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important, implicitAlternates);
+    bool implicitPosition = !positionValue;
+    addProperty(CSSPropertyFontVariantPosition, CSSPropertyFontVariant, positionValue ? positionValue.releaseNonNull() : CSSValuePool::singleton().createIdentifierValue(CSSValueNormal), important, implicitPosition);
+
+    bool implicitEastAsian = !eastAsianValue;
     if (!eastAsianValue)
         eastAsianValue = CSSValuePool::singleton().createIdentifierValue(CSSValueNormal);
-    addProperty(CSSPropertyFontVariantEastAsian, CSSPropertyFontVariant, eastAsianValue.releaseNonNull(), important);
+    addProperty(CSSPropertyFontVariantEastAsian, CSSPropertyFontVariant, eastAsianValue.releaseNonNull(), important, implicitEastAsian);
     
     return true;
 }
@@ -5532,12 +5540,9 @@ bool CSSPropertyParser::consumeOverflowShorthand(bool important)
     return true;
 }
 
-// FIXME-NEWPARSER: Hack to work around the fact that we aren't using CSSCustomIdentValue
-// for stuff yet. This can be replaced by CSSValue::isCustomIdentValue() once we switch
-// to using CSSCustomIdentValue everywhere.
 static bool isCustomIdentValue(const CSSValue& value)
 {
-    return is<CSSPrimitiveValue>(value) && downcast<CSSPrimitiveValue>(value).isString();
+    return is<CSSPrimitiveValue>(value) && downcast<CSSPrimitiveValue>(value).isCustomIdent();
 }
 
 bool CSSPropertyParser::consumeGridItemPositionShorthand(CSSPropertyID shorthandId, bool important)
@@ -5621,7 +5626,7 @@ bool CSSPropertyParser::consumeGridTemplateRowsAndAreasAndColumns(CSSPropertyID 
             templateRows->append(lineNames.releaseNonNull());
 
         // Handle a template-area's row.
-        if (m_range.peek().type() != StringToken || !parseGridTemplateAreasRow(m_range.consumeIncludingWhitespace().value().toString(), gridAreaMap, rowCount, columnCount))
+        if (m_range.peek().type() != StringToken || !parseGridTemplateAreasRow(m_range.consumeIncludingWhitespace().value(), gridAreaMap, rowCount, columnCount))
             return false;
         ++rowCount;
 

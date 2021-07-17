@@ -159,14 +159,14 @@ RenderWidget* HTMLPlugInElement::renderWidgetLoadingPlugin() const
     return renderWidget(); // This will return nullptr if the renderer is not a RenderWidget.
 }
 
-bool HTMLPlugInElement::isPresentationAttribute(const QualifiedName& name) const
+bool HTMLPlugInElement::hasPresentationalHintsForAttribute(const QualifiedName& name) const
 {
     if (name == widthAttr || name == heightAttr || name == vspaceAttr || name == hspaceAttr || name == alignAttr)
         return true;
-    return HTMLFrameOwnerElement::isPresentationAttribute(name);
+    return HTMLFrameOwnerElement::hasPresentationalHintsForAttribute(name);
 }
 
-void HTMLPlugInElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomString& value, MutableStyleProperties& style)
+void HTMLPlugInElement::collectPresentationalHintsForAttribute(const QualifiedName& name, const AtomString& value, MutableStyleProperties& style)
 {
     if (name == widthAttr)
         addHTMLLengthToStyle(style, CSSPropertyWidth, value);
@@ -181,7 +181,7 @@ void HTMLPlugInElement::collectStyleForPresentationAttribute(const QualifiedName
     } else if (name == alignAttr)
         applyAlignmentAttributeToStyle(value, style);
     else
-        HTMLFrameOwnerElement::collectStyleForPresentationAttribute(name, value, style);
+        HTMLFrameOwnerElement::collectPresentationalHintsForAttribute(name, value, style);
 }
 
 void HTMLPlugInElement::defaultEventHandler(Event& event)
@@ -469,7 +469,7 @@ bool HTMLPlugInElement::isReplacementObscured()
     auto height = viewRect.height();
     // Hit test the center and near the corners of the replacement text to ensure
     // it is visible and is not masked by other elements.
-    constexpr OptionSet<HitTestRequest::RequestType> hitType { HitTestRequest::ReadOnly, HitTestRequest::Active, HitTestRequest::IgnoreClipping, HitTestRequest::DisallowUserAgentShadowContent, HitTestRequest::AllowChildFrameContent };
+    constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::ReadOnly, HitTestRequest::Type::Active, HitTestRequest::Type::IgnoreClipping, HitTestRequest::Type::DisallowUserAgentShadowContent, HitTestRequest::Type::AllowChildFrameContent };
     HitTestResult result;
     HitTestLocation location { LayoutPoint { viewRect.center() } };
     ASSERT(!renderView->needsLayout());

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2021 Apple Inc. All rights reserved.
+ * Copyright (C) 2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,6 +42,10 @@ void TestWithImageData::didReceiveMessage(IPC::Connection& connection, IPC::Deco
         return IPC::handleMessage<Messages::TestWithImageData::SendImageData>(decoder, this, &TestWithImageData::sendImageData);
     UNUSED_PARAM(connection);
     UNUSED_PARAM(decoder);
+#if ENABLE(IPC_TESTING_API)
+    if (connection.ignoreInvalidMessageForTesting())
+        return;
+#endif // ENABLE(IPC_TESTING_API)
     ASSERT_NOT_REACHED_WITH_MESSAGE("Unhandled message %s to %" PRIu64, description(decoder.messageName()), decoder.destinationID());
 }
 
@@ -53,6 +57,10 @@ bool TestWithImageData::didReceiveSyncMessage(IPC::Connection& connection, IPC::
     UNUSED_PARAM(connection);
     UNUSED_PARAM(decoder);
     UNUSED_PARAM(replyEncoder);
+#if ENABLE(IPC_TESTING_API)
+    if (connection.ignoreInvalidMessageForTesting())
+        return false;
+#endif // ENABLE(IPC_TESTING_API)
     ASSERT_NOT_REACHED_WITH_MESSAGE("Unhandled synchronous message %s to %" PRIu64, description(decoder.messageName()), decoder.destinationID());
     return false;
 }

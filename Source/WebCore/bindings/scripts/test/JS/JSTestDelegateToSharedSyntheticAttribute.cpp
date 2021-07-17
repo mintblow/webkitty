@@ -29,6 +29,7 @@
 #include "JSDOMConstructorNotConstructable.h"
 #include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
+#include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMWrapperCache.h"
 #include "ScriptExecutionContext.h"
 #include "WebCoreJSClientData.h"
@@ -152,18 +153,13 @@ JSObject* JSTestDelegateToSharedSyntheticAttribute::prototype(VM& vm, JSDOMGloba
 
 JSValue JSTestDelegateToSharedSyntheticAttribute::getConstructor(VM& vm, const JSGlobalObject* globalObject)
 {
-    return getDOMConstructor<JSTestDelegateToSharedSyntheticAttributeDOMConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+    return getDOMConstructor<JSTestDelegateToSharedSyntheticAttributeDOMConstructor, DOMConstructorID::TestDelegateToSharedSyntheticAttribute>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
 }
 
 void JSTestDelegateToSharedSyntheticAttribute::destroy(JSC::JSCell* cell)
 {
     JSTestDelegateToSharedSyntheticAttribute* thisObject = static_cast<JSTestDelegateToSharedSyntheticAttribute*>(cell);
     thisObject->JSTestDelegateToSharedSyntheticAttribute::~JSTestDelegateToSharedSyntheticAttribute();
-}
-
-template<> inline JSTestDelegateToSharedSyntheticAttribute* IDLAttribute<JSTestDelegateToSharedSyntheticAttribute>::cast(JSGlobalObject& lexicalGlobalObject, EncodedJSValue thisValue)
-{
-    return jsDynamicCast<JSTestDelegateToSharedSyntheticAttribute*>(JSC::getVM(&lexicalGlobalObject), JSValue::decode(thisValue));
 }
 
 JSC_DEFINE_CUSTOM_GETTER(jsTestDelegateToSharedSyntheticAttributeConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName))

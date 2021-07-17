@@ -70,6 +70,7 @@ extern "C" {
     M(LocalStorageDatabaseTracker) \
     M(Media) \
     M(MemoryPressure) \
+    M(ModelElement) \
     M(MouseHandling) \
     M(Network) \
     M(NetworkCache) \
@@ -91,6 +92,7 @@ extern "C" {
     M(Selection) \
     M(ServiceWorker) \
     M(SessionState) \
+    M(SharedDisplayLists) \
     M(Storage) \
     M(StorageAPI) \
     M(TextInput) \
@@ -100,6 +102,7 @@ extern "C" {
     M(ViewportSizing) \
     M(VirtualMemory) \
     M(VisibleRects) \
+    M(WebAuthn) \
     M(WebGL) \
     M(WebRTC) \
     M(WheelEvents) \

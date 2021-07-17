@@ -52,12 +52,12 @@ public:
             return emptyString();
 
         if (!m_containsOnlyASCII) {
-            m_containsOnlyASCII = charactersAreAllASCII(reinterpret_cast<const LChar*>(m_scriptBuffer.buffer()->data()), m_scriptBuffer.buffer()->size());
+            m_containsOnlyASCII = charactersAreAllASCII(m_scriptBuffer.buffer()->data(), m_scriptBuffer.buffer()->size());
             if (*m_containsOnlyASCII)
-                m_scriptHash = StringHasher::computeHashAndMaskTop8Bits(reinterpret_cast<const LChar*>(m_scriptBuffer.buffer()->data()), m_scriptBuffer.buffer()->size());
+                m_scriptHash = StringHasher::computeHashAndMaskTop8Bits(m_scriptBuffer.buffer()->data(), m_scriptBuffer.buffer()->size());
         }
         if (*m_containsOnlyASCII)
-            return { reinterpret_cast<const LChar*>(m_scriptBuffer.buffer()->data()), static_cast<unsigned>(m_scriptBuffer.buffer()->size()) };
+            return { m_scriptBuffer.buffer()->data(), static_cast<unsigned>(m_scriptBuffer.buffer()->size()) };
 
         if (!m_cachedScriptString) {
             m_cachedScriptString = m_scriptBuffer.toString();
@@ -93,7 +93,7 @@ private:
     ScriptBuffer m_scriptBuffer;
     mutable unsigned m_scriptHash { 0 };
     mutable String m_cachedScriptString;
-    mutable Optional<bool> m_containsOnlyASCII;
+    mutable std::optional<bool> m_containsOnlyASCII;
 };
 
 } // namespace WebCore

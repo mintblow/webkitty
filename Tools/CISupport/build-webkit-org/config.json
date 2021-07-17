@@ -14,7 +14,7 @@
                     { "name": "bot140", "platform": "mac-bigsur" },
                     { "name": "bot141", "platform": "mac-bigsur" },
                     { "name": "bot142", "platform": "mac-bigsur" },
-                    { "name": "bot279", "platform": "mac-bigsur" },
+                    { "name": "bot165", "platform": "mac-bigsur" },
                     { "name": "bot302", "platform": "mac-bigsur" },
                     { "name": "bot603", "platform": "mac-bigsur" },
                     { "name": "bot632", "platform": "mac-bigsur" },
@@ -113,6 +113,7 @@
                     { "name": "gtk-linux-bot-16", "platform": "gtk" },
                     { "name": "gtk-linux-bot-17", "platform": "gtk" },
                     { "name": "gtk-linux-bot-18", "platform": "gtk" },
+                    { "name": "gtk-linux-bot-19", "platform": "gtk" },
 
                     { "name": "jsconly-linux-igalia-bot-1", "platform": "jsc-only" },
                     { "name": "jsconly-linux-igalia-bot-2", "platform": "jsc-only" },
@@ -135,10 +136,14 @@
                     { "name": "Apple-BigSur-Release-Build", "factory": "BuildFactory", "builddir": "bigsur-release",
                       "platform": "mac-bigsur", "configuration": "release", "architectures": ["x86_64", "arm64"],
                       "triggers": [
-                          "bigsur-release-tests-test262", "bigsur-release-tests-wk1", "bigsur-release-tests-wk2", "bigsur-release-applesilicon-tests-wk1",
-                          "bigsur-release-applesilicon-tests-wk2", "bigsur-applesilicon-release-tests-jsc", "bigsur-release-tests-wk2-webgl"
+                          "bigsur-applesilicon-release-tests-test262" ,"bigsur-release-tests-test262", "bigsur-release-tests-wk1", "bigsur-release-tests-wk2",
+                          "bigsur-release-applesilicon-tests-wk1", "bigsur-release-applesilicon-tests-wk2", "bigsur-applesilicon-release-tests-jsc", "bigsur-release-tests-wk2-webgl"
                       ],
-                      "workernames": ["bot279", "bot121", "bot124"]
+                      "workernames": ["bot121", "bot124"]
+                    },
+                    { "name": "Apple-BigSur-AppleSilicon-Release-Test262-Tests", "factory": "Test262Factory", "builddir": "bigsur-applesilicon-release-tests-test262",
+                      "platform": "mac-bigsur", "configuration": "release", "architectures": ["x86_64", "arm64"],
+                      "workernames": ["bot165"]
                     },
                     { "name": "Apple-BigSur-Release-Test262-Tests", "factory": "Test262Factory", "builddir": "bigsur-release-tests-test262",
                       "platform": "mac-bigsur", "configuration": "release", "architectures": ["x86_64", "arm64"],
@@ -348,7 +353,8 @@
                       "name": "GTK-Linux-64-bit-Release-Build", "factory": "BuildAndGenerateJSCBundleFactory", "builddir": "gtk-linux-64-release",
                       "platform": "gtk", "configuration": "release", "architectures": ["x86_64"],
                       "triggers": ["gtk-linux-64-release-tests", "gtk-linux-64-release-tests-js", "gtk-linux-64-release-tests-webdriver",
-                                   "gtk-linux-64-release-wayland-tests", "gtk-linux-64-release-perf-tests", "gtk-linux-64-release-gtk4-tests"],
+                                   "gtk-linux-64-release-wayland-tests", "gtk-linux-64-release-perf-tests", "gtk-linux-64-release-gtk4-tests",
+                                   "gtk-linux-64-release-skip-failing-tests"],
                       "workernames": ["gtk-linux-bot-2"]
                     },
                     {
@@ -427,6 +433,12 @@
                       "name": "GTK-Linux-64-bit-Release-GTK4-Tests", "factory": "BuildAndTestAllButJSCFactory", "builddir": "gtk-linux-64-release-gtk4",
                       "platform": "gtk", "configuration": "release", "architectures": ["x86_64"],
                       "workernames": ["gtk-linux-bot-18"]
+                    },
+                    {
+                      "name": "GTK-Linux-64-bit-Release-Skip-Failing-Tests", "factory": "TestAllButJSCFactory", "builddir": "gtk-linux-64-release-skip-failing-tests",
+                      "platform": "gtk", "configuration": "release", "architectures": ["x86_64"],
+                      "additionalArguments": ["--skip-failing-tests"],
+                      "workernames": ["gtk-linux-bot-19"]
                     },
                     {
                       "name": "WinCairo-64-bit-WKL-Release-Build", "factory": "BuildFactory", "builddir": "wincairo-wkl-release",
@@ -588,6 +600,9 @@
                     { "type": "Triggerable", "name": "bigsur-release-tests-test262",
                       "builderNames": ["Apple-BigSur-Release-Test262-Tests"]
                     },
+                    { "type": "Triggerable", "name": "bigsur-applesilicon-release-tests-test262",
+                      "builderNames": ["Apple-BigSur-AppleSilicon-Release-Test262-Tests"]
+                    },
                     { "type": "Triggerable", "name": "bigsur-applesilicon-debug-tests-jsc",
                       "builderNames": ["Apple-BigSur-AppleSilicon-Debug-JSC-Tests"]
                     },
@@ -686,6 +701,9 @@
                     },
                     { "type": "Triggerable", "name": "gtk-linux-64-release-wayland-tests",
                       "builderNames": ["GTK-Linux-64-bit-Release-Wayland-Tests"]
+                    },
+                    { "type": "Triggerable", "name": "gtk-linux-64-release-skip-failing-tests",
+                      "builderNames": ["GTK-Linux-64-bit-Release-Skip-Failing-Tests"]
                     },
                     { "type": "Triggerable", "name": "wincairo-wkl-release-tests",
                       "builderNames": ["WinCairo-64-bit-WKL-Release-Tests"]

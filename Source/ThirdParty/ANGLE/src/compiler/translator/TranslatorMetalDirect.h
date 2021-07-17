@@ -23,8 +23,6 @@ constexpr const char kXfbVerticesPerDraw[]        = "xfbVerticesPerDraw";
 constexpr const char kXfbBufferOffsets[]          = "xfbBufferOffsets";
 constexpr const char kAcbBufferOffsets[]          = "acbBufferOffsets";
 constexpr const char kDepthRange[]                = "depthRange";
-constexpr const char kPreRotation[]               = "preRotation";
-constexpr const char kFragRotation[]              = "fragRotation";
 constexpr const char kUnassignedAttributeString[] = " __unassigned_attribute__";
 
 class TOutputMSL;
@@ -122,6 +120,8 @@ class TranslatorMetalReflection
     {
         hasUBOs = false;
         hasFlatInput = false;
+        hasAtan = false;
+        hasInvariance = false;
         originalNames.clear();
         samplerBindings.clear();
         textureBindings.clear();
@@ -131,6 +131,8 @@ class TranslatorMetalReflection
 
     bool hasUBOs = false;
     bool hasFlatInput = false;
+    bool hasAtan = false;
+    bool hasInvariance = false;
 
   private:
     originalNamesMap originalNames;
@@ -159,6 +161,9 @@ class TranslatorMetalDirect : public TCompiler
     bool translate(TIntermBlock *root,
                    ShCompileOptions compileOptions,
                    PerformanceDiagnostics *perfDiagnostics) override;
+
+    // Need to collect variables so that RemoveInactiveInterfaceVariables works.
+    bool shouldCollectVariables(ShCompileOptions compileOptions) override { return true; }
 
     ANGLE_NO_DISCARD bool translateImpl(TIntermBlock &root, ShCompileOptions compileOptions);
 

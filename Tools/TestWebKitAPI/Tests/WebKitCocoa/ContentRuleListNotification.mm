@@ -32,6 +32,7 @@
 #import "TestNavigationDelegate.h"
 #import "TestUIDelegate.h"
 #import "TestURLSchemeHandler.h"
+#import "TestWKWebView.h"
 #import <WebKit/WKContentRuleListPrivate.h>
 #import <WebKit/WKContentRuleListStorePrivate.h>
 #import <WebKit/WKNavigationDelegatePrivate.h>
@@ -42,10 +43,8 @@
 #import <WebKit/_WKContentRuleListAction.h>
 #import <WebKit/_WKWebsiteDataStoreConfiguration.h>
 #import <wtf/RetainPtr.h>
-#import <wtf/SHA1.h>
 #import <wtf/URL.h>
 #import <wtf/cocoa/VectorCocoa.h>
-#import <wtf/text/Base64.h>
 #import <wtf/text/WTFString.h>
 
 static bool receivedNotification;
@@ -157,6 +156,45 @@ TEST(ContentRuleList, NotificationSubresource)
     EXPECT_STREQ([notificationIdentifier UTF8String], "testidentifier");
 }
 
+TEST(ContentRuleList, LoadHTMLStringDisplayNone)
+{
+    NSString *html = @"<a href='https://www.apple.com/'>link to Apple</a>";
+
+    NSString *getLinkDisplay = @"window.getComputedStyle(document.querySelector('a')).getPropertyValue('display')";
+
+    auto list = makeContentRuleList(@"["
+        "{ \"action\": { \"type\" : \"css-display-none\", \"selector\": \"a[href*='apple.com']\" }, \"trigger\": { \"url-filter\": \".*\" }},"
+        "{ \"action\": { \"type\" : \"block\" }, \"trigger\": { \"url-filter\": \"webkit.org\" }},"
+        "{ \"action\": { \"type\" : \"ignore-previous-rules\" }, \"trigger\": { \"url-filter\": \"example.com\" }}"
+    "]");
+
+    auto configuration = adoptNS([WKWebViewConfiguration new]);
+    [[configuration userContentController] addContentRuleList:list.get()];
+    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:configuration.get()]);
+
+    [webView synchronouslyLoadHTMLString:html];
+    EXPECT_WK_STREQ([webView objectByEvaluatingJavaScript:getLinkDisplay], "none");
+
+    [webView synchronouslyLoadHTMLString:html baseURL:[NSURL URLWithString:@"https://webkit.org/"]];
+    EXPECT_WK_STREQ([webView objectByEvaluatingJavaScript:getLinkDisplay], "none");
+
+    [webView synchronouslyLoadHTMLString:html baseURL:[NSURL URLWithString:@"https://example.com/"]];
+    EXPECT_WK_STREQ([webView objectByEvaluatingJavaScript:getLinkDisplay], "inline");
+
+    auto list2 = makeContentRuleList(@"["
+        "{ \"action\": { \"type\" : \"css-display-none\", \"selector\": \"a[href*='apple.com']\" }, \"trigger\": { \"url-filter\": \"webkit.org\" }}"
+    "]", @"other extension");
+    auto configuration2 = adoptNS([WKWebViewConfiguration new]);
+    [[configuration2 userContentController] addContentRuleList:list2.get()];
+    auto webView2 = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:configuration2.get()]);
+
+    [webView2 synchronouslyLoadHTMLString:html baseURL:[NSURL URLWithString:@"https://webkit.org/"]];
+    EXPECT_WK_STREQ([webView2 objectByEvaluatingJavaScript:getLinkDisplay], "none");
+
+    [webView2 synchronouslyLoadHTMLString:html baseURL:[NSURL URLWithString:@"https://example.com/"]];
+    EXPECT_WK_STREQ([webView2 objectByEvaluatingJavaScript:getLinkDisplay], "inline");
+}
+
 TEST(ContentRuleList, PerformedActionForURL)
 {
     NSString *firstList = @"[{\"action\":{\"type\":\"notify\",\"notification\":\"testnotification\"},\"trigger\":{\"url-filter\":\"notify\"}}]";
@@ -181,34 +219,11 @@ TEST(ContentRuleList, PerformedActionForURL)
     EXPECT_TRUE(expectedNotifications == notificationList);
 }
 
-static String webSocketAcceptValue(const Vector<char>& request)
-{
-    constexpr auto* keyHeaderField = "Sec-WebSocket-Key: ";
-    const char* keyBegin = strnstr(request.data(), keyHeaderField, request.size()) + strlen(keyHeaderField);
-    EXPECT_NOT_NULL(keyBegin);
-    const char* keyEnd = strnstr(keyBegin, "\r\n", request.size() + (keyBegin - request.data()));
-    EXPECT_NOT_NULL(keyEnd);
-
-    constexpr auto* webSocketKeyGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    SHA1 sha1;
-    sha1.addBytes(reinterpret_cast<const uint8_t*>(keyBegin), keyEnd - keyBegin);
-    sha1.addBytes(reinterpret_cast<const uint8_t*>(webSocketKeyGUID), strlen(webSocketKeyGUID));
-    SHA1::Digest hash;
-    sha1.computeHash(hash);
-    return base64Encode(hash.data(), SHA1::hashSize);
-}
-
 TEST(ContentRuleList, ResourceTypes)
 {
     using namespace TestWebKitAPI;
     HTTPServer webSocketServer([](Connection connection) {
-        connection.receiveHTTPRequest([=](Vector<char>&& request) {
-            connection.send(HTTPResponse(101, {
-                { "Upgrade", "websocket" },
-                { "Connection", "Upgrade" },
-                { "Sec-WebSocket-Accept", webSocketAcceptValue(request) }
-            }).serialize(HTTPResponse::IncludeContentLength::No));
-        });
+        connection.webSocketHandshake();
     });
     auto serverPort = webSocketServer.port();
 

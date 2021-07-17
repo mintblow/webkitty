@@ -30,14 +30,15 @@
 
 #import "APIData.h"
 #import "Logging.h"
-#import "PDFKitSoftLink.h"
 #import "PrintInfo.h"
 #import "ShareableBitmap.h"
 #import "WebPageProxy.h"
 #import <Quartz/Quartz.h>
-#import <WebCore/GraphicsContext.h>
+#import <WebCore/GraphicsContextCG.h>
 #import <WebCore/LocalDefaultSystemAppearance.h>
 #import <wtf/RunLoop.h>
+
+#import "PDFKitSoftLink.h"
 
 NSString * const WebKitOriginalTopPrintingMarginKey = @"WebKitOriginalTopMargin";
 NSString * const WebKitOriginalBottomPrintingMarginKey = @"WebKitOriginalBottomMargin";
@@ -258,7 +259,7 @@ static void pageDidDrawToImage(const WebKit::ShareableBitmap::Handle& imageHandl
         return;
     }
 
-    auto locker = holdLock(_printingCallbackMutex);
+    Locker locker { _printingCallbackMutex };
 
     ASSERT([self _hasPageRects]);
     ASSERT(_printedPagesData.isEmpty());
@@ -372,7 +373,7 @@ static void prepareDataForPrintingOnSecondaryThread(WKPrintingView *view)
 {
     ASSERT(RunLoop::isMain());
 
-    auto locker = holdLock(view->_printingCallbackMutex);
+    Locker locker { view->_printingCallbackMutex };
 
     // We may have received page rects while a message to call this function traveled from secondary thread to main one.
     if ([view _hasPageRects]) {
@@ -414,13 +415,13 @@ static void prepareDataForPrintingOnSecondaryThread(WKPrintingView *view)
         *range = NSMakeRange(1, _printingPageRects.size());
     else if (!RunLoop::isMain()) {
         ASSERT(![self _isPrintingPreview]);
-        std::unique_lock<Lock> lock(_printingCallbackMutex);
+        Locker lock { _printingCallbackMutex };
 
         RunLoop::main().dispatch([self] {
             prepareDataForPrintingOnSecondaryThread(self);
         });
 
-        _printingCallbackCondition.wait(lock);
+        _printingCallbackCondition.wait(_printingCallbackMutex);
         *range = NSMakeRange(1, _printingPageRects.size());
     } else {
         ASSERT([self _isPrintingPreview]);
@@ -555,7 +556,7 @@ static NSString *linkDestinationName(PDFDocument *document, PDFDestination *dest
 
     RefPtr<WebKit::ShareableBitmap> bitmap = pagePreviewIterator->value;
 
-    WebCore::GraphicsContext context([[NSGraphicsContext currentContext] CGContext]);
+    WebCore::GraphicsContextCG context([[NSGraphicsContext currentContext] CGContext]);
     WebCore::GraphicsContextStateSaver stateSaver(context);
 
     bitmap->paint(context, _webFrame->page()->deviceScaleFactor(), WebCore::IntPoint(nsRect.origin), bitmap->bounds());

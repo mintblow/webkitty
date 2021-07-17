@@ -1257,6 +1257,7 @@
    },
    "Chris Gambrell" : {
       "emails" : [
+         "christopher@gambrell.info",
          "cgambrell@apple.com"
       ],
       "expertise" : "CGI, PHP, and Python",
@@ -1750,6 +1751,16 @@
       "nicks" : [
          "krit"
       ]
+   },
+   "Dmitry Bezhetskov" : {
+      "emails" : [
+         "dbezhetskov@igalia.com",
+         "dima00782@gmail.com"
+      ],
+      "nicks" : [
+         "dbezhetskov"
+      ],
+      "status" : "committer"
    },
    "Dmitry Gorbik" : {
       "emails" : [
@@ -2426,6 +2437,15 @@
          "hta"
       ]
    },
+   "Harshil Ratnu" : {
+      "emails" : [
+         "harshil.sratnu@gmail.com"
+      ],
+      "expertise" : "Web Inspector",
+      "nicks" : [
+         "harshil"
+      ]
+   },
    "Hayato Ito" : {
       "emails" : [
          "hayato@chromium.org"
@@ -2540,6 +2560,12 @@
       "nicks" : [
          "vollick"
       ]
+   },
+   "Igalia Layout Team" : {
+      "emails" : [
+         "webkit-layout-noreply@igalia.com"
+      ],
+      "expertise" : "Flexbox, CSS Grid Layout, CSS Scroll Snap, CSS Containment"
    },
    "Igor Trindade Oliveira" : {
       "emails" : [
@@ -2808,6 +2834,7 @@
    },
    "Jean-Yves Avenard" : {
       "emails" : [
+         "jean-yves.avenard@apple.com",
          "jya@apple.com"
       ],
       "nicks" : [
@@ -3349,7 +3376,7 @@
       ],
       "status" : "committer"
    },
-   "Katherine Cheney" : {
+   "Kate Cheney" : {
       "emails" : [
          "katherine_cheney@apple.com"
       ],
@@ -4993,7 +5020,7 @@
       "nicks" : [
          "ryanhaddad"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    "Ryosuke Niwa" : {
       "emails" : [
@@ -5558,7 +5585,7 @@
       "nicks" : [
          "ntim"
       ],
-      "status": "committer"
+      "status" : "committer"
    },
    "Tim Omernick" : {
       "emails" : [
@@ -5802,6 +5829,16 @@
          "seumas"
       ]
    },
+   "W.D. Xiong" : {
+      "emails" : [
+         "wdx@apple.com",
+         "w_xiong@apple.com"
+      ],
+      "nicks" : [
+         "wdx"
+      ],
+      "status" : "committer"
+   },
    "Web Components Team" : {
       "emails" : [
          "webcomponents-bugzilla@chromium.org"
@@ -5931,6 +5968,15 @@
          "yi.shen@sisa.samsung.com",
          "yi.4.shen@nokia.com"
       ]
+   },
+   "Yijia Huang" : {
+      "emails" : [
+         "yijia_huang@apple.com"
+      ],
+      "nicks" : [
+         "yijia"
+      ],
+      "status" : "committer"
    },
    "Yoav Weiss" : {
       "emails" : [
@@ -6076,6 +6122,15 @@
       "nicks" : [
          "zhifei_fang",
          "z.f"
+      ],
+      "status" : "committer"
+   },
+   "Ziran Sun" : {
+      "emails" : [
+         "zsun@igalia.com"
+      ],
+      "nicks" : [
+         "zsun"
       ],
       "status" : "committer"
    },

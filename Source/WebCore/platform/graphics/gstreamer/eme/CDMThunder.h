@@ -50,8 +50,6 @@ struct ThunderSystemDeleter {
 
 using UniqueThunderSystem = std::unique_ptr<OpenCDMSystem, ThunderSystemDeleter>;
 
-using UniqueThunderSession = std::unique_ptr<OpenCDMSession, WTF::BoxPtrDeleter<OpenCDMSession>>;
-
 } // namespace Thunder
 
 class CDMFactoryThunder final : public CDMFactory, public CDMProxyFactory {
@@ -98,7 +96,7 @@ public:
     bool supportsInitData(const AtomString&, const SharedBuffer&) const final;
     RefPtr<SharedBuffer> sanitizeInitData(const AtomString& initDataType, const SharedBuffer& initData) const final;
     RefPtr<SharedBuffer> sanitizeResponse(const SharedBuffer&) const final;
-    Optional<String> sanitizeSessionId(const String&) const final;
+    std::optional<String> sanitizeSessionId(const String&) const final;
 
 private:
     String m_keySystem;
@@ -142,7 +140,7 @@ public:
     void clearClient() final { m_client.clear(); }
 
 private:
-    Optional<CDMInstanceThunder&> cdmInstanceThunder() const;
+    CDMInstanceThunder* cdmInstanceThunder() const;
 
     using Notification = void (CDMInstanceSessionThunder::*)(RefPtr<WebCore::SharedBuffer>&&);
     using ChallengeGeneratedCallback = Function<void()>;
@@ -161,7 +159,7 @@ private:
     bool m_doesKeyStoreNeedMerging { false };
     InitData m_initData;
     OpenCDMSessionCallbacks m_thunderSessionCallbacks { };
-    Thunder::UniqueThunderSession m_session;
+    BoxPtr<OpenCDMSession> m_session;
     RefPtr<SharedBuffer> m_message;
     bool m_needsIndividualization { false };
     Vector<ChallengeGeneratedCallback> m_challengeCallbacks;

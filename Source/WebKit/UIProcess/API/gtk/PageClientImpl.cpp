@@ -39,6 +39,7 @@
 #include "WebEventFactory.h"
 #include "WebKitColorChooser.h"
 #include "WebKitPopupMenu.h"
+#include "WebKitWebViewBaseInternal.h"
 #include "WebKitWebViewBasePrivate.h"
 #include "WebKitWebViewPrivate.h"
 #include "WebPageProxy.h"
@@ -96,6 +97,11 @@ void PageClientImpl::requestScroll(const WebCore::FloatPoint&, const WebCore::In
     notImplemented();
 }
 
+void PageClientImpl::requestScrollToRect(const WebCore::FloatRect&, const WebCore::FloatPoint&)
+{
+    notImplemented();
+}
+
 WebCore::FloatPoint PageClientImpl::viewScrollPosition()
 {
     return { };
@@ -103,8 +109,7 @@ WebCore::FloatPoint PageClientImpl::viewScrollPosition()
 
 WebCore::IntSize PageClientImpl::viewSize()
 {
-    auto* drawingArea = static_cast<DrawingAreaProxyCoordinatedGraphics*>(webkitWebViewBaseGetPage(WEBKIT_WEB_VIEW_BASE(m_viewWidget))->drawingArea());
-    return drawingArea ? drawingArea->size() : IntSize();
+    return webkitWebViewBaseGetViewSize(WEBKIT_WEB_VIEW_BASE(m_viewWidget));
 }
 
 bool PageClientImpl::isViewWindowActive()
@@ -320,7 +325,7 @@ void PageClientImpl::selectionDidChange()
         webkitWebViewSelectionDidChange(WEBKIT_WEB_VIEW(m_viewWidget));
 }
 
-RefPtr<ViewSnapshot> PageClientImpl::takeViewSnapshot(Optional<WebCore::IntRect>&& clipRect)
+RefPtr<ViewSnapshot> PageClientImpl::takeViewSnapshot(std::optional<WebCore::IntRect>&& clipRect)
 {
     return webkitWebViewBaseTakeViewSnapshot(WEBKIT_WEB_VIEW_BASE(m_viewWidget), WTFMove(clipRect));
 }
@@ -422,19 +427,35 @@ void PageClientImpl::wheelEventWasNotHandledByWebCore(const NativeWebWheelEvent&
     if (!event.nativeEvent())
         return;
 
-#if !USE(GTK4)
     ViewGestureController* controller = webkitWebViewBaseViewGestureController(WEBKIT_WEB_VIEW_BASE(m_viewWidget));
     if (controller && controller->isSwipeGestureEnabled()) {
-        double deltaX;
-        gdk_event_get_scroll_deltas(event.nativeEvent(), &deltaX, nullptr);
-        bool isEnd = gdk_event_is_scroll_stop_event(event.nativeEvent()) ? true : false;
+        FloatSize delta(-event.wheelTicks());
+
         int32_t eventTime = static_cast<int32_t>(gdk_event_get_time(event.nativeEvent()));
-        PlatformGtkScrollData scrollData = { .delta = deltaX, .eventTime = eventTime, .isTouch = false, .isEnd = isEnd };
+
+        GdkDevice* device = gdk_event_get_source_device(event.nativeEvent());
+        GdkInputSource source = gdk_device_get_source(device);
+
+        bool isEnd = event.phase() == WebWheelEvent::Phase::PhaseEnded;
+
+        PlatformGtkScrollData scrollData = { .delta = delta, .eventTime = eventTime, .source = source, .isEnd = isEnd };
         controller->wheelEventWasNotHandledByWebCore(&scrollData);
         return;
     }
 
+    // Wheel events can have either scroll events or touch events attached to them.
+    // We only want to propagate scroll events; touch events are controlled via their
+    // event sequences and if we're scrolling with touch events, that sequence is
+    // already claimed and there's no point in propagating it.
+
+    if (gdk_event_get_event_type(event.nativeEvent()) != GDK_SCROLL)
+        return;
+
     webkitWebViewBaseForwardNextWheelEvent(WEBKIT_WEB_VIEW_BASE(m_viewWidget));
+
+#if USE(GTK4)
+    gdk_display_put_event(gtk_widget_get_display(m_viewWidget), event.nativeEvent());
+#else
     gtk_main_do_event(event.nativeEvent());
 #endif
 }
@@ -445,6 +466,7 @@ void PageClientImpl::didFinishLoadingDataForCustomContentProvider(const String&,
 
 void PageClientImpl::navigationGestureDidBegin()
 {
+    webkitWebViewBaseSynthesizeWheelEvent(WEBKIT_WEB_VIEW_BASE(m_viewWidget), 0, 0, 0, 0, WheelEventPhase::Began, WheelEventPhase::NoPhase);
 }
 
 void PageClientImpl::navigationGestureWillEnd(bool, WebBackForwardListItem&)

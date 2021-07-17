@@ -29,7 +29,7 @@
 #include "PropertySlot.h"
 
 #if PLATFORM(IOS)
-#include <wtf/spi/darwin/dyldSPI.h>
+#include <wtf/cocoa/RuntimeApplicationChecksCocoa.h>
 #endif
 
 namespace JSC {
@@ -101,8 +101,8 @@ bool objectPrototypeHasOwnProperty(JSGlobalObject* globalObject, JSValue base, c
 
     Structure* structure = thisObject->structure(vm);
     HasOwnPropertyCache* hasOwnPropertyCache = vm.ensureHasOwnPropertyCache();
-    if (Optional<bool> result = hasOwnPropertyCache->get(structure, propertyName)) {
-        ASSERT(*result == thisObject->hasOwnProperty(globalObject, propertyName));
+    if (std::optional<bool> result = hasOwnPropertyCache->get(structure, propertyName)) {
+        ASSERT(*result == thisObject->hasOwnProperty(globalObject, propertyName) || vm.hasPendingTerminationException());
         scope.assertNoExceptionExceptTermination();
         return *result;
     }
@@ -322,7 +322,7 @@ inline static bool isPokerBros()
     auto bundleID = CFBundleGetIdentifier(CFBundleGetMainBundle());
     return bundleID
         && CFEqual(bundleID, CFSTR("com.kpgame.PokerBros"))
-        && dyld_get_program_sdk_version() < DYLD_IOS_VERSION_14_0;
+        && applicationSDKVersion() < DYLD_IOS_VERSION_14_0;
 }
 #endif
 

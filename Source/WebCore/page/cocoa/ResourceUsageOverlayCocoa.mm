@@ -269,7 +269,7 @@ static void showText(CGContextRef context, float x, float y, CGColorRef color, c
     CFTypeRef values[] = { font.get(), kCFBooleanTrue };
     auto attributes = adoptCF(CFDictionaryCreate(kCFAllocatorDefault, keys, values, WTF_ARRAY_LENGTH(keys), &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
     CString cstr = text.ascii();
-    auto string = adoptCF(CFStringCreateWithBytesNoCopy(kCFAllocatorDefault, reinterpret_cast<const UInt8*>(cstr.data()), cstr.length(), kCFStringEncodingASCII, false, kCFAllocatorNull));
+    auto string = adoptCF(CFStringCreateWithBytesNoCopy(kCFAllocatorDefault, cstr.dataAsUInt8Ptr(), cstr.length(), kCFStringEncodingASCII, false, kCFAllocatorNull));
     auto attributedString = adoptCF(CFAttributedStringCreate(kCFAllocatorDefault, string.get(), attributes.get()));
     auto line = adoptCF(CTLineCreateWithAttributedString(attributedString.get()));
     CGContextSetTextPosition(context, x, y);
@@ -467,7 +467,7 @@ void ResourceUsageOverlay::platformDraw(CGContextRef context)
         size_t reclaimable = category.reclaimableSize.last();
         size_t external = category.externalSize.last();
         
-        String label = makeString(pad(' ', 11, category.name), ": ", formatByteNumber(dirty));
+        auto label = makeString(pad(' ', 11, category.name), ": ", formatByteNumber(dirty));
         if (external)
             label = label + makeString(" + ", formatByteNumber(external));
         if (reclaimable)

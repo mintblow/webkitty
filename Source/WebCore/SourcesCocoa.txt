@@ -23,6 +23,11 @@
 
 JSApplePayCancelEvent.cpp
 JSApplePayContactField.cpp
+JSApplePayCouponCodeChangedEvent.cpp
+JSApplePayCouponCodeDetails.cpp
+JSApplePayCouponCodeUpdate.cpp
+JSApplePayDateComponents.cpp
+JSApplePayDateComponentsRange.cpp
 JSApplePayDetailsUpdateBase.cpp
 JSApplePayDetailsUpdateData.cpp
 JSApplePayError.cpp
@@ -33,7 +38,6 @@ JSApplePayInstallmentItem.cpp
 JSApplePayInstallmentItemType.cpp
 JSApplePayInstallmentRetailChannel.cpp
 JSApplePayLineItem.cpp
-JSApplePayLineItemData.cpp
 JSApplePayMerchantCapability.cpp
 JSApplePayModifier.cpp
 JSApplePayPayment.cpp
@@ -41,12 +45,13 @@ JSApplePayPaymentAuthorizationResult.cpp
 JSApplePayPaymentAuthorizedEvent.cpp
 JSApplePayPaymentContact.cpp
 JSApplePayPaymentMethod.cpp
-JSApplePayPaymentMethodModeUpdate.cpp
 JSApplePayPaymentMethodSelectedEvent.cpp
 JSApplePayPaymentMethodType.cpp
 JSApplePayPaymentMethodUpdate.cpp
 JSApplePayPaymentPass.cpp
 JSApplePayPaymentRequest.cpp
+JSApplePayPaymentTiming.cpp
+JSApplePayRecurringPaymentDateUnit.cpp
 JSApplePayRequest.cpp
 JSApplePayRequestBase.cpp
 JSApplePaySession.cpp
@@ -56,14 +61,15 @@ JSApplePaySetupConfiguration.cpp
 JSApplePaySetupFeature.cpp
 JSApplePaySetupFeatureState.cpp
 JSApplePaySetupFeatureType.cpp
+JSApplePayShippingContactEditingMode.cpp
 JSApplePayShippingContactSelectedEvent.cpp
 JSApplePayShippingContactUpdate.cpp
 JSApplePayShippingMethod.cpp
-JSApplePayShippingMethodData.cpp
 JSApplePayShippingMethodSelectedEvent.cpp
 JSApplePayShippingMethodUpdate.cpp
 JSApplePayValidateMerchantEvent.cpp
 Modules/airplay/WebMediaSessionManager.cpp
+Modules/applepay/ApplePayCouponCodeChangedEvent.cpp
 Modules/applepay/ApplePayCancelEvent.cpp
 Modules/applepay/ApplePayContactField.cpp
 Modules/applepay/ApplePayMerchantCapability.cpp
@@ -93,6 +99,7 @@ Modules/applepay/paymentrequest/ApplePayPaymentHandler.cpp
 Modules/async-clipboard/ios/ClipboardImageReaderIOS.mm
 Modules/async-clipboard/mac/ClipboardImageReaderMac.mm
 Modules/mediastream/RTCRtpSFrameTransformerCocoa.cpp
+Modules/model-element/HTMLModelElementCocoa.mm
 Modules/plugins/QuickTimePluginReplacement.mm
 Modules/plugins/YouTubePluginReplacement.cpp
 Modules/speech/cocoa/SpeechRecognizerCocoa.mm
@@ -141,7 +148,7 @@ dom/DataTransferMac.mm
 dom/ios/MouseEventIOS.cpp
 dom/ios/PointerEventIOS.cpp
 dom/ios/TouchEvents.cpp
-editing/SelectionRectGatherer.cpp
+editing/SelectionGeometryGatherer.cpp
 editing/SmartReplaceCF.cpp
 editing/cocoa/AlternativeTextContextController.mm
 editing/cocoa/AlternativeTextUIController.mm
@@ -182,6 +189,7 @@ page/cocoa/PerformanceLoggingCocoa.mm
 page/cocoa/ResourceUsageOverlayCocoa.mm
 page/cocoa/ResourceUsageThreadCocoa.mm
 page/cocoa/SettingsBaseCocoa.mm
+page/cocoa/WebTextIndicatorLayer.mm
 page/ios/ContentChangeObserver.cpp
 page/ios/DOMTimerHoldingTank.cpp
 page/ios/EventHandlerIOS.mm
@@ -190,6 +198,7 @@ page/ios/WebEventRegion.mm
 page/mac/ChromeMac.mm
 page/mac/DragControllerMac.mm
 page/mac/EventHandlerMac.mm
+page/mac/ImageOverlayControllerMac.mm
 page/mac/PageMac.mm
 page/mac/ServicesOverlayController.mm
 page/mac/TextIndicatorWindow.mm
@@ -217,13 +226,11 @@ platform/audio/cocoa/CARingBuffer.cpp
 platform/audio/cocoa/MediaSessionManagerCocoa.mm
 platform/audio/cocoa/WebAudioBufferList.cpp
 platform/audio/ios/AudioOutputUnitAdaptorIOS.cpp @no-unify
-platform/audio/ios/AudioFileReaderIOS.cpp @no-unify
 platform/audio/ios/AudioSessionIOS.mm @no-unify
 platform/audio/ios/MediaSessionHelperIOS.mm @no-unify
 platform/audio/ios/MediaSessionManagerIOS.mm @no-unify
 platform/audio/mac/AudioBusMac.mm
 platform/audio/mac/AudioOutputUnitAdaptorMac.cpp
-platform/audio/mac/AudioFileReaderMac.cpp
 platform/audio/mac/AudioHardwareListenerMac.cpp
 platform/audio/mac/AudioSessionMac.mm
 platform/audio/mac/FFTFrameMac.cpp
@@ -236,7 +243,6 @@ platform/cf/RunLoopObserver.cpp
 platform/cf/SharedBufferCF.cpp
 platform/cocoa/ContentFilterUnblockHandlerCocoa.mm @no-unify
 platform/cocoa/CoreVideoSoftLink.cpp
-platform/cocoa/DataDetectorsCoreSoftLink.mm @no-unify
 platform/cocoa/DragDataCocoa.mm
 platform/cocoa/DragImageCocoa.mm
 platform/cocoa/FileMonitorCocoa.mm
@@ -480,6 +486,7 @@ platform/ios/wak/WebCoreThreadRun.cpp
 platform/ios/wak/WebCoreThreadSystemInterface.cpp
 platform/mac/BlocklistUpdater.mm
 platform/mac/CursorMac.mm @no-unify
+platform/mac/DataDetectorHighlight.mm
 platform/mac/HIDDevice.cpp
 platform/mac/HIDElement.cpp
 platform/mac/KeyEventMac.mm @no-unify
@@ -526,14 +533,15 @@ platform/mediarecorder/MediaRecorderPrivateAVFImpl.cpp
 platform/mediarecorder/cocoa/AudioSampleBufferCompressor.mm
 platform/mediarecorder/cocoa/MediaRecorderPrivateWriterCocoa.mm
 platform/mediarecorder/cocoa/VideoSampleBufferCompressor.mm
+platform/mediastream/cocoa/AudioMediaStreamTrackRendererCocoa.cpp
+platform/mediastream/cocoa/AudioMediaStreamTrackRendererInternalUnit.cpp
+platform/mediastream/cocoa/AudioMediaStreamTrackRendererUnit.cpp
 platform/mediastream/ios/AVAudioSessionCaptureDevice.mm
 platform/mediastream/ios/AVAudioSessionCaptureDeviceManager.mm @no-unify
 platform/mediastream/ios/CoreAudioCaptureSourceIOS.mm @no-unify
 platform/mediastream/libwebrtc/LibWebRTCProviderCocoa.cpp
 platform/mediastream/mac/AVCaptureDeviceManager.mm @no-unify
 platform/mediastream/mac/AVVideoCaptureSource.mm @no-unify
-platform/mediastream/mac/AudioMediaStreamTrackRendererCocoa.cpp
-platform/mediastream/mac/AudioMediaStreamTrackRendererUnit.cpp
 platform/mediastream/mac/BaseAudioSharedUnit.cpp
 platform/mediastream/mac/CoreAudioCaptureDevice.cpp
 platform/mediastream/mac/CoreAudioCaptureDeviceManager.cpp

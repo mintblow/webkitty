@@ -65,6 +65,8 @@ public:
     bool hasBrokenContinuation() const { return m_hasBrokenContinuation; }
 
 private:
+    static void markBoxForRelayoutAfterSplit(RenderBox&);
+
     void attachInternal(RenderElement& parent, RenderPtr<RenderObject>, RenderObject* beforeChild);
 
     void childFlowStateChangesAndAffectsParentBlock(RenderElement& child);
@@ -86,6 +88,8 @@ private:
     void moveAllChildrenIncludingFloats(RenderBlock& from, RenderBlock& toBlock, RenderTreeBuilder::NormalizeAfterInsertion);
     void moveAllChildren(RenderBoxModelObject& from, RenderBoxModelObject& to, NormalizeAfterInsertion);
     void moveAllChildren(RenderBoxModelObject& from, RenderBoxModelObject& to, RenderObject* beforeChild, NormalizeAfterInsertion);
+
+    void removeFloatingObjects(RenderBlock&);
 
     RenderObject* splitAnonymousBoxesAroundChild(RenderBox& parent, RenderObject& originalBeforeChild);
     void makeChildrenNonInline(RenderBlock& parent, RenderObject* insertionPoint = nullptr);

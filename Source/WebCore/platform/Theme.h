@@ -26,6 +26,7 @@
 #pragma once
 
 #include "ThemeTypes.h"
+#include <optional>
 #include <wtf/Forward.h>
 
 namespace WebCore {
@@ -51,7 +52,7 @@ public:
     virtual int baselinePositionAdjustment(ControlPart) const;
 
     // The font description result should have a zoomed font size.
-    virtual Optional<FontCascadeDescription> controlFont(ControlPart, const FontCascade&, float zoomFactor) const;
+    virtual std::optional<FontCascadeDescription> controlFont(ControlPart, const FontCascade&, float zoomFactor) const;
 
     // The size here is in zoomed coordinates already. If a new size is returned, it also needs to be in zoomed coordinates.
     virtual LengthSize controlSize(ControlPart, const FontCascade&, const LengthSize& zoomedSize, float zoomFactor) const;

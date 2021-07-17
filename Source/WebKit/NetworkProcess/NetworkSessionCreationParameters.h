@@ -51,7 +51,7 @@ enum class AllowsCellularAccess : bool { No, Yes };
 
 struct NetworkSessionCreationParameters {
     void encode(IPC::Encoder&) const;
-    static Optional<NetworkSessionCreationParameters> decode(IPC::Decoder&);
+    static std::optional<NetworkSessionCreationParameters> decode(IPC::Decoder&);
     
     PAL::SessionID sessionID { PAL::SessionID::defaultSessionID() };
     String boundInterfaceIdentifier;
@@ -60,7 +60,6 @@ struct NetworkSessionCreationParameters {
     RetainPtr<CFDictionaryRef> proxyConfiguration;
     String sourceApplicationBundleIdentifier;
     String sourceApplicationSecondaryIdentifier;
-    String attributedBundleIdentifier;
     bool shouldLogCookieInformation { false };
     URL httpProxy;
     URL httpsProxy;
@@ -100,6 +99,7 @@ struct NetworkSessionCreationParameters {
     bool preventsSystemHTTPProxyAuthentication { false };
     bool appHasRequestedCrossWebsiteTrackingPermission { false };
     bool useNetworkLoader { false };
+    bool allowsHSTSWithUntrustedRootCertificate { false };
 
     ResourceLoadStatisticsParameters resourceLoadStatisticsParameters;
 };

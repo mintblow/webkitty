@@ -47,7 +47,7 @@
 #import <wtf/ProcessPrivilege.h>
 #import <wtf/URL.h>
 #import <wtf/cocoa/Entitlements.h>
-#import <wtf/text/StringBuilder.h>
+#import <wtf/text/cf/StringConcatenateCF.h>
 
 #if PLATFORM(IOS_FAMILY)
 #import <UIKit/UIApplication.h>
@@ -115,15 +115,10 @@ void WebsiteDataStore::platformSetNetworkParameters(WebsiteDataStoreParameters& 
             firstPartyWebsiteDataRemovalMode = WebCore::FirstPartyWebsiteDataRemovalMode::AllButCookies;
     }
 
-    auto* manualPrevalentResource = [defaults stringForKey:@"ITPManualPrevalentResource"];
-    if (manualPrevalentResource) {
-        URL url { URL(), manualPrevalentResource };
-        if (!url.isValid()) {
-            StringBuilder builder;
-            builder.appendLiteral("http://");
-            builder.append(manualPrevalentResource);
-            url = { URL(), builder.toString() };
-        }
+    if (auto manualPrevalentResource = [defaults stringForKey:@"ITPManualPrevalentResource"]) {
+        URL url { { }, manualPrevalentResource };
+        if (!url.isValid())
+            url = { { }, makeString("http://", manualPrevalentResource) };
         if (url.isValid())
             resourceLoadStatisticsManualPrevalentResource = WebCore::RegistrableDomain { url };
     }
@@ -164,7 +159,6 @@ void WebsiteDataStore::platformSetNetworkParameters(WebsiteDataStoreParameters& 
     parameters.networkSessionParameters.proxyConfiguration = configuration().proxyConfiguration();
     parameters.networkSessionParameters.sourceApplicationBundleIdentifier = configuration().sourceApplicationBundleIdentifier();
     parameters.networkSessionParameters.sourceApplicationSecondaryIdentifier = configuration().sourceApplicationSecondaryIdentifier();
-    parameters.networkSessionParameters.attributedBundleIdentifier = configuration().attributedBundleIdentifier();
     parameters.networkSessionParameters.shouldLogCookieInformation = shouldLogCookieInformation;
     parameters.networkSessionParameters.httpProxy = WTFMove(httpProxy);
     parameters.networkSessionParameters.httpsProxy = WTFMove(httpsProxy);
@@ -192,7 +186,7 @@ void WebsiteDataStore::platformSetNetworkParameters(WebsiteDataStoreParameters& 
     parameters.uiProcessCookieStorageIdentifier = m_uiProcessCookieStorageIdentifier;
 
     if (!cookieFile.isEmpty())
-        SandboxExtension::createHandleForReadWriteDirectory(FileSystem::directoryName(cookieFile), parameters.cookieStoragePathExtensionHandle);
+        SandboxExtension::createHandleForReadWriteDirectory(FileSystem::parentPath(cookieFile), parameters.cookieStoragePathExtensionHandle);
 }
 
 #if HAVE(CFNETWORK_ALTERNATIVE_SERVICE) || HAVE(NETWORK_LOADER)
@@ -326,6 +320,13 @@ WTF::String WebsiteDataStore::defaultJavaScriptConfigurationDirectory()
 {
     return tempDirectoryFileSystemRepresentation("JavaScriptCoreDebug", ShouldCreateDirectory::No);
 }
+
+#if HAVE(ARKIT_INLINE_PREVIEW)
+WTF::String WebsiteDataStore::defaultModelElementCacheDirectory()
+{
+    return tempDirectoryFileSystemRepresentation("ModelElement", ShouldCreateDirectory::No);
+}
+#endif
 
 WTF::String WebsiteDataStore::tempDirectoryFileSystemRepresentation(const WTF::String& directoryName, ShouldCreateDirectory shouldCreateDirectory)
 {
@@ -528,7 +529,7 @@ void WebsiteDataStore::beginAppBoundDomainCheck(const String& host, const String
         // because test cases may have app bound domains but no key.
         bool hasAppBoundDomains = keyExists || !domains.isEmpty();
         if (!hasAppBoundDomains) {
-            listener->didReceiveAppBoundDomainResult(WTF::nullopt);
+            listener->didReceiveAppBoundDomainResult(std::nullopt);
             return;
         }
         listener->didReceiveAppBoundDomainResult(schemeOrDomainIsAppBound(host, protocol, domains, schemes));
@@ -553,11 +554,11 @@ void WebsiteDataStore::getAppBoundSchemes(CompletionHandler<void(const HashSet<S
     });
 }
 
-Optional<HashSet<WebCore::RegistrableDomain>> WebsiteDataStore::appBoundDomainsIfInitialized()
+std::optional<HashSet<WebCore::RegistrableDomain>> WebsiteDataStore::appBoundDomainsIfInitialized()
 {
     ASSERT(RunLoop::isMain());
     if (!hasInitializedAppBoundDomains)
-        return WTF::nullopt;
+        return std::nullopt;
     return appBoundDomains();
 }
 

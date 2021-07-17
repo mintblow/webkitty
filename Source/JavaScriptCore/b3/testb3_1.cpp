@@ -338,6 +338,7 @@ void run(const char* filter)
     RUN_UNARY(testCheckAddRemoveCheckWithSExt32, int32Operands());
     RUN_UNARY(testCheckAddRemoveCheckWithZExt32, int32Operands());
 
+    RUN(testStoreZeroReg());
     RUN(testStore32(44));
     RUN(testStoreConstant(49));
     RUN(testStoreConstantPtr(49));
@@ -867,7 +868,7 @@ void run(const char* filter)
                     for (;;) {
                         RefPtr<SharedTask<void()>> task;
                         {
-                            LockHolder locker(lock);
+                            Locker locker { lock };
                             if (tasks.isEmpty())
                                 return;
                             task = tasks.takeFirst();
